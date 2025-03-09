@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "types": ["jest", "node"],
+    "skipLibCheck": true,
+    "noImplicitThis": false,
+    "noImplicitReturns": false,
+    "strict": false
+  },
+  "include": ["src/__tests__/**/*"]
+} 

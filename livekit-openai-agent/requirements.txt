@@ -1,0 +1,7 @@
+livekit-agents>=0.11.2
+livekit-plugins-openai>=0.10.5
+python-dotenv
+google-cloud-secret-manager>=2.21.0
+firebase_admin
+google-cloud-storage
+pymupdf

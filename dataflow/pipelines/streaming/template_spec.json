@@ -1,0 +1,72 @@
+{
+  "name": "Streaming User Matching Pipeline",
+  "description": "A streaming pipeline that processes user profiles and finds matches",
+  "parameters": [
+    {
+      "name": "project",
+      "label": "Project ID",
+      "helpText": "Project ID for GCP resources",
+      "regexes": ["^[a-z0-9-]+$"],
+      "isOptional": false
+    },
+    {
+      "name": "pubsub_topic",
+      "label": "PubSub Topic",
+      "helpText": "PubSub topic for user profile updates",
+      "isOptional": false
+    },
+    {
+      "name": "pinecone_region",
+      "label": "Pinecone Region",
+      "helpText": "Region for Pinecone service",
+      "isOptional": false
+    },
+    {
+      "name": "pinecone_index",
+      "label": "Pinecone Index",
+      "helpText": "Name of the Pinecone index",
+      "isOptional": false
+    },
+    {
+      "name": "profiles_collection",
+      "label": "Profiles Collection",
+      "helpText": "Firestore collection for user profiles",
+      "isOptional": false
+    },
+    {
+      "name": "matches_collection",
+      "label": "Matches Collection",
+      "helpText": "Firestore collection for matches",
+      "isOptional": false
+    },
+    {
+      "name": "top_k",
+      "label": "Top K Matches",
+      "helpText": "Number of matches to return",
+      "isOptional": false
+    },
+    {
+      "name": "temp_location",
+      "label": "Temp Location",
+      "helpText": "GCS path for temporary files",
+      "isOptional": false
+    },
+    {
+      "name": "staging_location",
+      "label": "Staging Location",
+      "helpText": "GCS path for staging files",
+      "isOptional": false
+    },
+    {
+      "name": "dlq_bucket",
+      "label": "DLQ Bucket",
+      "helpText": "GCS bucket for dead letter queue",
+      "isOptional": false
+    }
+  ],
+  "defaultEnvironment": {
+    "experiments": [
+      "use_runner_v2"
+    ]
+  }
+} 

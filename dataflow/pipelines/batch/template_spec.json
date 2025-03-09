@@ -1,0 +1,59 @@
+{
+  "name": "User Matching Batch Pipeline",
+  "description": "Batch pipeline for user matching",
+  "parameters": [
+    {
+      "name": "project",
+      "label": "Project ID",
+      "helpText": "GCP Project ID where the pipeline will run"
+    },
+    {
+      "name": "pinecone_region",
+      "label": "Pinecone Region",
+      "helpText": "Region for Pinecone index (e.g., us-west1-gcp)"
+    },
+    {
+      "name": "profiles_collection",
+      "label": "Profiles Collection",
+      "helpText": "Firestore collection name for profiles",
+      "default": "PROFILES"
+    },
+    {
+      "name": "matches_collection",
+      "label": "Matches Collection",
+      "helpText": "Firestore collection name for matches",
+      "default": "MATCHES"
+    },
+    {
+      "name": "top_k",
+      "label": "Top K Matches",
+      "helpText": "Number of top matches to return",
+      "default": "10"
+    },
+    {
+      "name": "temp_location",
+      "label": "Temp Location",
+      "helpText": "GCS temp location"
+    },
+    {
+      "name": "staging_location",
+      "label": "Staging Location",
+      "helpText": "GCS staging location"
+    },
+    {
+      "name": "dlq_bucket",
+      "label": "DLQ Bucket",
+      "helpText": "GCS bucket for dead-letter queue"
+    },
+    {
+      "name": "pinecone_index",
+      "label": "Pinecone Index Name",
+      "helpText": "Name of the Pinecone index to use"
+    },
+    {
+      "name": "country",
+      "label": "Country Code",
+      "helpText": "Country code to process"
+    }
+  ]
+} 
