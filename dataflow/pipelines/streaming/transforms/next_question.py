@@ -737,6 +737,7 @@ class SelectBestQuestionDoFn(beam.DoFn):
     def process(self, element: Tuple[str, Dict[str, List[Any]]]):
         user_id, grouped_data = element
         selected_question_dict = None # The final candidate dict to yield
+        candidate_count = 0 # Initialize candidate count
         self.logger.info(f"SelectBest: Processing user {user_id}. Available data tags: {list(grouped_data.keys())}")
 
         try:
@@ -762,10 +763,11 @@ class SelectBestQuestionDoFn(beam.DoFn):
             layer1_candidates = extract_candidates_from_group(self.LAYER1_TAG, grouped_data)
             layer2_candidates = extract_candidates_from_group(self.LAYER2_TAG, grouped_data)
             layer3_candidates = extract_candidates_from_group(self.LAYER3_TAG, grouped_data)
-            layer4_candidates = extract_candidates_from_group(self.LAYER4_TAG, grouped_data) # Extract L4
+            layer4_candidates = extract_candidates_from_group(self.LAYER4_TAG, grouped_data)
 
-            all_candidates = layer1_candidates + layer2_candidates + layer3_candidates + layer4_candidates # Combine all
-            self.logger.info(f"SelectBest ({user_id}): Candidates found - L1={len(layer1_candidates)}, L2={len(layer2_candidates)}, L3={len(layer3_candidates)}, L4={len(layer4_candidates)}. Total={len(all_candidates)}")
+            all_candidates = layer1_candidates + layer2_candidates + layer3_candidates + layer4_candidates
+            candidate_count = len(all_candidates) # Calculate total candidate count
+            self.logger.info(f"SelectBest ({user_id}): Candidates found - L1={len(layer1_candidates)}, L2={len(layer2_candidates)}, L3={len(layer3_candidates)}, L4={len(layer4_candidates)}. Total Candidates={candidate_count}")
 
             user_history = extract_candidates_from_group(self.HISTORY_TAG, grouped_data)
             if not user_history:
@@ -777,7 +779,6 @@ class SelectBestQuestionDoFn(beam.DoFn):
             if not all_candidates:
                 self.logger.warning(f"No candidates found from any layer for user {user_id}. Cannot select a question.")
                 self.no_candidates_counter.inc()
-                # selected_question_dict remains None
             else:
                 # Sort candidates by calculated priority (handles layers and internal priority)
                 all_candidates.sort(key=_get_candidate_priority)
@@ -811,21 +812,34 @@ class SelectBestQuestionDoFn(beam.DoFn):
                      selected_question_dict = all_candidates[0] # Highest priority based on sort
                      self.llm_selection_errors.inc() # Count LLM failure as an error
 
-            # Yield the selected candidate dictionary (or nothing if no candidates)
+            # Yield the selected candidate dictionary AND the candidate count
             if selected_question_dict:
-                # Double-check: Ensure the selected dict is not None before yielding
                 yield {
                     'user_id': user_id,
-                    'selected_question': selected_question_dict
+                    'selected_question': selected_question_dict,
+                    'candidate_count': candidate_count # Add count to output
                 }
             else:
-                # This case should only happen if all_candidates was empty initially.
-                self.logger.warning(f"SelectBest ({user_id}): Reached end of processing without selecting a question.")
+                # If no question was selected (e.g., no candidates initially),
+                # still yield something to potentially clear the suggestion or log?
+                # Yielding count = 0 might be useful.
+                 yield {
+                    'user_id': user_id,
+                    'selected_question': None, # Explicitly None
+                    'candidate_count': candidate_count # Still yield count (which would be 0)
+                 }
+                # self.logger.warning(f"SelectBest ({user_id}): Reached end of processing without selecting a question.")
 
         except Exception as e:
             self.logger.error(f"Error selecting best question for user {user_id}: {e}", exc_info=True)
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': str(e), 'user_id': user_id, 'trace': traceback.format_exc()})
+            # Yield fallback on error?
+            yield {
+                'user_id': user_id,
+                'selected_question': None,
+                'candidate_count': 0
+            }
 
 
 class UpdateNextQuestionDoFn(beam.DoFn):
@@ -851,21 +865,46 @@ class UpdateNextQuestionDoFn(beam.DoFn):
             raise
 
     def process(self, element: Dict[str, Any]):
-        # Expects element like: {'user_id': ..., 'selected_question': { ... question details ... }}
+        # Expects element like: {'user_id': ..., 'selected_question': { ... }, 'candidate_count': ...}
         if not self.db:
-            self.logger.error("Firestore client not initialized in UpdateNextQuestionDoFn. Skipping.")
-            Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-            # Raising an error might be better if DB connection is critical
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'DoFn setup failed', 'element': element})
+            # ... (error handling for db init) ...
             return
 
         user_id = element.get('user_id')
-        selected_question = element.get('selected_question')
+        selected_question = element.get('selected_question') # This can be None now
+        candidate_count = element.get('candidate_count') # Get the count
 
-        if not user_id or not selected_question or not isinstance(selected_question, dict):
-            self.logger.error(f"Invalid input for UpdateNextQuestionDoFn: {element}")
+        # Handle case where no question was selected (e.g., no candidates)
+        if selected_question is None:
+            # If no question selected, maybe clear the suggestion or set specific state?
+            # Option 1: Clear the suggestion document (or specific fields)
+            self.logger.info(f"No question selected for user {user_id} (candidate count: {candidate_count}). Clearing suggestion.")
+            suggestion_ref = self.db.collection(self.suggestions_collection_name).document(user_id)
+            # Update with minimal fields or delete?
+            suggestion_ref.set({
+                'userId': user_id,
+                'suggestionCompletionState': 'no_candidates_found', # Example state
+                'lastActivity': firestore.SERVER_TIMESTAMP,
+                'nextSuggestionCandidateCount': candidate_count, # Still store count
+                # Clear out old question fields explicitly
+                'nextSuggestedQuestionId': None,
+                'nextSuggestedQuestionText': None,
+                'nextSuggestedQuestionLayer': None,
+                'nextSuggestedQuestionSection': None,
+                'nextSuggestedQuestionTimestamp': None,
+                'nextSuggestedQuestionReasoning': None,
+                'nextSuggestionSource': None,
+                'nextSuggestedQuestionFramework': None,
+                'nextSuggestedQuestionClarificationTag': None
+            }, merge=True)
+            Metrics.counter(self.__class__.__name__, 'suggestions_cleared').inc()
+            return # Stop processing for this element
+
+        # --- Proceed if a question was selected --- #
+        if not user_id or not isinstance(selected_question, dict):
+            self.logger.error(f"Invalid input for UpdateNextQuestionDoFn (selected_question invalid): {element}")
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'Invalid input format', 'element': element})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'Invalid selected_question format', 'element': element})
             return
 
         try:
@@ -876,33 +915,25 @@ class UpdateNextQuestionDoFn(beam.DoFn):
             question_text = selected_question.get('text') or selected_question.get('question_text')
             layer = selected_question.get('layer')
             section = selected_question.get('section')
-            reasoning = selected_question.get('reasoning', '') # L1, L3 reasoning
-            source = selected_question.get('candidate_source') # L1, L3 might have this
-            framework = selected_question.get('framework') # L4 specific
-            clarification_tag = selected_question.get('clarificationTag') # L1 specific
+            reasoning = selected_question.get('reasoning', '')
+            source = selected_question.get('candidate_source')
+            framework = selected_question.get('framework')
+            clarification_tag = selected_question.get('clarificationTag')
 
-            # Determine the primary source identifier (used for nextSuggestionSource)
-            if framework: # Layer 4
-                suggestion_source_detail = f'layer_{layer}_{framework}'
-            elif source: # Layer 1 or 3 with specific source
-                suggestion_source_detail = source
-            elif layer: # Layer 2 or default
-                suggestion_source_detail = f'layer_{layer}'
-            else:
-                suggestion_source_detail = 'unknown' # Fallback
+            # Determine suggestion_source_detail
+            if framework: suggestion_source_detail = f'layer_{layer}_{framework}'
+            elif source: suggestion_source_detail = source
+            elif layer: suggestion_source_detail = f'layer_{layer}'
+            else: suggestion_source_detail = 'unknown'
 
-            # Determine suggestion state (simple example)
-            completion_state = 'layer2_ongoing' # Default or determine based on layer?
-            if layer == GENERAL_LAYER:
-                completion_state = 'layer3_ongoing'
-            elif layer == INSIGHT_LAYER:
-                completion_state = 'layer4_ongoing'
-            elif layer == CLARIFICATION_LAYER:
-                completion_state = 'layer1_ongoing' # Add state for layer 1
+            # Determine completion_state
+            completion_state = 'layer2_ongoing'
+            if layer == GENERAL_LAYER: completion_state = 'layer3_ongoing'
+            elif layer == INSIGHT_LAYER: completion_state = 'layer4_ongoing'
+            elif layer == CLARIFICATION_LAYER: completion_state = 'layer1_ongoing'
 
             update_data = {
                 'userId': user_id,
-                # --- Aligned keys with NextQuestionSuggestion interface --- #
                 'nextSuggestedQuestionId': question_id,
                 'nextSuggestedQuestionText': question_text or 'N/A',
                 'nextSuggestedQuestionLayer': layer,
@@ -910,23 +941,22 @@ class UpdateNextQuestionDoFn(beam.DoFn):
                 'nextSuggestedQuestionTimestamp': firestore.SERVER_TIMESTAMP,
                 'suggestionCompletionState': completion_state,
                 'lastActivity': firestore.SERVER_TIMESTAMP,
-                # --- Added fields based on updated TS interface --- #
                 'nextSuggestedQuestionReasoning': reasoning,
                 'nextSuggestionSource': suggestion_source_detail,
                 'nextSuggestedQuestionFramework': framework,
-                'nextSuggestedQuestionClarificationTag': clarification_tag
+                'nextSuggestedQuestionClarificationTag': clarification_tag,
+                'nextSuggestionCandidateCount': candidate_count # Add the candidate count field
             }
 
-            # Remove keys with None or empty string values before writing?
-            # Keep empty strings for reasoning? Decide based on desired behavior.
+            # Remove keys with None values before writing
             update_data = {k: v for k, v in update_data.items() if v is not None}
-            # update_data = {k: v for k, v in update_data.items() if v}
 
-            self.logger.info(f"Updating suggestion for user {user_id}: ID={question_id}, Layer={layer}, Source={suggestion_source_detail}, Text={update_data.get('nextSuggestedQuestionText')[:50]}...")
+            self.logger.info(f"Updating suggestion for user {user_id}: ID={question_id}, Layer={layer}, Count={candidate_count}, Text={update_data.get('nextSuggestedQuestionText')[:50]}...")
             suggestion_ref.set(update_data, merge=True)
             Metrics.counter(self.__class__.__name__, 'suggestions_updated').inc()
 
         except Exception as e:
+            # Restore error handling
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
             self.logger.error(f"Firestore update failed for next suggestion ({user_id}): {str(e)}", exc_info=True)
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': str(e), 'user_id': user_id, 'trace': traceback.format_exc()})

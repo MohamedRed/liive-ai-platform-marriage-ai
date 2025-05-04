@@ -112,6 +112,9 @@ export interface NextQuestionSuggestion extends Timestamping {
   nextSuggestedQuestionFramework?: string; // Optional: Specific framework for L4 assessments
   nextSuggestedQuestionClarificationTag?: string; // Optional: Tag for L1 clarification sequences
 
+  // Add field for total candidate count when this suggestion was made
+  nextSuggestionCandidateCount?: number | null;
+
   // Other metadata related to suggestion state can be added here
 }
 
@@ -129,6 +132,8 @@ export interface Matches extends Timestamping {
       [key: string]: [value: string];
     };
   }[]
+  // Add field for the overall top match percentage for the primary user
+  topMatchPercentage?: number | null; // e.g., 85 (representing 85%)
 }
 
 // Enhanced Zod Schema for Wali

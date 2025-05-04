@@ -333,21 +333,49 @@ def run_streaming_pipeline(argv=None):
         )
 
         # Assuming RerankAndScoreMatches takes {'user_id': ..., 'scores': ..., 'matches': ...}
-        reranked_matches, reranking_errors = (
+        reranked_matches_data, reranking_errors = (
             joined_scores_and_matches
             | "RerankAndScoreMatches" >> RerankAndScoreMatches(
                 project_id=known_args.project,
+                # Pass the user info collection used by the DoFn inside
+                profiles_collection=user_info_collection,
                 pdf_bucket=known_args.pdf_bucket,
                 pdf_instructions_path=known_args.pdf_instructions_path
             ).with_outputs(RerankAndScoreMatches.ERROR_TAG, main=RerankAndScoreMatches.OUTPUT_TAG)
         )
         reranking_errors | "DLQ_RerankingErrors" >> dlq_sink("RerankingErrors")
+        # Expected output of RerankAndScoreMatches: PCollection of dicts
+        # e.g., {'user_id': 'user123', 'ranked_matches': [{'match_id': 'matchA', 'ai_score': 0.85, ...}, ...]}
+
+        # Add step to calculate Top Match Percentage
+        def calculate_top_match_percentage(element):
+            user_id = element.get('user_id')
+            ranked_matches = element.get('ranked_matches', [])
+            top_percentage = None
+            if ranked_matches:
+                # Ensure sorted just in case (descending by ai_score)
+                try:
+                    ranked_matches.sort(key=lambda x: x.get('ai_score', 0.0), reverse=True)
+                    top_score = ranked_matches[0].get('ai_score')
+                    if top_score is not None:
+                        top_percentage = round(top_score * 100)
+                except Exception as e:
+                    logger.error(f"Error sorting/extracting top score for {user_id}: {e}")
+                    # Leave top_percentage as None
+            
+            element['topMatchPercentage'] = top_percentage
+            return element
+
+        matches_with_percentage = (
+            reranked_matches_data
+            | "CalculateTopMatchPercentage" >> beam.Map(calculate_top_match_percentage)
+        )
 
         # --- Final Output/Actions --- #
 
-        # Write reranked matches to Firestore
+        # Write reranked matches (now including percentage) to Firestore
         _, write_match_errors = (
-            reranked_matches
+            matches_with_percentage # Use the PCollection with the percentage added
             | "WriteMatchesToFirestore" >> WriteMatchesToFirestore(
                 project_id=known_args.project,
                 collection_name=matches_collection
@@ -355,9 +383,9 @@ def run_streaming_pipeline(argv=None):
         )
         write_match_errors | "DLQ_WriteMatchErrors" >> dlq_sink("WriteMatchErrors")
 
-        # Schedule Delayed Matching
+        # Schedule Delayed Matching (Use data with percentage)
         _, schedule_errors = (
-            reranked_matches # Could also trigger from processed_immediate if needed sooner
+            matches_with_percentage # Use the PCollection with the percentage added
             | "ScheduleDelayedMatching" >> ScheduleDelayedMatching(
                 project_id=known_args.project,
                 location=known_args.tasks_location,
@@ -369,9 +397,9 @@ def run_streaming_pipeline(argv=None):
         )
         schedule_errors | "DLQ_ScheduleErrors" >> dlq_sink("ScheduleErrors")
 
-        # Handle Actions (Notifications/Voice)
+        # Handle Actions (Notifications/Voice) (Use data with percentage)
         _, action_errors = (
-             reranked_matches # Trigger actions based on final matches
+             matches_with_percentage # Use the PCollection with the percentage added
              | "HandleMatchActions" >> HandleMatchActions(
                  project_id=known_args.project,
                  location=known_args.tasks_location,
