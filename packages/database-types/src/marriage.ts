@@ -10,6 +10,7 @@ export enum QuestionLayer {
   LAYER_2_FOUNDATIONAL = 2,
   LAYER_3_GENERAL = 3,
   LAYER_4_INSIGHT = 4, // Added for completeness, though not a template layer
+  LAYER_5_TOP_MATCH = 5, // Added for top match deep dive questions
 }
 
 // Interface for Question Templates (primarily for Layer 2)

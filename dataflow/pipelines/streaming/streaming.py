@@ -280,13 +280,14 @@ def run_streaming_pipeline(argv=None):
 
         # Layer 4: Assessment Templates (Needs user history)
         layer4_candidates_tagged, layer4_errors = (
-             user_history_keyed.history # Input is (user_id, list_of_qa_dicts)
+             user_history_keyed # Input is (user_id, list_of_qa_dicts)
              | "GenerateLayer4Candidates" >> beam.ParDo(Layer4CandidateDoFn(
                  project_id=known_args.project
              )).with_outputs(Layer4CandidateDoFn.OUTPUT_ERROR_TAG, main=Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG)
         )
         layer4_candidates = layer4_candidates_tagged[Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG]
         layer4_errors = layer4_candidates_tagged[Layer4CandidateDoFn.OUTPUT_ERROR_TAG]
+        layer4_errors | "DLQ_Layer4Errors" >> dlq_sink("Layer4Errors") # DLQ sink for layer 4
 
         # --- Combine Candidate Layers and History --- #
         all_candidates_and_history = (
@@ -295,7 +296,7 @@ def run_streaming_pipeline(argv=None):
                 Layer2CandidateDoFn.__name__: layer2_candidates_tagged,
                 Layer3CandidateDoFn.OUTPUT_CANDIDATES_TAG: layer3_candidates_tagged,
                 Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG: layer4_candidates_tagged,
-                FetchUserHistoryDoFn.HISTORY_TAG: user_history_keyed.history # Add history
+                FetchUserHistoryDoFn.HISTORY_TAG: user_history_keyed, # Add history
             }
             | "CombineAllCandidatesAndHistory" >> beam.CoGroupByKey()
         )
@@ -371,11 +372,58 @@ def run_streaming_pipeline(argv=None):
             | "CalculateTopMatchPercentage" >> beam.Map(calculate_top_match_percentage)
         )
 
-        # --- Final Output/Actions --- #
+        # --- Branch A Output: Matches with Percentage --- #
+        # matches_with_percentage is the result after reranking and percentage calculation
+        # Key it for the CoGroupByKey
+        keyed_reranked_matches = (
+            matches_with_percentage
+            | "KeyRerankedMatches" >> beam.Map(lambda x: (x['user_id'], x))
+        )
 
-        # Write reranked matches (now including percentage) to Firestore
+        # --- Combine Candidate Layers, History, AND Reranking Results --- #
+        RERANKING_RESULTS_TAG = 'reranking_results' # Define tag for reranked matches
+        all_inputs_for_selection = (
+            {
+                # Branch B Outputs (Candidate Generation Layers)
+                Layer1CandidateDoFn.OUTPUT_CANDIDATES_TAG: layer1_candidates_tagged,
+                Layer2CandidateDoFn.__name__: layer2_candidates_tagged,
+                Layer3CandidateDoFn.OUTPUT_CANDIDATES_TAG: layer3_candidates_tagged,
+                Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG: layer4_candidates,
+                # History
+                FetchUserHistoryDoFn.HISTORY_TAG: user_history_keyed,
+                # Branch A Output (Reranked Matches)
+                RERANKING_RESULTS_TAG: keyed_reranked_matches
+            }
+            | "CombineAllInputsForSelection" >> beam.CoGroupByKey()
+        )
+        # all_inputs_for_selection output: (user_id, { tag1: [...], ..., 'reranking_results': [...] })
+
+        # --- Select and Update Next Question --- #
+        selected_next_question, selection_errors = (
+            all_inputs_for_selection # Use combined data including reranking results
+            | "SelectBestNextQuestion" >> beam.ParDo(SelectBestQuestionDoFn(
+                project_id=known_args.project,
+                location=known_args.region,
+                # Pass the tag name used for reranking results
+                reranking_results_tag=RERANKING_RESULTS_TAG
+            ))
+            .with_outputs(SelectBestQuestionDoFn.OUTPUT_ERROR_TAG, main='main')
+        )
+        selection_errors | "DLQ_SelectionErrors" >> dlq_sink("SelectionErrors")
+
+        _, update_next_q_errors = (
+             selected_next_question # Output: {'user_id': ..., 'selected_question': ..., 'candidate_count': ...}
+             | "UpdateNextQuestionSuggestion" >> beam.ParDo(UpdateNextQuestionDoFn(
+                 project_id=known_args.project
+             )).with_outputs(UpdateNextQuestionDoFn.OUTPUT_ERROR_TAG, main='main')
+        )
+        update_next_q_errors | "DLQ_UpdateNextQErrors" >> dlq_sink("UpdateNextQErrors")
+
+        # --- Final Output/Actions (using matches_with_percentage from Branch A) --- #
+
+        # Write reranked matches (including percentage) to Firestore
         _, write_match_errors = (
-            matches_with_percentage # Use the PCollection with the percentage added
+            matches_with_percentage # Use the result from Branch A
             | "WriteMatchesToFirestore" >> WriteMatchesToFirestore(
                 project_id=known_args.project,
                 collection_name=matches_collection
@@ -383,31 +431,31 @@ def run_streaming_pipeline(argv=None):
         )
         write_match_errors | "DLQ_WriteMatchErrors" >> dlq_sink("WriteMatchErrors")
 
-        # Schedule Delayed Matching (Use data with percentage)
+        # Schedule Delayed Matching
         _, schedule_errors = (
-            matches_with_percentage # Use the PCollection with the percentage added
+            matches_with_percentage # Use the result from Branch A
             | "ScheduleDelayedMatching" >> ScheduleDelayedMatching(
                 project_id=known_args.project,
                 location=known_args.tasks_location,
                 queue_name=known_args.delayed_matching_queue,
                 target_topic=known_args.delayed_matching_pubsub_topic,
                 delay_seconds=known_args.delayed_task_delay_seconds,
-                service_account_email=known_args.service_account_email # For task authentication
+                service_account_email=known_args.service_account_email
             ).with_outputs(ScheduleDelayedMatching.ERROR_TAG, main=ScheduleDelayedMatching.OUTPUT_TAG)
         )
         schedule_errors | "DLQ_ScheduleErrors" >> dlq_sink("ScheduleErrors")
 
-        # Handle Actions (Notifications/Voice) (Use data with percentage)
+        # Handle Actions (Notifications/Voice)
         _, action_errors = (
-             matches_with_percentage # Use the PCollection with the percentage added
+             matches_with_percentage # Use the result from Branch A
              | "HandleMatchActions" >> HandleMatchActions(
-                 project_id=known_args.project,
-                 location=known_args.tasks_location,
-                 notification_queue=known_args.notification_queue,
-                 voice_agent_queue=known_args.voice_agent_queue,
-                 notification_url=known_args.notification_function_url,
-                 voice_agent_url=known_args.voice_agent_function_url,
-                 service_account_email=known_args.service_account_email
+                project_id=known_args.project,
+                location=known_args.tasks_location,
+                notification_queue=known_args.notification_queue,
+                voice_agent_queue=known_args.voice_agent_queue,
+                notification_url=known_args.notification_function_url,
+                voice_agent_url=known_args.voice_agent_function_url,
+                service_account_email=known_args.service_account_email
              ).with_outputs(HandleMatchActions.ERROR_TAG, main=HandleMatchActions.OUTPUT_TAG)
          )
         action_errors | "DLQ_ActionErrors" >> dlq_sink("ActionErrors")
