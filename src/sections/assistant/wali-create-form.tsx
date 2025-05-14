@@ -1,5 +1,5 @@
 import type {IUserItem} from 'src/types/user';
-import type {UpdateData, DocumentReference, Timestamp} from "firebase/firestore";
+import type {Timestamp} from "firebase/firestore";
 
 import {z as zod} from 'zod';
 import {firstValueFrom} from "rxjs";
@@ -27,7 +27,7 @@ import {
   WaliUserProvidedInfo,
   WaliInfo,
   RelationshipType
-} from '@liive-marriage-ai/database-types';
+} from '@livve-1/database-types';
 
 // ----------------------------------------------------------------------
 
@@ -92,16 +92,18 @@ export function WaliCreateForm({ currentUser }: Props) {
 
   const [waliProfile, setWaliProfile] = useState<Partial<NewWaliSchemaType>>({});
 
-  if (!user) return null;
+  // Return null if user or uid is not available
+  if (!user?.uid) return null;
   
-  const userRef = doc(firestore, COLLECTIONS.USER_INFO, user.id);
+  const userRef = doc(firestore, COLLECTIONS.USERS.USER_INFO, user.uid); // Use USERS.USER_INFO and user.uid
   const { data: userProfile } = useFirestoreDocData(userRef);
 
   // Fetch the Wali data if available
   useEffect(() => {
     const fetchWaliData = async () => {
       if (userProfile?.wali?.firebaseUID) {
-        const waliRef = doc(firestore, COLLECTIONS.WALI_USER_PROVIDED_INFO, userProfile.wali.firebaseUID);
+        // Use MARRIAGE.WALI_USER_PROVIDED_INFO path
+        const waliRef = doc(firestore, COLLECTIONS.MARRIAGE.WALI_USER_PROVIDED_INFO, userProfile.wali.firebaseUID); 
         try {
           const waliDoc = await getDoc(waliRef);
           if (waliDoc.exists()) {
@@ -166,7 +168,8 @@ export function WaliCreateForm({ currentUser }: Props) {
         toast.success('Wali profile created successfully!');
       } else {
         // Update existing Wali profile
-        const waliRef = doc(firestore, COLLECTIONS.WALI_USER_PROVIDED_INFO, userProfile.wali.firebaseUID);
+        // Use MARRIAGE.WALI_USER_PROVIDED_INFO path
+        const waliRef = doc(firestore, COLLECTIONS.MARRIAGE.WALI_USER_PROVIDED_INFO, userProfile.wali.firebaseUID);
         const normalizedData = NewWaliSchema.parse(data);
         await updateDoc(waliRef, {
           personalInfo: {

@@ -4,7 +4,7 @@ import {useTheme} from "@mui/material/styles";
 import { useFirestoreDocData, useFirestore } from 'reactfire';
 import { doc, WithFieldValue } from 'firebase/firestore';
 import { useAuthContext } from "src/auth/hooks";
-import { COLLECTIONS, Matches, UserInfo } from '@liive-marriage-ai/database-types';
+import { COLLECTIONS, Matches, UserInfo } from '@livve-1/database-types';
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -34,13 +34,18 @@ export function UserStatistics({isOpen, onClose}: Props) {
   const firestore = useFirestore();
   const { user } = useAuthContext();
 
-  const matchesRef = doc(firestore, COLLECTIONS.MATCHES, user?.uid).withConverter(matchesConverter);
-  const userInfoRef = doc(firestore, COLLECTIONS.USER_INFO, user?.uid).withConverter(userInfoConverter);
+  // Return null if user or uid is not available
+  if (!user?.uid) {
+    return null;
+  }
+
+  const matchesRef = doc(firestore, COLLECTIONS.MARRIAGE.MATCHES, user.uid).withConverter(matchesConverter);
+  const userInfoRef = doc(firestore, COLLECTIONS.USERS.USER_INFO, user.uid).withConverter(userInfoConverter);
 
   const { data: matches } = useFirestoreDocData<Matches>(matchesRef);
   const { data: userInfo } = useFirestoreDocData<UserInfo>(userInfoRef);
 
-  const chartOptions = useChart({
+  const baseChartOptions = useChart({
     chart: { sparkline: { enabled: true } },
     stroke: { width: 0 },
     fill: {
@@ -66,13 +71,30 @@ export function UserStatistics({isOpen, onClose}: Props) {
     },
   });
 
-  const bestMatchScore = matches?.matches
-    .sort((a, b) => b.ai_score - a.ai_score)[0]?.ai_score ?? 0;
-
   const totalMatches = matches?.matches.length ?? 0;
-  const averageScore = totalMatches > 0 
-    ? matches?.matches.reduce((acc, match) => acc + match.ai_score, 0) / totalMatches 
-    : 0;
+  // const averageScore = totalMatches > 0 
+  //   ? matches?.matches.reduce((acc, match) => acc + match.ai_score, 0) / totalMatches 
+  //   : 0;
+
+  const profileStrengthChartOptions = {
+    ...(baseChartOptions ?? {}),
+    plotOptions: {
+      ...(baseChartOptions?.plotOptions ?? {}),
+      radialBar: {
+        ...(baseChartOptions?.plotOptions?.radialBar ?? {}),
+        dataLabels: {
+          ...(baseChartOptions?.plotOptions?.radialBar?.dataLabels ?? {}),
+          value: {
+            ...(baseChartOptions?.plotOptions?.radialBar?.dataLabels?.value ?? {}),
+            offsetY: 6,
+            color: theme.palette.primary.main,
+            fontSize: theme.typography.subtitle2.fontSize as string,
+            formatter: (val: number) => `${Math.round(val)}%`,
+          },
+        },
+      },
+    },
+  };
 
   return (
     <Sheet isOpen={isOpen} onClose={() => onClose()} tweenConfig={{ ease: 'easeOut', duration: 0.4 }}>
@@ -89,12 +111,12 @@ export function UserStatistics({isOpen, onClose}: Props) {
                     gridTemplateColumns={{xs: 'repeat(1, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)'}}
                   >
                     <Card sx={{ p: 2 }}>
-                      <Typography variant="subtitle2" sx={{ mb: 1 }}>Best Match Score</Typography>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>Top Match Score</Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Chart
                           type="radialBar"
-                          series={[bestMatchScore * 100]}
-                          options={chartOptions}
+                          series={[(matches?.topMatchPercentage ?? 0) * 100]}
+                          options={baseChartOptions}
                           width={80}
                           height={80}
                         />
@@ -106,25 +128,25 @@ export function UserStatistics({isOpen, onClose}: Props) {
                       <Typography variant="h4">{totalMatches}</Typography>
                     </Card>
 
-                    <Card sx={{ p: 2 }}>
+                    {/* <Card sx={{ p: 2 }}>
                       <Typography variant="subtitle2" sx={{ mb: 1 }}>Average Match Score</Typography>
                       <Typography variant="h4">{Math.round(averageScore * 100)}%</Typography>
-                    </Card>
+                    </Card> */}
                   </Box>
                 </Block>
 
-                <Block title="Profile Completion">
+                <Block title="Profile Strength">
                   <Card sx={{ p: 2 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>Profile Information</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Name: {userInfo?.name.firstName} {userInfo?.name.lastName}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Email: {userInfo?.contact.email}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Phone: {userInfo?.contact.phoneNumber}
-                    </Typography>
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}>Profile Completeness</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Chart
+                        type="radialBar"
+                        series={[(matches?.currentUserCoreProfileCompletenessFactor ?? 0) * 100]}
+                        options={profileStrengthChartOptions}
+                        width={80}
+                        height={80}
+                      />
+                    </Box>
                   </Card>
                 </Block>
               </Stack>
