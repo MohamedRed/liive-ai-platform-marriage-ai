@@ -39,6 +39,13 @@ const ICONS = {
   analytics: icon('ic-analytics'),
   dashboard: icon('ic-dashboard'),
   parameter: icon('ic-parameter'),
+  city: icon('ic-city'),
+  building: icon('ic-building'),
+  car: icon('ic-car'),
+  assistantBrain: icon('ic-assistant-brain'),
+  science: icon('ic-science'),
+  grid: icon('ic-grid'),
+  contacts: icon('ic-contacts'),
 };
 
 // ----------------------------------------------------------------------
@@ -52,10 +59,14 @@ export const navData = [
     items: [
       {title: 'Assistant', path: paths.dashboard.root, icon: ICONS.chat},
       {title: 'Profile', path: paths.dashboard.profile, icon: ICONS.user},
+      {title: 'Meal Planning', path: paths.dashboard.mealPlanning, icon: ICONS.ecommerce},
+      {title: 'Ridesharing', path: paths.dashboard.ridesharing, icon: ICONS.tour},
+      {title: 'Friends', path: paths.dashboard.friends, icon: ICONS.contacts},
+      {title: 'News', path: paths.dashboard.news.root, icon: ICONS.blog},
       {title: 'Liive Domains', path: paths.dashboard.general.liiveDomains, icon: ICONS.analytics},
       {title: 'Ecommerce', path: paths.dashboard.general.ecommerce, icon: ICONS.ecommerce},
       {title: 'Analytics', path: paths.dashboard.general.analytics, icon: ICONS.analytics},
-      {title: 'Banking', path: paths.dashboard.general.banking, icon: ICONS.banking},
+      {title: 'Banking', path: paths.dashboard.banking.root, icon: ICONS.banking},
       {title: 'Booking', path: paths.dashboard.general.booking, icon: ICONS.booking},
       {title: 'File', path: paths.dashboard.general.file, icon: ICONS.file},
       {title: 'Course', path: paths.dashboard.general.course, icon: ICONS.course},
@@ -144,6 +155,14 @@ export const navData = [
           {title: 'Edit', path: paths.dashboard.tour.demo.edit},
         ],
       },
+      {
+        title: 'Hijra',
+        path: paths.dashboard.hijra.root,
+        icon: ICONS.tour,
+        children: [
+          {title: 'Packages', path: paths.dashboard.hijra.root},
+        ],
+      },
       {title: 'File manager', path: paths.dashboard.fileManager, icon: ICONS.folder},
       {
         title: 'Mail',
@@ -158,6 +177,18 @@ export const navData = [
       {title: 'Chat', path: paths.dashboard.chat, icon: ICONS.chat},
       {title: 'Calendar', path: paths.dashboard.calendar, icon: ICONS.calendar},
       {title: 'Kanban', path: paths.dashboard.kanban, icon: ICONS.kanban},
+      {
+        title: 'City',
+        path: paths.dashboard.city.root,
+        icon: ICONS.city,
+        children: [
+          { title: 'Dashboard', path: paths.dashboard.city.root },
+          { title: 'Restaurants', path: paths.dashboard.city.restaurants },
+          { title: 'Events', path: paths.dashboard.city.events },
+          { title: 'Orders', path: paths.dashboard.city.orders },
+          { title: 'Public Transit', path: paths.dashboard.city.publicTransit },
+        ],
+      },
     ],
   },
   /**

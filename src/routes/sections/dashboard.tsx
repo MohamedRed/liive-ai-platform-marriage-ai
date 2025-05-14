@@ -45,6 +45,11 @@ const BlogPostsPage = lazy(() => import('src/pages/dashboard/post/list'));
 const BlogPostPage = lazy(() => import('src/pages/dashboard/post/details'));
 const BlogNewPostPage = lazy(() => import('src/pages/dashboard/post/new'));
 const BlogEditPostPage = lazy(() => import('src/pages/dashboard/post/edit'));
+// News
+const NewsListPage = lazy(() => import('src/pages/dashboard/news/list'));
+const NewsDetailsPage = lazy(() => import('src/pages/dashboard/news/details'));
+const PositiveNewsPage = lazy(() => import('src/pages/dashboard/news/positive'));
+const NegativeNewsPage = lazy(() => import('src/pages/dashboard/news/negative'));
 // Job
 const JobDetailsPage = lazy(() => import('src/pages/dashboard/job/details'));
 const JobListPage = lazy(() => import('src/pages/dashboard/job/list'));
@@ -69,10 +74,35 @@ const PermissionDeniedPage = lazy(() => import('src/pages/dashboard/permission')
 // Blank page
 const ParamsPage = lazy(() => import('src/pages/dashboard/params'));
 const BlankPage = lazy(() => import('src/pages/dashboard/blank'));
+// Test routes
+const TestNewsRoutePage = lazy(() => import('src/routes/test-news-route'));
 // Profile
 const ProfilePage = lazy(() => import('src/pages/dashboard/profile/profile'));
 // Onboarding
 const OnboardingPage = lazy(() => import('src/pages/dashboard/onboarding'));
+// Health
+const HealthPage = lazy(() => import('src/pages/dashboard/health'));
+// Meal Planning
+const MealPlanningPage = lazy(() => import('src/pages/dashboard/meal-planning'));
+const MealPlanningHistoryPage = lazy(() => import('src/pages/dashboard/meal-planning/history'));
+const MealPlanningViewPage = lazy(() => import('src/pages/dashboard/meal-planning/view'));
+// Ridesharing
+const RidesharingPage = lazy(() => import('src/pages/dashboard/ridesharing'));
+// Friends
+const FriendsPage = lazy(() => import('src/pages/dashboard/friends'));
+// City
+const CityDashboardPage = lazy(() => import('src/pages/dashboard/city'));
+const CityRestaurantsPage = lazy(() => import('src/pages/dashboard/city/restaurants'));
+const CityEventsPage = lazy(() => import('src/pages/dashboard/city/events'));
+const CityOrdersPage = lazy(() => import('src/pages/dashboard/city/orders'));
+const CityPublicTransitPage = lazy(() => import('src/pages/dashboard/city/public-transit'));
+// Business Owner
+const BusinessOwnerDashboardPage = lazy(() => import('src/pages/dashboard/business-owner'));
+// Hijra
+const HijraListPage = lazy(() => import('src/pages/dashboard/hijra/list'));
+const HijraDetailsPage = lazy(() => import('src/pages/dashboard/hijra/details'));
+const HijraNewPage = lazy(() => import('src/pages/dashboard/hijra/new'));
+const HijraEditPage = lazy(() => import('src/pages/dashboard/hijra/edit'));
 
 // ----------------------------------------------------------------------
 
@@ -101,6 +131,17 @@ export const dashboardRoutes = [
         ) 
       },
 
+      // Direct access to meal planning routes (bypassing OnboardingGuard for testing)
+      { path: 'meal-planning', element: <MealPlanningPage /> },
+      { path: 'meal-planning/history', element: <MealPlanningHistoryPage /> },
+      { path: 'meal-planning/view', element: <MealPlanningViewPage /> },
+      
+      // Direct access to ridesharing route (bypassing OnboardingGuard)
+      { path: 'ridesharing', element: <RidesharingPage /> },
+      
+      // Direct access to friends route (bypassing OnboardingGuard)
+      { path: 'friends', element: <FriendsPage /> },
+
       // All other routes protected by OnboardingGuard
       {
         element: (
@@ -119,6 +160,25 @@ export const dashboardRoutes = [
           { path: 'course', element: <OverviewCoursePage /> },
           { path: 'liive-domains', element: <LiiveDomainsPage /> },
           { path: 'builder', element: <BuilderPage /> },
+          
+          // City Routes
+          {
+            path: 'city',
+            children: [
+              { element: <CityDashboardPage />, index: true },
+              { path: 'restaurants', element: <CityRestaurantsPage /> },
+              { path: 'events', element: <CityEventsPage /> },
+              { path: 'orders', element: <CityOrdersPage /> },
+              { path: 'public-transit', element: <CityPublicTransitPage /> },
+            ],
+          },
+          
+          // Business Owner Routes
+          {
+            path: 'business-owner',
+            element: <BusinessOwnerDashboardPage />,
+          },
+          
           {
             path: 'user',
             children: [
@@ -142,6 +202,26 @@ export const dashboardRoutes = [
             ],
           },
           {
+            path: 'post',
+            children: [
+              {element: <BlogPostsPage/>, index: true},
+              {path: 'list', element: <BlogPostsPage/>},
+              {path: ':title', element: <BlogPostPage/>},
+              {path: 'new', element: <BlogNewPostPage/>},
+              {path: ':title/edit', element: <BlogEditPostPage/>},
+            ],
+          },
+          {
+            path: 'news',
+            children: [
+              {element: <NewsListPage/>, index: true},
+              {path: 'list', element: <NewsListPage/>},
+              {path: 'positive', element: <PositiveNewsPage/>},
+              {path: 'negative', element: <NegativeNewsPage/>},
+              {path: ':title', element: <NewsDetailsPage/>},
+            ],
+          },
+          {
             path: 'order',
             children: [
               {element: <OrderListPage/>, index: true},
@@ -157,16 +237,6 @@ export const dashboardRoutes = [
               {path: ':id', element: <InvoiceDetailsPage/>},
               {path: ':id/edit', element: <InvoiceEditPage/>},
               {path: 'new', element: <InvoiceCreatePage/>},
-            ],
-          },
-          {
-            path: 'post',
-            children: [
-              {element: <BlogPostsPage/>, index: true},
-              {path: 'list', element: <BlogPostsPage/>},
-              {path: ':title', element: <BlogPostPage/>},
-              {path: ':title/edit', element: <BlogEditPostPage/>},
-              {path: 'new', element: <BlogNewPostPage/>},
             ],
           },
           {
@@ -189,6 +259,16 @@ export const dashboardRoutes = [
               {path: ':id/edit', element: <TourEditPage/>},
             ],
           },
+          {
+            path: 'hijra',
+            children: [
+              {element: <HijraListPage/>, index: true},
+              {path: 'list', element: <HijraListPage/>},
+              {path: 'new', element: <HijraNewPage/>},
+              {path: ':id', element: <HijraDetailsPage/>},
+              {path: ':id/edit', element: <HijraEditPage/>},
+            ],
+          },
           {path: 'file-manager', element: <FileManagerPage/>},
           {path: 'mail', element: <MailPage/>},
           {path: 'chat', element: <ChatPage/>},
@@ -197,6 +277,8 @@ export const dashboardRoutes = [
           {path: 'permission', element: <PermissionDeniedPage/>},
           {path: 'params', element: <ParamsPage/>},
           {path: 'blank', element: <BlankPage/>},
+          {path: 'health', element: <HealthPage/>},
+          {path: 'test-news-route', element: <TestNewsRoutePage/>},
         ],
       },
     ],

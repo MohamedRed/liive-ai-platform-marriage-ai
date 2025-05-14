@@ -104,6 +104,55 @@ export const paths = {
     builder: `${ROOTS.DASHBOARD}/builder`,
     fileManager: `${ROOTS.DASHBOARD}/file-manager`,
     permission: `${ROOTS.DASHBOARD}/permission`,
+    health: `${ROOTS.DASHBOARD}/health`,
+    mealPlanning: `${ROOTS.DASHBOARD}/meal-planning`,
+    mealPlanningHistory: `${ROOTS.DASHBOARD}/meal-planning/history`,
+    ridesharing: `${ROOTS.DASHBOARD}/ridesharing`,
+    friends: `${ROOTS.DASHBOARD}/friends`,
+    city: {
+      root: `${ROOTS.DASHBOARD}/city`,
+      restaurants: `${ROOTS.DASHBOARD}/city/restaurants`,
+      events: `${ROOTS.DASHBOARD}/city/events`,
+      orders: `${ROOTS.DASHBOARD}/city/orders`,
+      publicTransit: `${ROOTS.DASHBOARD}/city/public-transit`,
+      restaurant: {
+        new: `${ROOTS.DASHBOARD}/city/restaurant/new`,
+        details: (id: string) => `${ROOTS.DASHBOARD}/city/restaurant/${id}`,
+        edit: (id: string) => `${ROOTS.DASHBOARD}/city/restaurant/${id}/edit`,
+      },
+      event: {
+        new: `${ROOTS.DASHBOARD}/city/event/new`,
+        details: (id: string) => `${ROOTS.DASHBOARD}/city/event/${id}`,
+        edit: (id: string) => `${ROOTS.DASHBOARD}/city/event/${id}/edit`,
+      },
+      order: {
+        details: (id: string) => `${ROOTS.DASHBOARD}/city/order/${id}`,
+      },
+    },
+    businessOwner: {
+      root: `${ROOTS.DASHBOARD}/business-owner`,
+      overview: `${ROOTS.DASHBOARD}/business-owner/overview`,
+      orders: `${ROOTS.DASHBOARD}/business-owner/orders`,
+      settings: `${ROOTS.DASHBOARD}/business-owner/settings`,
+      // Restaurant-specific paths
+      menu: `${ROOTS.DASHBOARD}/business-owner/menu`,
+      menuItem: {
+        new: `${ROOTS.DASHBOARD}/business-owner/menu/new`,
+        edit: (id: string) => `${ROOTS.DASHBOARD}/business-owner/menu/${id}/edit`,
+      },
+      // Event-specific paths
+      events: `${ROOTS.DASHBOARD}/business-owner/events`,
+      event: {
+        new: `${ROOTS.DASHBOARD}/business-owner/events/new`,
+        edit: (id: string) => `${ROOTS.DASHBOARD}/business-owner/events/${id}/edit`,
+      },
+      // Transit-specific paths
+      routes: `${ROOTS.DASHBOARD}/business-owner/routes`,
+      route: {
+        new: `${ROOTS.DASHBOARD}/business-owner/routes/new`,
+        edit: (id: string) => `${ROOTS.DASHBOARD}/business-owner/routes/${id}/edit`,
+      },
+    },
     general: {
       app: `${ROOTS.DASHBOARD}/app`,
       ecommerce: `${ROOTS.DASHBOARD}/ecommerce`,
@@ -182,6 +231,47 @@ export const paths = {
         details: `${ROOTS.DASHBOARD}/tour/${MOCK_ID}`,
         edit: `${ROOTS.DASHBOARD}/tour/${MOCK_ID}/edit`,
       },
+    },
+    hijra: {
+      root: `${ROOTS.DASHBOARD}/hijra`,
+      new: `${ROOTS.DASHBOARD}/hijra/new`,
+      details: (id: string) => `${ROOTS.DASHBOARD}/hijra/${id}`,
+      edit: (id: string) => `${ROOTS.DASHBOARD}/hijra/${id}/edit`,
+      demo: {
+        details: `${ROOTS.DASHBOARD}/hijra/${MOCK_ID}`,
+        edit: `${ROOTS.DASHBOARD}/hijra/${MOCK_ID}/edit`,
+      },
+    },
+    // Add hajj routes
+    hajj: {
+      root: `${ROOTS.DASHBOARD}/hajj`,
+      new: `${ROOTS.DASHBOARD}/hajj/new`,
+      details: (id: string) => `${ROOTS.DASHBOARD}/hajj/${id}`,
+      edit: (id: string) => `${ROOTS.DASHBOARD}/hajj/${id}/edit`,
+      demo: {
+        details: `${ROOTS.DASHBOARD}/hajj/${MOCK_ID}`,
+        edit: `${ROOTS.DASHBOARD}/hajj/${MOCK_ID}/edit`,
+      },
+    },
+    // Add banking routes
+    banking: {
+      root: `${ROOTS.DASHBOARD}/banking`,
+      accounts: `${ROOTS.DASHBOARD}/banking/accounts`,
+      cards: `${ROOTS.DASHBOARD}/banking/cards`,
+      transactions: `${ROOTS.DASHBOARD}/banking/transactions`,
+      account: {
+        new: `${ROOTS.DASHBOARD}/banking/account/new`,
+        details: (id: string) => `${ROOTS.DASHBOARD}/banking/account/${id}`,
+      },
+      card: {
+        new: `${ROOTS.DASHBOARD}/banking/card/new`,
+        details: (id: string) => `${ROOTS.DASHBOARD}/banking/card/${id}`,
+      },
+    },
+    // Add news routes
+    news: {
+      root: `${ROOTS.DASHBOARD}/news`,
+      details: (id: string) => `${ROOTS.DASHBOARD}/news/${id}`,
     },
   },
 };
