@@ -120,21 +120,30 @@ export interface NextQuestionSuggestion extends Timestamping {
 }
 
 export interface Matches extends Timestamping {
-  matches: {
-    userId: string;
-    vector_score: number;
-    ai_score: number;
+  userId: string;
+  matches: { // This array holds the reranked matches
+    userId: string; // The ID of the matched user
+    vector_score: number; // Assuming this is from an initial dense retrieval
+    ai_score: number; // This is the raw AI score from the reranking LLM for THIS specific match
     suggested_questions: {
       question: string;
       rationale: string;
       section: string;
     }[];
-    metadata: {
-      [key: string]: [value: string];
-    };
-  }[]
-  // Add field for the overall top match percentage for the primary user
-  topMatchPercentage?: number | null; // e.g., 85 (representing 85%)
+    // Assuming metadata might exist, keep it flexible or define if known
+    metadata?: { [key: string]: any };
+  }[];
+
+  // This field will store the new 'adjustedTopMatchPercentage'
+  // calculated for the user's TOP match from the 'matches' list above.
+  topMatchPercentage: number;
+
+  // New fields to provide context for the 'topMatchPercentage'
+  rawTopMatchAiScore: number; // The 'ai_score' of the specific top match used for topMatchPercentage
+  currentUserCoreProfileCompletenessFactor: number; // User's L2/L4 completeness (0.0 to 1.0)
+  currentUserAnsweredCoreQuestionsCount: number; // Count of user's answered L2/L4 questions
+  totalCoreQuestionsInSystem: number; // Total L2/L4 questions configured in the system
+  minConfidenceWeightUsed: number; // The MIN_CONFIDENCE_WEIGHT value used in the calculation
 }
 
 // Enhanced Zod Schema for Wali

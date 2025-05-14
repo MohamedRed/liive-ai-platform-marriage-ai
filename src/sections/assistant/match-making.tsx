@@ -21,7 +21,7 @@ import {Chart, useChart} from "../../components/chart";
 import {Block} from "../../components/settings/drawer/styles";
 import {SheetTweenConfig} from "react-modal-sheet/src/types";
 import { useAuthContext } from "src/auth/hooks";
-import { COLLECTIONS, Matches } from '@liive-marriage-ai/database-types';
+import { COLLECTIONS, Matches } from '@livve-1/database-types';
 
 // ----------------------------------------------------------------------
 
@@ -48,14 +48,20 @@ export function MatchMaking({isOpen, onClose}: Props) {
 
   const firestore = useFirestore();
   const {user} = useAuthContext()
-  const matchesRef = doc(firestore, COLLECTIONS.MATCHES, user?.uid).withConverter(matchesConverter)
+
+  // Return null if user or uid is not available
+  if (!user?.uid) {
+    return null;
+  }
+
+  const matchesRef = doc(firestore, COLLECTIONS.MARRIAGE.MATCHES, user.uid).withConverter(matchesConverter)
 
   const { status, data: matches } = useFirestoreDocData<Matches>(matchesRef, {
     idField: "id"
   });
   
-  const bestMatchScore = matches?.matches
-    .sort((a, b) => b.ai_score - a.ai_score)[0]?.ai_score ?? 0;
+  // Use topMatchPercentage from the root of the Matches document
+  const topMatchPercentageToShow = matches?.topMatchPercentage ?? 0;
 
   useEffect(() => {
     setTimeout(() => {
@@ -72,7 +78,7 @@ export function MatchMaking({isOpen, onClose}: Props) {
             <Sheet.Scroller draggableAt="top">
               <Stack spacing={6} flexGrow={1} sx={{p: 1, mt: 2}}>
                 <Block title="Best match yet" sx={{p: 2, backgroundColor: theme.palette.primary.main}}>
-                  <ProspectItem isBestMatch bestMatchScore={bestMatchScore}/>
+                  <ProspectItem isBestMatch bestMatchScore={topMatchPercentageToShow}/>
                 </Block>
                 <Block title="We are searching for a 99% match">
                   <Box

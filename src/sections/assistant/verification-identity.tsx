@@ -10,7 +10,7 @@ import {useState, useEffect, useCallback} from "react";
 import Stack from '@mui/material/Stack';
 import LinearProgress from "@mui/material/LinearProgress";
 import {SheetTweenConfig} from "react-modal-sheet/src/types";
-import { IdentityVerification } from '@liive-marriage-ai/database-types';
+import { IdentityVerification } from '@livve-1/database-types';
 
 // ----------------------------------------------------------------------
 

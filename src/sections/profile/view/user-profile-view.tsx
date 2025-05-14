@@ -1,59 +1,79 @@
+import {useState, useCallback} from 'react';
 import { motion } from 'framer-motion';
-import {useCallback} from 'react';
 
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
 import Card from '@mui/material/Card';
-import Stack from '@mui/material/Stack';
-import Container from '@mui/material/Container';
-import Grid from '@mui/material/Unstable_Grid2';
-import Typography from '@mui/material/Typography';
+import Tabs from '@mui/material/Tabs';
+
+import {useTabs} from 'src/hooks/use-tabs';
+
+import {_userAbout} from 'src/_mock';
+
+import {Iconify} from 'src/components/iconify';
 
 import {useMockedUser} from 'src/auth/hooks';
-import {useTabs} from '../../../hooks/use-tabs';
+
+import {ProfileHome} from '../profile-home';
 import {ProfileCover} from '../profile-cover';
 import {useProfile} from "../hooks/use-profile";
 import { MatchSummaryWidget } from 'src/sections/assistant/match-summary-widget';
-import {ProfileGallery} from '../profile-gallery';
-import {ProfileFollowers} from '../profile-followers';
-import {ProfileFriends} from '../profile-friends';
-import {ProfileHome} from '../profile-home';
-import {_userAbout} from 'src/_mock';
 
 // ----------------------------------------------------------------------
 
-export default function UserProfileView() {
+const TABS = [
+  {value: 'profile', label: 'Profile', icon: <Iconify icon="solar:user-id-bold" width={24}/>},
+];
+
+// ----------------------------------------------------------------------
+
+export function UserProfileView() {
   const {user} = useMockedUser();
   const tabs = useTabs('profile');
-  const {profile} = useProfile();
+  const { userInfo, qas, profileLoading, profileError, profileEmpty } = useProfile();
 
   return (
-    <Box sx={{ pl: 1, pr: 1, pb: 2 }}>
-      <Container maxWidth={false}>
-      <Card sx={{mb: 3}}>
+    <Box sx={{ pl: 2, pr: 2, pb: 2 }}>
+      <Card sx={{ mb: 3, height: 290 }}>
         <ProfileCover
-          role={_userAbout.role}
-          name={user?.displayName}
+          role={'User Role'}
+          name={userInfo?.name ? `${userInfo.name.firstName} ${userInfo.name.lastName}` : user?.displayName}
           avatarUrl={user?.photoURL}
           coverUrl={_userAbout.coverUrl}
         />
-        </Card>
 
-        <Grid container spacing={3}>
-          <Grid xs={12} md={4}>
-            <Stack spacing={3}>
-              <MatchSummaryWidget />
-            </Stack>
-          </Grid>
+        <Box
+          display="flex"
+          justifyContent={{xs: 'center', md: 'flex-end'}}
+          sx={{
+            width: 1,
+            bottom: 0,
+            zIndex: 9,
+            px: {md: 3},
+            position: 'absolute',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Tabs value={tabs.value} onChange={tabs.onChange}>
+            {TABS.map((tab) => (
+              <Tab key={tab.value} value={tab.value} icon={tab.icon} label={tab.label}/>
+            ))}
+          </Tabs>
+        </Box>
+      </Card>
 
-          <Grid xs={12} md={8}>
-            <Stack spacing={3}>
-                <ProfileHome />
-            </Stack>
-          </Grid>
-        </Grid>
-      </Container>
+      <Box sx={{ mb: 3 }}>
+        <MatchSummaryWidget />
+      </Box>
+      <Box sx={{ mb: 3 }}>
+        {tabs.value === 'profile' && 
+          <ProfileHome 
+            userInfo={userInfo} 
+            qasData={qas} 
+            isLoading={profileLoading} 
+          />
+        }
+      </Box>
     </Box>
   );
 }

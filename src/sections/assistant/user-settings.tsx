@@ -4,8 +4,8 @@ import {useTheme} from "@mui/material/styles";
 import { useFirestoreDocData, useFirestore } from 'reactfire';
 import { doc, WithFieldValue, updateDoc } from 'firebase/firestore';
 import { useAuthContext } from "src/auth/hooks";
-import { COLLECTIONS } from '@liive-marriage-ai/database-types';
-import type { UserSettings } from '@liive-marriage-ai/database-types';
+import { COLLECTIONS } from '@livve-1/database-types';
+import type { UserSettings } from '@livve-1/database-types';
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -93,7 +93,12 @@ export function UserSettings({isOpen, onClose}: Props) {
   const { user } = useAuthContext();
   const { locale } = useLocale();
 
-  const settingsRef = doc(firestore, COLLECTIONS.USER_SETTINGS, user?.uid).withConverter(settingsConverter);
+  // Return null if user or uid is not available
+  if (!user?.uid) {
+    return null;
+  }
+
+  const settingsRef = doc(firestore, COLLECTIONS.USERS.USER_SETTINGS, user.uid).withConverter(settingsConverter);
   const { data: settings } = useFirestoreDocData<UserSettings>(settingsRef);
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(settings?.notification?.preferences?.enabled ?? true);

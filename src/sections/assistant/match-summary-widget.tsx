@@ -1,25 +1,40 @@
-import { Box } from '@mui/material';
+import { Box, Grid } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { useFirestore, useFirestoreDocData } from 'reactfire';
+import { useFirestore } from 'reactfire';
 import { doc, getDoc, WithFieldValue, DocumentData, Timestamp } from 'firebase/firestore';
 import { useAuthContext } from 'src/auth/hooks';
-import { COLLECTIONS, Matches } from '@liive-marriage-ai/database-types';
+import { COLLECTIONS, Matches, QuestionsAnswers } from '@livve-1/database-types';
 import { MatchProgressWidget } from './match-progress-widget';
 import { useState, useEffect } from 'react';
+import { EcommerceWidgetSummary } from "src/sections/overview/e-commerce/ecommerce-widget-summary";
 
 interface Props {
 }
 
 // Define a fallback profile if data can't be loaded
-const DEFAULT_PROFILE: Partial<Matches> = {
+const DEFAULT_MATCHES_DATA: Partial<Matches> = {
   matches: [],
-  createdAt: Timestamp.now(),
-  updatedAt: Timestamp.now()
+  topMatchPercentage: 0, // Default percentage
+  // currentUserAnsweredCoreQuestionsCount: 0, // Removed - Fetched from QAS now
 };
 
-const profileConverter = {
-  toFirestore: (profile: WithFieldValue<Matches>) => profile,
-  fromFirestore: (snap: any) => snap.data() as Matches,
+const DEFAULT_QAS_DATA: Partial<QuestionsAnswers> = {
+  questions: {}
+};
+
+const matchesConverter = {
+  toFirestore: (matches: WithFieldValue<Matches>) => matches,
+  fromFirestore: (snap: any): Matches => snap.data() as Matches, // Ensure type is Matches
+};
+
+const qasConverter = {
+  toFirestore: (qas: WithFieldValue<QuestionsAnswers>) => qas,
+  fromFirestore: (snap: any): QuestionsAnswers => snap.data() as QuestionsAnswers,
+};
+
+const DEFAULT_CHART_DATA = {
+  categories: ['-'], 
+  series: [0] 
 };
 
 export function MatchSummaryWidget({}: Props) {
@@ -27,84 +42,85 @@ export function MatchSummaryWidget({}: Props) {
   const theme = useTheme();
   const firestore = useFirestore();
   
-  // State for tracking loading status and profile data
-  const [profile, setProfile] = useState<Partial<Matches>>(DEFAULT_PROFILE);
+  const [matchesData, setMatchesData] = useState<Partial<Matches>>(DEFAULT_MATCHES_DATA);
+  const [qasData, setQasData] = useState<Partial<QuestionsAnswers>>(DEFAULT_QAS_DATA);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
   const userId = user?.id || '';
   
-  // Fetch data when component mounts and userId changes
   useEffect(() => {
-    // Reset loading state
     setIsLoading(true);
-    
-    // Only attempt to fetch data if we have a valid user ID
     if (!userId) {
       setIsLoading(false);
+      setMatchesData(DEFAULT_MATCHES_DATA);
+      setQasData(DEFAULT_QAS_DATA);
       return;
     }
     
-    const fetchProfileData = async () => {
+    const fetchWidgetData = async () => {
       try {
-        const profileRef = doc(firestore, COLLECTIONS.MATCHES, userId).withConverter(profileConverter);
-        const profileData = await getDoc(profileRef);
-        
-        if (profileData.exists()) {
-          setProfile(profileData.data());
-        } else {
-          // No profile found for this user
-          setProfile(DEFAULT_PROFILE);
-        }
+        // Fetch Matches Data
+        const matchesRef = doc(firestore, COLLECTIONS.MARRIAGE.MATCHES, userId).withConverter(matchesConverter);
+        const matchesSnap = await getDoc(matchesRef);
+        setMatchesData(matchesSnap.exists() ? matchesSnap.data() : DEFAULT_MATCHES_DATA);
+
+        // Fetch QAS Data
+        const qasRef = doc(firestore, COLLECTIONS.MARRIAGE.QUESTIONS_ANSWERS, userId).withConverter(qasConverter);
+        const qasSnap = await getDoc(qasRef);
+        setQasData(qasSnap.exists() ? qasSnap.data() : DEFAULT_QAS_DATA);
+
       } catch (error) {
-        console.error('Error fetching profile:', error);
-        setProfile(DEFAULT_PROFILE);
+        console.error('Error fetching widget data:', error);
+        setMatchesData(DEFAULT_MATCHES_DATA);
+        setQasData(DEFAULT_QAS_DATA);
       } finally {
         setIsLoading(false);
       }
     };
     
-    fetchProfileData();
+    fetchWidgetData();
   }, [userId, firestore]);
   
-  // Use a safe accessor pattern to avoid undefined errors
-  const bestMatch = profile?.matches?.reduce((best: any, current: any) => {
-    if (!best || (current && current.ai_score > best.ai_score)) {
-      return current;
-    }
-    return best;
-  }, null);
+  // Use the adjusted percentage directly from the fetched data
+  const matchPercentage = (matchesData as Matches)?.topMatchPercentage ?? 0;
 
-  // Provide fallback values to avoid rendering errors
-  const matchPercentage = bestMatch ? Math.round((bestMatch.ai_score || 0) * 100) : 50;
+  // Calculate total answered questions count from QAS data
+  const totalAnsweredCount = qasData?.questions ? Object.keys(qasData.questions).length : 0;
 
-  // If we don't have a valid user ID or profile, show a default state
-  if (!userId || isLoading) {
+  if (isLoading) {
     return (
-      <Box sx={{ width: '100%', maxWidth: 600, mx: 'auto' }}>
-        <MatchProgressWidget
-          title="Loading Match Data..."
-          percent={0}
-          total={100}
-          chart={{
-            categories: ['--', '--', '--', '--', '--', '--', '--', '--'],
-            series: [0, 0, 0, 0, 0, 0, 0, 0],
-          }}
-        />
-      </Box>
+      <Grid container spacing={3} sx={{ width: '100%', maxWidth: 600, mx: 'auto' }}>
+         <Grid item xs={6} md={6}>
+            <EcommerceWidgetSummary title="Match Score" total={0} percent={0} chart={DEFAULT_CHART_DATA} />
+         </Grid>
+         <Grid item xs={6} md={6}>
+             <EcommerceWidgetSummary title="Questions Answered" total={0} percent={0} chart={DEFAULT_CHART_DATA} />
+         </Grid>
+      </Grid>
     );
   }
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 600, mx: 'auto' }}>
-      <MatchProgressWidget
-        title="Match Found"
+    <Grid container spacing={3} sx={{ width: '100%', maxWidth: 600, mx: 'auto' }}>
+       <Grid item xs={6} md={6}>
+         <EcommerceWidgetSummary 
+           title="Questions Answered"
+           total={totalAnsweredCount}
+           percent={0}
+           chart={DEFAULT_CHART_DATA}
+         />
+       </Grid>
+       <Grid item xs={6} md={6}>
+         <EcommerceWidgetSummary 
+           title="Top Match Score (%)"
+           total={matchPercentage}
         percent={matchPercentage}
-        total={matchPercentage}
         chart={{
-          categories: ['12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'],
-          series: [22, 8, 35, 50, 82, 84, 77, 50],
+             categories: ['Match'],
+             series: [matchPercentage]
         }}
       />
-    </Box>
+       </Grid>
+    </Grid>
   );
 } 

@@ -1,7 +1,7 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import {Sheet} from "react-modal-sheet";
 import {useTheme} from "@mui/material/styles";
-import UserProfileView from "../profile/view/user-profile-view";
+import { UserProfileView } from "../profile/view/user-profile-view";
 
 
 // ----------------------------------------------------------------------

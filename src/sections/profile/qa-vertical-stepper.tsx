@@ -1,9 +1,8 @@
-import {doc, updateDoc, serverTimestamp, DocumentData} from "firebase/firestore";
+import {doc, updateDoc, serverTimestamp, Timestamp} from "firebase/firestore";
 import {useState, useEffect, useCallback} from 'react';
-import {useFirestore, useFirestoreDocData} from "reactfire";
+import {useFirestore} from "reactfire";
 import { Box } from '@mui/material';
 import LoadingButton from '@mui/lab/LoadingButton';
-import { Timestamp } from '@firebase/firestore-types';
 
 import Step from '@mui/material/Step';
 import Paper from '@mui/material/Paper';
@@ -18,10 +17,11 @@ import {useAuthContext} from "../../auth/hooks";
 import {Iconify} from "../../components/iconify";
 import { 
   COLLECTIONS, 
-  QuestionsAnswers,
-  QAEditLogs,
-  Timestamping
-} from '../../../packages/database-types/src';
+  QuestionsAnswers, 
+  Timestamping, 
+  UserInfo,
+  VerificationStatus 
+} from '@livve-1/database-types';
 
 // ----------------------------------------------------------------------
 
@@ -35,25 +35,34 @@ interface GroupedQAsBySection {
   }>;
 }
 
+// Props for QAVerticalStepper
+interface QAVerticalStepperProps {
+  qasData: QuestionsAnswers | null;
+  isLoading: boolean;
+  // We might need userInfo for save operations later, or pass userId
+  userId: string | undefined; 
+}
+
 // ----------------------------------------------------------------------
 
-export function QAVerticalStepper() {
-  const {user} = useAuthContext();
+export function QAVerticalStepper({ qasData, isLoading, userId }: QAVerticalStepperProps) {
+  // const {user} = useAuthContext(); // user.uid was used for profileRef, now userId prop
   const firestore = useFirestore();
 
-  if (!user) {
+  // Return loading state if isLoading prop is true
+  if (isLoading) { // Changed condition
     return <Paper sx={{ p: 3, textAlign: 'center' }}>Loading user profile...</Paper>;
   }
   
-  // Get real-time updates for the questions and answers document
-  const qaRef = doc(firestore, COLLECTIONS.QUESTIONS_ANSWERS, user?.id || 'dummy');
-  const { status, data: qaData } = useFirestoreDocData<DocumentData>(qaRef);
+  // Removed: Internal data fetching for profile document
+  // const profileRef = doc(firestore, COLLECTIONS.USERS.USER_INFO, user.uid); 
+  // const { status, data: profile } = useFirestoreDocData(profileRef);
 
   const [activeStep, setActiveStep] = useState(0);
   const [groupedQAs, setGroupedQAs] = useState<GroupedQAsBySection>({});
 
   const [controlled, setControlled] = useState<string | false>(false);
-  const [pendingUpdates, setPendingUpdates] = useState<Record<string, boolean>>({});
+  // const [pendingUpdates, setPendingUpdates] = useState<Record<string, boolean>>({}); // Related to old update logic
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>({});
   const [changedAnswers, setChangedAnswers] = useState<Record<string, string>>({});
   const [savingAnswers, setSavingAnswers] = useState<Record<string, boolean>>({});
@@ -75,24 +84,26 @@ export function QAVerticalStepper() {
     setActiveStep(0);
   };
 
-  // Initialize local answers from Q&A data
+  // Initialize local answers from qasData prop
   useEffect(() => {
-    if (qaData?.questions) {
+    if (qasData?.questions) { // Changed to use qasData
       const answers: Record<string, string> = {};
-      Object.entries(qaData.questions as QuestionsAnswers['questions']).forEach(([id, qa]) => {
+      Object.entries(qasData.questions).forEach(([id, qa]) => {
         answers[id] = qa.answer || '';
       });
       setLocalAnswers(answers);
+    } else {
+      setLocalAnswers({}); // Clear if no qasData
     }
-  }, [qaData?.questions]);
+  }, [qasData]); // Dependency on qasData
 
   const handleAnswerChange = (questionId: string, newAnswer: string) => {
     setLocalAnswers(prev => ({ ...prev, [questionId]: newAnswer }));
     
-    // Normalize whitespace: trim and replace multiple spaces with single space
-    const normalizeText = (text: string) => text.trim().replace(/\s+/g, ' ');
+    const normalizeText = (text: string) => text.trim().replace(/\\s+/g, ' ');
     
-    const originalAnswer = (qaData?.questions as QuestionsAnswers['questions'])?.[questionId]?.answer || '';
+    // Original answer now comes from qasData
+    const originalAnswer = qasData?.questions?.[questionId]?.answer || '';
     const hasRealChange = 
       normalizeText(newAnswer) !== normalizeText(originalAnswer) && 
       normalizeText(newAnswer) !== '';
@@ -109,34 +120,25 @@ export function QAVerticalStepper() {
   };
 
   const handleSaveAnswer = async (questionId: string) => {
+    if (!userId) {
+      console.error("User ID is missing, cannot save answer.");
+      return;
+    }
     const newAnswer = localAnswers[questionId];
     setSavingAnswers(prev => ({ ...prev, [questionId]: true }));
     
+    // IMPORTANT: This needs to update COLLECTIONS.MARRIAGE.QUESTIONS_ANSWERS
+    // For now, this is a placeholder and will likely FAIL or update the wrong place
+    // if profileRef was pointing to USER_INFO.
+    // We need a qasRef.
+    const qasDocRef = doc(firestore, COLLECTIONS.MARRIAGE.QUESTIONS_ANSWERS, userId);
+
     try {
-      // Update the answer in questions
-      await updateDoc(qaRef, {
+      // This update path assumes 'questions' is the top-level field in QAS doc
+      await updateDoc(qasDocRef, {
         [`questions.${questionId}.answer`]: newAnswer,
         [`questions.${questionId}.updatedAt`]: serverTimestamp(),
       });
-
-      // Create QA edit log
-      const editLogRef = doc(firestore, COLLECTIONS.QA_EDIT_LOGS);
-      const editLog: Omit<QAEditLogs, 'id'> = {
-        userId: user.id,
-        questionId: questionId,
-        previousAnswer: (qaData?.questions as QuestionsAnswers['questions'])?.[questionId]?.answer || '',
-        newAnswer: newAnswer,
-        createdAt: serverTimestamp() as unknown as Timestamp,
-        metadata: {
-          deviceInfo: 'Web Browser',
-          location: {
-            country: 'US' // TODO: Get actual country
-          }
-        }
-      };
-      await updateDoc(editLogRef, editLog);
-
-      // Add artificial delay
       await new Promise(resolve => setTimeout(resolve, 1500));
       setChangedAnswers(prev => {
         const next = { ...prev };
@@ -150,9 +152,10 @@ export function QAVerticalStepper() {
     }
   };
 
-  function groupQAsBySection(questionsAnswers: QuestionsAnswers['questions'] = {}): GroupedQAsBySection {
+  function groupQAsBySection(questions: QuestionsAnswers['questions'] | undefined): GroupedQAsBySection { // Changed signature
+    if (!questions) return {}; // Handle undefined questions
     // First group QAs by section
-    const grouped = Object.entries(questionsAnswers).reduce<GroupedQAsBySection>((grouped, [key, qa]) => {
+    const grouped = Object.entries(questions).reduce<GroupedQAsBySection>((grouped, [key, qa]) => {
       const section = qa.section || "uncategorized";
       
       if (!grouped[section]) {
@@ -163,26 +166,32 @@ export function QAVerticalStepper() {
         id: key,
         question: qa.question,
         answer: qa.answer,
-        createdAt: qa.createdAt,
-        updatedAt: qa.updatedAt
+        createdAt: qa.createdAt as any, // Timestamps might need conversion if not Firestore Timestamps
+        updatedAt: qa.updatedAt as any
       });
 
       return grouped;
     }, {});
 
     // Sort QAs within each section by timestamp
-    Object.values(grouped).forEach(qas => {
-      qas.sort((a, b) => {
-        const timeA = a.createdAt.toMillis();
-        const timeB = b.createdAt.toMillis();
+    Object.values(grouped).forEach(qasInSection => { // Renamed qas to qasInSection to avoid conflict
+      qasInSection.sort((a, b) => {
+        const timeA = (a.createdAt as any)?.toMillis === 'function' ? (a.createdAt as any)?.toMillis() : Number(a.createdAt) ;
+        const timeB = (b.createdAt as any)?.toMillis === 'function' ? (b.createdAt as any)?.toMillis() : Number(b.createdAt);
+        if (timeA == null && timeB == null) return 0;
+        if (timeA == null) return 1;
+        if (timeB == null) return -1;
         return timeA - timeB;
       });
     });
 
     // Convert to array of [section, qas] pairs and sort by earliest question in each section
     const sortedEntries = Object.entries(grouped).sort(([, qasA], [, qasB]) => {
-      const timeA = qasA[0].createdAt.toMillis();
-      const timeB = qasB[0].createdAt.toMillis();
+      const timeA = (qasA[0]?.createdAt as any)?.toMillis === 'function' ? (qasA[0]?.createdAt as any)?.toMillis() : Number(qasA[0]?.createdAt);
+      const timeB = (qasB[0]?.createdAt as any)?.toMillis === 'function' ? (qasB[0]?.createdAt as any)?.toMillis() : Number(qasB[0]?.createdAt);
+      if (timeA == null && timeB == null) return 0;
+      if (timeA == null) return 1;
+      if (timeB == null) return -1;
       return timeA - timeB;
     });
 
@@ -191,22 +200,20 @@ export function QAVerticalStepper() {
   }
 
   useEffect(() => {
-    if (qaData) {
-      // Handle missing or malformed questions
-      const questions = (qaData.questions || {}) as QuestionsAnswers['questions'];
-      setGroupedQAs(groupQAsBySection(questions));
-    }
-  }, [qaData]);
+    // Use qasData prop to group QAs
+    setGroupedQAs(groupQAsBySection(qasData?.questions));
+  }, [qasData]); // Dependency on qasData
 
   // Add empty state handling
-  const hasQAs = Object.keys(groupedQAs).length > 0;
+  // isLoading is now a prop, status is removed
+  const hasQAs = !isLoading && qasData && Object.keys(qasData.questions || {}).length > 0 && Object.keys(groupedQAs).length > 0;
 
   useEffect(() => {
     const handleScroll = (event: CustomEvent) => {
       const { section, questionId } = event.detail;
       // Find and scroll to the section/question
       // You might need to use refs or element IDs
-      const element = document.querySelector(`[data-section="${section}"][data-question="${questionId}"]`);
+      const element = document.querySelector(`[data-section=\"${section}\"][data-question=\"${questionId}\"]`);
       if (element) {
         element.scrollIntoView({ behavior: 'smooth' });
         element.classList.add('highlight');
@@ -220,7 +227,7 @@ export function QAVerticalStepper() {
 
   return (
     <>
-      {status === 'loading' ? (
+      {isLoading ? ( // Use isLoading prop
         <span>loading...</span>
       ) : (
         <>
@@ -232,28 +239,29 @@ export function QAVerticalStepper() {
             </Paper>
           )}
 
-          {hasQAs && Object.entries(groupedQAs).map(([section, qas]) => (
+          {hasQAs && Object.entries(groupedQAs).map(([section, qasInSection]) => ( // Renamed qas to qasInSection
             <Accordion 
               key={section}
               expanded={controlled === section}
               onChange={handleChangeControlled(section)}
-              sx={{ p: 2, bgcolor: 'background.paper', gap: 0 }}
+              sx={{ py: 3, px: 0, bgcolor: 'background.paper', marginBottom: 0 }}
             >
               <AccordionSummary expandIcon={<Iconify icon="eva:arrow-ios-downward-fill" />}>
                 <Typography variant="subtitle1">{section}</Typography>
               </AccordionSummary>
-              <AccordionDetails>
-                <Stepper activeStep={activeStep} orientation="vertical">
-                  {qas.map((qa) => (
+              <AccordionDetails sx={{ px: 2 }}>
+                <Stepper activeStep={activeStep} orientation="vertical" sx={{ width: '100%' }}>
+                  {qasInSection.map((qa) => (
                     <Step 
                       active 
                       key={qa.id}
                       data-section={section}
                       data-question={qa.id}
+                      sx={{ width: '100%' }}
                     >
                       <StepLabel>{qa.question}</StepLabel>
-                      <StepContent>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <StepContent sx={{ width: '100%', '.MuiStepContent-root': { paddingTop: 1, paddingBottom: 1 } }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', mt: 2 }}>
                           <TextField
                             variant="outlined"
                             rows={5}
@@ -268,6 +276,7 @@ export function QAVerticalStepper() {
                             disabled={!changedAnswers[qa.id]}
                             variant="contained"
                             color="primary"
+                            loadingPosition="start"
                             onClick={() => handleSaveAnswer(qa.id)}
                             sx={{ alignSelf: 'center', minWidth: 100 }}
                           >

@@ -2,6 +2,7 @@ import {useRef} from 'react';
 
 import Stack from '@mui/material/Stack';
 import Grid from '@mui/material/Unstable_Grid2';
+import { UserInfo, QuestionsAnswers } from '@livve-1/database-types';
 
 import {QAVerticalStepper} from "./qa-vertical-stepper";
 
@@ -13,7 +14,14 @@ export interface QuestionAnswer {
   createdAt: number
 }
 
-export function ProfileHome() {
+// Define Props interface
+interface ProfileHomeProps {
+  userInfo: UserInfo | null;
+  qasData: QuestionsAnswers | null;
+  isLoading: boolean;
+}
+
+export function ProfileHome({ userInfo, qasData, isLoading }: ProfileHomeProps) {
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -70,12 +78,16 @@ export function ProfileHome() {
 
 
       </Stack> */}
-      <QAVerticalStepper />
+      <QAVerticalStepper 
+        qasData={qasData} 
+        isLoading={isLoading} 
+        userId={userInfo?.id} 
+      />
     </>
   );
 
   return (
-        <Stack spacing={2}>
+        <Stack spacing={0} sx={{ mx: { xs: -2, md: 0 } }}>
 
           {renderAbout}
 
