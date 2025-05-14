@@ -31,54 +31,75 @@ class UpdateFirestoreDoFn(beam.DoFn):
             raise
 
     def process(self, element):
-        # Expecting element like {'user_id': ..., 'ranked_matches': [...], 'topMatchPercentage': ...}
+        # Expecting element like {
+        #   'user_id': ...,
+        #   'matches': [...],
+        #   'topMatchPercentage': ..., 
+        #   'rawTopMatchAiScore': ..., 
+        #   'currentUserCoreProfileCompletenessFactor': ..., 
+        #   'currentUserAnsweredCoreQuestionsCount': ..., 
+        #   'totalCoreQuestionsInSystem': ..., 
+        #   'minConfidenceWeightUsed': ...
+        # }
         if not self.db:
             self.logger.error("Firestore client not initialized in UpdateFirestoreDoFn. Skipping.")
             self.error_counter.inc()
             raise RuntimeError("Setup failed for UpdateFirestoreDoFn")
 
-        # Adjust check for new expected structure
-        if not isinstance(element, dict) or 'user_id' not in element or 'ranked_matches' not in element:
-            self.logger.error(f"Invalid input element format for UpdateFirestoreDoFn (missing user_id or ranked_matches): {element}")
+        if not isinstance(element, dict) or 'user_id' not in element or 'matches' not in element:
+            self.logger.error(f"Invalid input element format for UpdateFirestoreDoFn (missing user_id or matches): {element}")
             self.error_counter.inc()
             raise TypeError(f"Invalid input element format for UpdateFirestoreDoFn: {type(element)}")
 
         user_id = element.get('user_id')
-        # Rename variable to match element structure
-        ranked_matches = element.get('ranked_matches', []) # Default to empty list
-        top_percentage = element.get('topMatchPercentage') # Get the percentage
+        matches_list = element.get('matches', [])
+        
+        # Extract all new and existing fields for Firestore
+        top_match_percentage = element.get('topMatchPercentage') # Adjusted percentage
+        raw_top_match_ai_score = element.get('rawTopMatchAiScore')
+        completeness_factor = element.get('currentUserCoreProfileCompletenessFactor')
+        answered_core_count = element.get('currentUserAnsweredCoreQuestionsCount')
+        total_core_system = element.get('totalCoreQuestionsInSystem')
+        min_confidence_weight = element.get('minConfidenceWeightUsed')
 
         if not user_id:
             self.logger.warning("No user_id found in element for Firestore update.")
             self.missing_user_id_counter.inc()
-            return # Cannot update without user_id
+            return
 
         try:
             doc_ref = self.db.collection(self.collection_name).document(user_id)
 
-            # Example: Overwrite matches field completely and add percentage
             update_data = {
-                "matches": ranked_matches, # Replace the entire array (use correct key)
-                "topMatchPercentage": top_percentage, # Add the percentage
-                "last_updated": firestore.SERVER_TIMESTAMP # Add an update timestamp
+                "matches": matches_list,
+                "topMatchPercentage": top_match_percentage,
+                "rawTopMatchAiScore": raw_top_match_ai_score,
+                "currentUserCoreProfileCompletenessFactor": completeness_factor,
+                "currentUserAnsweredCoreQuestionsCount": answered_core_count,
+                "totalCoreQuestionsInSystem": total_core_system,
+                "minConfidenceWeightUsed": min_confidence_weight,
+                "last_updated": firestore.SERVER_TIMESTAMP
             }
 
-            # Remove topMatchPercentage if it's None to avoid storing null?
-            if top_percentage is None:
+            # Clean up any None values to avoid writing them explicitly as null in Firestore, if desired.
+            # topMatchPercentage could be None if calculation failed.
+            if top_match_percentage is None:
                 del update_data['topMatchPercentage']
+            # rawTopMatchAiScore could be None if no matches or score extraction failed
+            if raw_top_match_ai_score is None:
+                del update_data['rawTopMatchAiScore']
+            # Other numeric fields will default to 0 or 0.0 if not found by .get() and calculation had issues,
+            # which is usually fine for Firestore.
             
-            doc_ref.set(update_data, merge=True) # Use set with merge=True to update/create
+            doc_ref.set(update_data, merge=True)
 
             self.update_success_counter.inc()
-            # self.logger.info(f"Successfully set/merged matches for user {user_id}")
-
-            # Yield element for potential downstream processing (e.g., final logging)
             yield element
 
         except Exception as e:
             self.error_counter.inc()
             self.logger.error(f"Firestore update failed for user {user_id}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
-            raise # Propagate error for DLQ
+            raise
 
 
 @beam.ptransform_fn

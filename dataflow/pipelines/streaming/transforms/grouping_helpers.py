@@ -167,47 +167,59 @@ class UpdateAllScoresDoFn(beam.DoFn):
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': str(e), 'user_id': user_id})
 
 class ProcessJoinedDataDoFn(beam.DoFn):
-    """Processes the output of CoGroupByKey, combining scores and matches for reranking."""
+    """Processes the output of CoGroupByKey, combining scores, matches, and user history for reranking."""
     OUTPUT_ERROR_TAG = 'errors'
-    SCORES_TAG = 'scores_tag'
-    MATCHES_TAG = 'matches_tag'
+    # SCORES_TAG and MATCHES_TAG are now passed in constructor if they vary, or use fixed ones.
 
-    def __init__(self):
+    def __init__(self, scores_tag: str, matches_tag: str, history_tag: str):
         self.logger = logging.getLogger(__name__)
+        self.scores_tag = scores_tag
+        self.matches_tag = matches_tag
+        self.history_tag = history_tag # New tag for user history
 
     def process(self, element):
         user_id, joined_data = element
         try:
-            scores_list = joined_data.get(self.SCORES_TAG, [])
-            matches_list = joined_data.get(self.MATCHES_TAG, [])
+            scores_list = joined_data.get(self.scores_tag, [])
+            matches_list = joined_data.get(self.matches_tag, [])
+            history_list = joined_data.get(self.history_tag, []) # Get history data
 
-            # Scores side should always have exactly one entry due to GroupByKey + AggregateScoresDoFn
+            # Scores side should always have exactly one entry
             if len(scores_list) == 1:
                  score_data = scores_list[0]
             else:
                  self.logger.error(f"Unexpected number of score entries for user {user_id} in join: {len(scores_list)}. Using default.")
                  score_data = {'scores': {}, 'aggregate': 0.0}
-                 if len(scores_list) != 0: # Log if not empty or 1
+                 if len(scores_list) != 0:
                      self.logger.warning(f"Multiple score entries found: {scores_list}")
 
             # Matches side can have zero or one entry
             if len(matches_list) == 1:
-                match_data = matches_list[0]
-                matches = match_data.get('matches', [])
+                match_data_dict = matches_list[0]
+                matches = match_data_dict.get('matches', []) # Assuming matches are under a 'matches' key
             elif len(matches_list) == 0:
-                # Expected if Pinecone returns no matches
-                # self.logger.info(f"No matches found for user {user_id} during join.")
                 matches = []
-            else: # Multiple match entries - indicates upstream issue
+            else: 
                 self.logger.error(f"Unexpected number of match entries for user {user_id} in join: {len(matches_list)}. Taking first.")
-                match_data = matches_list[0]
-                matches = match_data.get('matches', [])
+                match_data_dict = matches_list[0]
+                matches = match_data_dict.get('matches', [])
                 self.logger.warning(f"Multiple match entries found: {matches_list}")
+
+            # History side should have one entry (the user_qas dict)
+            user_qas = {}
+            if len(history_list) == 1:
+                user_qas = history_list[0] # This is the user_qas_dict
+            elif len(history_list) > 1:
+                 self.logger.warning(f"Multiple history entries for user {user_id}: {len(history_list)}. Taking first.")
+                 user_qas = history_list[0]
+            else: # No history found - log and use empty
+                self.logger.warning(f"No history entry found for user {user_id} in join for reranking.")
 
             yield {
                 'user_id': user_id,
-                'scores': score_data, # Dict {'scores': {qa_id: score}, 'aggregate': agg_score}
-                'matches': matches # List of matches (can be empty)
+                'scores': score_data, 
+                'matches': matches, 
+                'user_qas': user_qas # Add user_qas to the output
             }
 
         except Exception as e:

@@ -5,9 +5,11 @@ FROM gcr.io/dataflow-templates-base/python3-template-launcher-base
 ARG WORKDIR=/template
 WORKDIR ${WORKDIR}
 
-# Copy the pipeline files
+# Copy the pipeline files and necessary subdirectories
 COPY streaming.py .
 COPY requirements.txt .
+COPY ./transforms ./transforms  # Copy the transforms directory
+COPY utils.py .              # Copy utils.py
 
 # Install dependencies
 RUN apt-get update \

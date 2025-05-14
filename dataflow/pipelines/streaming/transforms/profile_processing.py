@@ -112,7 +112,7 @@ class ValidateProfileDoFn(beam.DoFn):
     def setup(self):
         # Setup Firestore client
         if not self.is_test:
-            try:
+        try:
                 self.db = firestore.Client(project=self.project_id)
                 self.logger.info("ValidateProfileDoFn: Firestore client initialized.")
             except Exception as e:

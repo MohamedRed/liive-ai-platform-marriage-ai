@@ -13,3 +13,5 @@
 # limitations under the License.
 
 """A package that has a Beam pipeline that is split across multiple modules."""
+
+# Makes streaming a package

@@ -11,23 +11,46 @@ PROJECT_ID="marriage-ai-289c6"
 # GCP Region (e.g., us-central1)
 REGION="us-central1"
 
-# Google Cloud Storage Bucket Name
-BUCKET_NAME="marriage-ai-289c6.firebasestorage.app"
+# Google Cloud Storage Bucket Name (Ensure this is the bucket, not the firebase storage path)
+BUCKET_NAME="marriage-ai-289c6-dataflow-assets" # Example: Adjust if needed
 
 # Docker Image Details for Streaming Pipeline
+ARTIFACT_REPO="dataflow-repo" # Repository name in Artifact Registry
 IMAGE_NAME_STREAMING="streaming-pipeline"
 IMAGE_TAG="latest"
 
 # Template paths and metadata
-TEMPLATE_PATH="gs://${BUCKET_NAME}/dataflow/streaming/staging"
+TEMPLATE_BUCKET_PATH="gs://${BUCKET_NAME}/dataflow/streaming"
 STREAMING_METADATA="template_spec.json"
 
-# Pipeline parameters
-PINECONE_REGION="us-central1"
-PROFILES_COLLECTION="PROFILES"
+# Pipeline parameters (Add defaults or ensure they are passed/configured elsewhere)
+# Use placeholder values if they need to be overridden at runtime, but define them
 PINECONE_INDEX="profiles"
+PINECONE_REGION="us-central1-gcp" # Example value, replace with your Pinecone env
+PROFILES_COLLECTION="USERS"
 MATCHES_COLLECTION="MATCHES"
-TOP_K="10"
+TOP_K="20"
+PDF_BUCKET="your-pdf-bucket-name" # *** REPLACE WITH ACTUAL BUCKET ***
+PDF_INSTRUCTIONS_PATH="agent-instructions-1.0.pdf"
+TASKS_LOCATION="us-central1"
+DELAYED_MATCHING_QUEUE="delayed-matching"
+NOTIFICATION_QUEUE="match-notifications"
+VOICE_AGENT_QUEUE="voice-agent-calls"
+NOTIFICATION_FUNCTION_URL="YOUR_NOTIFICATION_FUNCTION_URL" # *** REPLACE ***
+VOICE_AGENT_FUNCTION_URL="YOUR_VOICE_AGENT_FUNCTION_URL"   # *** REPLACE ***
+DELAYED_TASK_DELAY_SECONDS="300"
+DATAFLOW_WORKER_SA="YOUR_DATAFLOW_WORKER_SA_EMAIL" # *** REPLACE ***
+IMMEDIATE_TOPIC="user-profile-updated" # Example topic name
+DELAYED_TOPIC="delayed-matching" # Example topic name
+
+# Construct derived variables
+IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${IMAGE_NAME_STREAMING}:${IMAGE_TAG}"
+TEMPLATE_SPEC_GCS_PATH="${TEMPLATE_BUCKET_PATH}/templates/streaming.json"
+STAGING_LOCATION="${TEMPLATE_BUCKET_PATH}/staging"
+TEMP_LOCATION="${TEMPLATE_BUCKET_PATH}/temp"
+DLQ_GCS_PATH="${TEMPLATE_BUCKET_PATH}/dlq/"
+IMMEDIATE_PUBSUB_TOPIC="projects/${PROJECT_ID}/topics/${IMMEDIATE_TOPIC}"
+DELAYED_PUBSUB_TOPIC="projects/${PROJECT_ID}/topics/${DELAYED_TOPIC}"
 
 # ============================
 # Step 1: Enable Required Services
@@ -56,11 +79,11 @@ fi
 # ============================
 
 echo "Checking if Artifact Registry repository exists..."
-if gcloud artifacts repositories describe dataflow-repo --location=${REGION} --project=${PROJECT_ID} > /dev/null 2>&1; then
-    echo "Artifact Registry repository 'dataflow-repo' already exists."
+if gcloud artifacts repositories describe ${ARTIFACT_REPO} --location=${REGION} --project=${PROJECT_ID} > /dev/null 2>&1; then
+    echo "Artifact Registry repository '${ARTIFACT_REPO}' already exists."
 else
     echo "Creating Artifact Registry repository..."
-    gcloud artifacts repositories create dataflow-repo \
+    gcloud artifacts repositories create ${ARTIFACT_REPO} \
         --repository-format=docker \
         --location=${REGION} \
         --project=${PROJECT_ID}
@@ -93,48 +116,60 @@ create_folder "dataflow/streaming/dlq"
 echo "Folder structures created."
 
 # ============================
-# Step 5: Build and Deploy Template
+# Step 5: Build and Deploy Template (Corrected Build Command)
 # ============================
 
-# Building Streaming Flex Template
 echo "Building Streaming Flex Template..."
-gcloud dataflow flex-template build \
-    gs://${BUCKET_NAME}/dataflow/streaming/templates/streaming.json \
-    --image-gcr-path="${REGION}-docker.pkg.dev/${PROJECT_ID}/dataflow-repo/${IMAGE_NAME_STREAMING}:${IMAGE_TAG}" \
-    --sdk-language=PYTHON \
-    --flex-template-base-image=PYTHON3 \
-    --metadata-file="${STREAMING_METADATA}" \
-    --py-path="." \
-    --env "FLEX_TEMPLATE_PYTHON_PY_FILE=streaming.py" \
-    --env "FLEX_TEMPLATE_PYTHON_REQUIREMENTS_FILE=requirements.txt"
-echo "Streaming Flex Template built and uploaded to gs://${BUCKET_NAME}/dataflow/streaming/templates/streaming.json."
+# Assuming Dockerfile and requirements.txt are in the current directory relative to script execution
+gcloud dataflow flex-template build ${TEMPLATE_SPEC_GCS_PATH} \
+    --image "${IMAGE_PATH}" \
+    --sdk-language PYTHON \
+    --metadata-file "${STREAMING_METADATA}" \
+    --requirements-file ./requirements.txt # Path relative to where command is run
+    # Removed: --flex-template-base-image, --py-path, --env flags
+
+echo "Streaming Flex Template built and uploaded to ${TEMPLATE_SPEC_GCS_PATH}."
 
 # ============================
-# Step 6: Run Template
+# Step 6: Run Template (Corrected Run Command with All Parameters)
 # ============================
 
-# Running Streaming Flex Template
 echo "Running Streaming Flex Template..."
-gcloud dataflow flex-template run "streaming-job-`date +%Y%m%d-%H%M%S`" \
-    --template-file-gcs-location "gs://${BUCKET_NAME}/dataflow/streaming/templates/streaming.json" \
-    --parameters \
-dlq_bucket="gs://${BUCKET_NAME}/dataflow/streaming/dlq",\
-project="${PROJECT_ID}",\
-pinecone_region="${PINECONE_REGION}",\
-pinecone_index="${PINECONE_INDEX}",\
-profiles_collection="${PROFILES_COLLECTION}",\
-matches_collection="${MATCHES_COLLECTION}",\
-top_k="${TOP_K}",\
-staging_location="gs://${BUCKET_NAME}/dataflow/streaming/staging",
-temp_location="gs://${BUCKET_NAME}/dataflow/streaming/temp" \
-user_profile_updated_pubsub_topic="projects/${PROJECT_ID}/topics/user-profile-updated",\
-delayed_matching_pubsub_topic="projects/${PROJECT_ID}/topics/delayed-matching" \
-    --region "${REGION}"
+gcloud dataflow flex-template run "streaming-job-$(date +%Y%m%d-%H%M%S)" \
+    --template-file-gcs-location "${TEMPLATE_SPEC_GCS_PATH}" \
+    --region "${REGION}" \
+    --service-account-email "${DATAFLOW_WORKER_SA}" \
+    --staging-location "${STAGING_LOCATION}" \
+    --temp-location "${TEMP_LOCATION}" \
+    --parameters project="${PROJECT_ID}" \
+    --parameters region="${REGION}" \
+    --parameters runner="DataflowRunner" \
+    --parameters requirements_file="ignored-runtime" \
+    --parameters user_profile_updated_pubsub_topic="${IMMEDIATE_PUBSUB_TOPIC}" \
+    --parameters delayed_matching_pubsub_topic="${DELAYED_PUBSUB_TOPIC}" \
+    --parameters profiles_collection="${PROFILES_COLLECTION}" \
+    --parameters matches_collection="${MATCHES_COLLECTION}" \
+    --parameters pinecone_index="${PINECONE_INDEX}" \
+    --parameters pinecone_region="${PINECONE_REGION}" \
+    --parameters top_k="${TOP_K}" \
+    --parameters pdf_bucket="${PDF_BUCKET}" \
+    --parameters pdf_instructions_path="${PDF_INSTRUCTIONS_PATH}" \
+    --parameters tasks_location="${TASKS_LOCATION}" \
+    --parameters delayed_matching_queue="${DELAYED_MATCHING_QUEUE}" \
+    --parameters notification_queue="${NOTIFICATION_QUEUE}" \
+    --parameters voice_agent_queue="${VOICE_AGENT_QUEUE}" \
+    --parameters notification_function_url="${NOTIFICATION_FUNCTION_URL}" \
+    --parameters voice_agent_function_url="${VOICE_AGENT_FUNCTION_URL}" \
+    --parameters delayed_task_delay_seconds="${DELAYED_TASK_DELAY_SECONDS}" \
+    --parameters dlq_gcs_path="${DLQ_GCS_PATH}" \
+    --parameters service_account_email="${DATAFLOW_WORKER_SA}" # Pass SA email as pipeline option too
+    # Add other Dataflow options like --max-workers, --machine-type if needed
+
+echo "Streaming job started."
 
 # ============================
 # Step 7: Deployment Confirmation
 # ============================
 
-echo "Deployment of Flex Templates completed successfully!"
-echo "Templates are available at:"
-echo " - Streaming: gs://${BUCKET_NAME}/dataflow/streaming/templates/streaming.json"
+echo "Deployment script completed! Check the GCP console for job status."
+echo "Template Spec: ${TEMPLATE_SPEC_GCS_PATH}"

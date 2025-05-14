@@ -29,8 +29,9 @@ from datetime import datetime
 import statistics # For calculating average aggregate score
 from apache_beam.metrics import Metrics # For custom DoFn metrics
 from google.cloud import firestore # Needed for history fetch setup
-from .common.definitions import COLLECTIONS, DEFAULT_LOCATION # Import COLLECTIONS
+from .common.definitions import COLLECTIONS, DEFAULT_LOCATION, FOUNDATIONAL_LAYER, INSIGHT_LAYER # Import COLLECTIONS and layer constants
 from .utils.firestore_helpers import get_all_user_qas # Import history fetch helper
+from .common import config # <<< Corrected import for config.py
 
 # Import modular components
 from .transforms.common import (
@@ -246,11 +247,11 @@ def run_streaming_pipeline(argv=None):
         pinecone_matches, query_errors = (
             processed_immediate
             | "QueryPineconeMatches" >> QueryMatchesFromPinecone(
-                project_id=known_args.project,
-                pinecone_region=known_args.pinecone_region,
-                pinecone_index=known_args.pinecone_index,
-                top_k=known_args.top_k
-            ).with_outputs(QueryMatchesFromPinecone.ERROR_TAG, main=QueryMatchesFromPinecone.OUTPUT_TAG)
+                 project_id=known_args.project,
+                 pinecone_region=known_args.pinecone_region,
+                 pinecone_index=known_args.pinecone_index,
+                 top_k=known_args.top_k
+             ).with_outputs(QueryMatchesFromPinecone.ERROR_TAG, main=QueryMatchesFromPinecone.OUTPUT_TAG)
         )
         query_errors | "DLQ_QueryErrors" >> dlq_sink("QueryErrors")
 
@@ -323,19 +324,29 @@ def run_streaming_pipeline(argv=None):
 
         # --- Continue with Reranking Logic using Matches and Scores --- #
 
-        # We need to join aggregated_scores and keyed_filtered_matches
-        joined_scores_and_matches = (
+        # We need to join aggregated_scores, keyed_filtered_matches, AND user_history_keyed
+        HISTORY_TAG_FOR_RERANKING_JOIN = 'history_for_reranking' # Define a distinct tag
+        joined_scores_matches_and_history = (
              {
-                 'scores': aggregated_scores, # (user_id, score_dict)
-                 'matches': keyed_filtered_matches # (user_id, matches_dict)
+                 ProcessJoinedDataDoFn.SCORES_TAG: aggregated_scores, # (user_id, score_dict)
+                 ProcessJoinedDataDoFn.MATCHES_TAG: keyed_filtered_matches, # (user_id, matches_dict)
+                 HISTORY_TAG_FOR_RERANKING_JOIN: user_history_keyed # (user_id, user_qas_dict)
              }
-             | "JoinScoresAndMatches" >> beam.CoGroupByKey()
-             | "ProcessJoinedData" >> beam.ParDo(ProcessJoinedDataDoFn())
+             | "JoinScoresMatchesAndHistory" >> beam.CoGroupByKey()
+             | "ProcessJoinedForReranking" >> beam.ParDo(ProcessJoinedDataDoFn(
+                 scores_tag=ProcessJoinedDataDoFn.SCORES_TAG, # Keep original tags for this DoFn
+                 matches_tag=ProcessJoinedDataDoFn.MATCHES_TAG,
+                 history_tag=HISTORY_TAG_FOR_RERANKING_JOIN # Pass the new history tag
+                )
         )
+        )
+        # Output of ProcessJoinedForReranking should now be:
+        # {'user_id': ..., 'scores': ..., 'matches': ..., 'user_qas': ...}
 
-        # Assuming RerankAndScoreMatches takes {'user_id': ..., 'scores': ..., 'matches': ...}
+
+        # RerankAndScoreMatches now receives user_qas as well
         reranked_matches_data, reranking_errors = (
-            joined_scores_and_matches
+            joined_scores_matches_and_history # Use the new joined data
             | "RerankAndScoreMatches" >> RerankAndScoreMatches(
                 project_id=known_args.project,
                 # Pass the user info collection used by the DoFn inside
@@ -345,31 +356,61 @@ def run_streaming_pipeline(argv=None):
             ).with_outputs(RerankAndScoreMatches.ERROR_TAG, main=RerankAndScoreMatches.OUTPUT_TAG)
         )
         reranking_errors | "DLQ_RerankingErrors" >> dlq_sink("RerankingErrors")
-        # Expected output of RerankAndScoreMatches: PCollection of dicts
-        # e.g., {'user_id': 'user123', 'ranked_matches': [{'match_id': 'matchA', 'ai_score': 0.85, ...}, ...]}
+        # Expected output of RerankAndScoreMatches (now RerankMatchesDoFn internally):
+        # e.g., {
+        #   'user_id': 'user123',
+        #   'matches': [{'match_id': 'matchA', 'ai_score': 0.85, ...}, ...], # <<< Key is 'matches'
+        #   'user_qas': { 'qid1': {'answer': '...', 'layer': 1}, ... }
+        # }
 
-        # Add step to calculate Top Match Percentage
-        def calculate_top_match_percentage(element):
+        # Add step to calculate Adjusted Top Match Percentage
+        def calculate_adjusted_top_match_percentage(element):
             user_id = element.get('user_id')
-            ranked_matches = element.get('ranked_matches', [])
-            top_percentage = None
-            if ranked_matches:
-                # Ensure sorted just in case (descending by ai_score)
+            matches_list = element.get('matches', [])
+            user_qas = element.get('user_qas', {})
+
+            raw_top_match_ai_score = None
+            adjusted_top_match_percentage = None
+            num_answered_core_questions_by_user = 0
+            core_profile_completeness_factor = 0.0
+
+            if matches_list:
                 try:
-                    ranked_matches.sort(key=lambda x: x.get('ai_score', 0.0), reverse=True)
-                    top_score = ranked_matches[0].get('ai_score')
-                    if top_score is not None:
-                        top_percentage = round(top_score * 100)
+                    top_match = matches_list[0]
+                    raw_top_match_ai_score_raw = top_match.get('ai_score')
+
+                    if raw_top_match_ai_score_raw is not None:
+                        raw_top_match_ai_score = max(0.0, min(1.0, raw_top_match_ai_score_raw))
+
+                        for qa_id, qa_data in user_qas.items():
+                            layer = qa_data.get('layer')
+                            if layer == FOUNDATIONAL_LAYER or layer == INSIGHT_LAYER:
+                                num_answered_core_questions_by_user += 1
+                        
+                        if config.TOTAL_CORE_QUESTIONS_IN_SYSTEM > 0:
+                            core_profile_completeness_factor = min(1.0, num_answered_core_questions_by_user / config.TOTAL_CORE_QUESTIONS_IN_SYSTEM)
+                        else:
+                            core_profile_completeness_factor = 1.0
+
+                        adjusted_percentage_float = raw_top_match_ai_score * (
+                            config.MIN_CONFIDENCE_WEIGHT + (1 - config.MIN_CONFIDENCE_WEIGHT) * core_profile_completeness_factor
+                        )
+                        adjusted_top_match_percentage = round(adjusted_percentage_float * 100)
+
                 except Exception as e:
-                    logger.error(f"Error sorting/extracting top score for {user_id}: {e}")
-                    # Leave top_percentage as None
+                    logger.error(f"Error calculating adjusted top score for {user_id}: {e}")
             
-            element['topMatchPercentage'] = top_percentage
+            element['topMatchPercentage'] = adjusted_top_match_percentage
+            element['rawTopMatchAiScore'] = raw_top_match_ai_score # Store as 0-1
+            element['currentUserCoreProfileCompletenessFactor'] = core_profile_completeness_factor
+            element['currentUserAnsweredCoreQuestionsCount'] = num_answered_core_questions_by_user
+            element['totalCoreQuestionsInSystem'] = config.TOTAL_CORE_QUESTIONS_IN_SYSTEM
+            element['minConfidenceWeightUsed'] = config.MIN_CONFIDENCE_WEIGHT
             return element
 
         matches_with_percentage = (
-            reranked_matches_data
-            | "CalculateTopMatchPercentage" >> beam.Map(calculate_top_match_percentage)
+            reranked_matches_data # This PCollection now contains the list under 'matches' key
+            | "CalculateAdjustedTopMatchPercentage" >> beam.Map(calculate_adjusted_top_match_percentage)
         )
 
         # --- Branch A Output: Matches with Percentage --- #
@@ -435,13 +476,13 @@ def run_streaming_pipeline(argv=None):
         _, schedule_errors = (
             matches_with_percentage # Use the result from Branch A
             | "ScheduleDelayedMatching" >> ScheduleDelayedMatching(
-                project_id=known_args.project,
-                location=known_args.tasks_location,
-                queue_name=known_args.delayed_matching_queue,
+                 project_id=known_args.project,
+                 location=known_args.tasks_location,
+                 queue_name=known_args.delayed_matching_queue,
                 target_topic=known_args.delayed_matching_pubsub_topic,
                 delay_seconds=known_args.delayed_task_delay_seconds,
                 service_account_email=known_args.service_account_email
-            ).with_outputs(ScheduleDelayedMatching.ERROR_TAG, main=ScheduleDelayedMatching.OUTPUT_TAG)
+             ).with_outputs(ScheduleDelayedMatching.ERROR_TAG, main=ScheduleDelayedMatching.OUTPUT_TAG)
         )
         schedule_errors | "DLQ_ScheduleErrors" >> dlq_sink("ScheduleErrors")
 

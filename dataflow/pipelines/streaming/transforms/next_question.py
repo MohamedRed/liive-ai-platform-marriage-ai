@@ -176,7 +176,7 @@ class Layer2CandidateDoFn(beam.DoFn):
             if not self._layer2_templates:
                 raise RuntimeError("Layer 2 templates are empty or failed to load during setup.")
             logger.info("Layer2CandidateDoFn setup complete.")
-        except Exception as e:
+    except Exception as e:
             logger.error(f"Failed Layer2CandidateDoFn setup: {e}", exc_info=True)
             # Propagate exception to potentially fail the pipeline startup
             raise
@@ -463,7 +463,7 @@ class Layer3CandidateDoFn(beam.DoFn):
                 for cand in candidates:
                     if isinstance(cand, dict) and 'question_text' in cand and 'reasoning' in cand:
                         valid_candidates.append(cand)
-                    else:
+                else:
                         self.logger.warning(f"Invalid candidate structure from Layer 3 LLM for user {user_id}: {cand}")
             else:
                 self.logger.warning(f"Layer 3 LLM output for user {user_id} was not a list after parsing: {type(candidates)}")
@@ -649,7 +649,7 @@ class SelectBestQuestionDoFn(beam.DoFn):
         if not self.prediction_client or not self.selector_model_endpoint:
             self.logger.error(f"Selector LLM client not initialized for user {user_id}. Cannot select question.")
             self.llm_selection_errors.inc()
-            return None
+                return None
 
         system_instruction = (
             "You are an AI assistant tasked with selecting the single best next question for a user building their relationship profile. "
@@ -851,7 +851,7 @@ class UpdateNextQuestionDoFn(beam.DoFn):
         # Expects element like: {'user_id': ..., 'selected_question': { ... }, 'candidate_count': ...}
         if not self.db:
             # ... (error handling for db init) ...
-            return
+                return
 
         user_id = element.get('user_id')
         selected_question = element.get('selected_question') # This can be None now
@@ -1115,7 +1115,7 @@ class Layer1CandidateDoFn(beam.DoFn):
         # The initial trigger for Q_INITIAL_GOALS_OPEN must also include the tag.
 
         triggering_tag = element.get('clarificationTag')
-        user_id = element.get('user_id')
+            user_id = element.get('user_id')
         triggering_qa_id = element.get('qa_id')
 
         # --- Check if this trigger belongs to the target clarification sequence --- #
@@ -1292,18 +1292,18 @@ class Layer4CandidateDoFn(beam.DoFn):
         # element: (user_id, list_of_qa_dicts)
         user_id, user_history = element
 
-        if not user_id:
+            if not user_id:
              self.logger.warning("Layer 4: Received element without user_id.")
              yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, ('UNKNOWN', []))
              return
 
         if not self.db:
              self.logger.error(f"Layer 4 ({user_id}): Firestore client not initialized. Skipping.")
-             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+                Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
              yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'DoFn setup failed', 'user_id': user_id})
              # Yield empty list for CoGroupByKey compatibility
              yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, (user_id, []))
-             return
+                return
 
         if not self._assessment_templates:
             self.logger.debug(f"Layer 4 ({user_id}): No assessment templates loaded. Cannot generate candidates.")
