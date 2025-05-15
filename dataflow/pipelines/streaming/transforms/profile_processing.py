@@ -3,7 +3,7 @@ import apache_beam as beam
 import logging
 import json
 import traceback
-from typing import Dict, Any, Tuple # Added Tuple
+from typing import Dict, Any, Tuple, Optional # Added Optional
 from apache_beam.metrics import Metrics
 # Import Firestore client
 from google.cloud import firestore
@@ -15,6 +15,27 @@ from ..common.definitions import COLLECTIONS
 
 # Assume logger is configured in the main script
 logger = logging.getLogger(__name__)
+
+# --- Metrics for ExtractChangedQADoFn ---
+# CHANGED_QA_EXTRACTION_ERRORS = 'ChangedQAExtractionErrors' # No longer needed
+# CHANGED_QA_FOUND = 'ChangedQAFound' # No longer needed
+# CHANGED_QA_MISSING_FIELDS = 'ChangedQAMissingFields' # No longer needed
+
+# class ExtractChangedQADoFn(beam.DoFn): # This DoFn is no longer needed
+#     """Extracts the specific Q&A that was changed from a Firestore trigger event."""
+#     OUTPUT_ERROR_TAG = 'error' # Define an error tag
+# 
+#     def __init__(self, project_id: str): # project_id might be needed if Firestore fallback is implemented
+#         self.project_id = project_id
+# ... (rest of the DoFn implementation removed for brevity) ...
+#             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": str(e), "element": element, "traceback": traceback.format_exc()})
+
+# @beam.ptransform_fn # This PTransform is no longer needed
+# def ExtractChangedQA(pcoll: beam.PCollection[Dict[str, Any]], project_id: str) -> beam.PCollectionTuple:
+#     """
+#     PTransform to extract individual changed Q&A pairs from Firestore trigger events.
+# ... (rest of the PTransform implementation removed for brevity) ...
+#     return results
 
 class FetchProfileDoFn(beam.DoFn):
     def __init__(self, project_id, collection_name, is_test=False):
@@ -112,12 +133,13 @@ class ValidateProfileDoFn(beam.DoFn):
     def setup(self):
         # Setup Firestore client
         if not self.is_test:
-        try:
+            try:
                 self.db = firestore.Client(project=self.project_id)
                 self.logger.info("ValidateProfileDoFn: Firestore client initialized.")
             except Exception as e:
                 self.logger.error(f"ValidateProfileDoFn: Failed Firestore client setup: {e}", exc_info=True)
                 raise
+        # else: self.logger.info("ValidateProfileDoFn: Running in test mode, Firestore client not initialized.") # Optional log for test mode
 
     def _is_verified(self, collection_name: str, user_id: str) -> bool:
         """Checks if a verification document exists and has status 'verified'."""

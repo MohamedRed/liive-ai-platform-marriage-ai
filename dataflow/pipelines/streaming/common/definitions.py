@@ -30,9 +30,14 @@ COLLECTIONS = {
         'big_five': 'ASSESSMENT_QUESTIONS_BIGFIVE',
         'core_values': 'ASSESSMENT_QUESTIONS_COREVALUES',
         'love_languages': 'ASSESSMENT_QUESTIONS_LOVELANGUAGES',
-    }
+    },
     # Add other domains if needed by this specific pipeline (unlikely)
     # e.g., 'COOKING': TS_COLLECTIONS['COOKING'],
+    # Application-specific collections used by the pipeline but not in core DB model
+    'MARRIAGE_APP_SPECIFIC': {
+        'PROFILE_SUMMARIES': 'MARRIAGE_PROFILE_SUMMARIES',
+        'MATCH_CANDIDATE_SCOREBOARD': 'MATCH_CANDIDATE_SCOREBOARD' # Added based on summary
+    }
 }
 
 # Constants for Pub/Sub Topics or other pipeline configs if needed

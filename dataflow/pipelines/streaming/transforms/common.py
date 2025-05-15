@@ -8,6 +8,9 @@ from datetime import datetime
 from apache_beam.metrics import Metrics
 from apache_beam.io.filesystems import FileSystems
 from google.protobuf.timestamp_pb2 import Timestamp # Needed for DLQ
+from ..common.definitions import COLLECTIONS # Ensure COLLECTIONS is available
+from google.cloud import firestore
+from typing import Tuple, Dict, Any
 
 # Configure logging (can be configured once in the main script)
 # logger = logging.getLogger(__name__) # Each module can get its own logger if needed
@@ -96,10 +99,10 @@ class ParseFirestoreTriggerEventDoFn(beam.DoFn):
             # Output the parsed and validated data
             output_dict = {
                 'user_id': user_id,
-                'qa_id': qa_id,
-                'answer': answer,
+                'question_id': qa_id,
+                'answer_text': answer,
                 'clarificationTag': clarification_tag,
-                'question': question_text # Include if available
+                'question_text': question_text
             }
             yield output_dict
 
@@ -249,3 +252,210 @@ class WriteToDLQFn(beam.DoFn):
             self.dlq_write_errors.inc()
             self.logger.error(f"FATAL: Failed to write DLQ record to {self.output_path}: {str(e)}", exc_info=True)
             # If writing to DLQ fails, we lose the record. Log thoroughly. 
+
+# --- Fetch User History for Candidate Generation --- #
+class FetchUserHistoryDoFn(beam.DoFn):
+    """Fetches the Q&A history (questions map) for a user from Firestore."""
+    # HISTORY_TAG was for CoGroupByKey, not an output tag here. Main output is implicit.
+    ERROR_TAG = 'error'     # Tag for error output
+
+    # Metrics constants
+    FETCH_HISTORY_SUCCESS = 'FetchHistorySuccess'
+    FETCH_HISTORY_ERRORS = 'FetchHistoryErrors'
+    FETCH_HISTORY_NOT_FOUND = 'FetchHistoryNotFound' # User/QAs doc not found or no 'questions' field
+    FETCH_HISTORY_MISSING_UID = 'FetchHistoryMissingUserId'
+
+    def __init__(self, project_id: str, qa_collection_name: str):
+        self.project_id = project_id
+        self.qa_collection_name = qa_collection_name
+        self.db = None
+        self.logger = logging.getLogger(__name__)
+        
+        # Metrics
+        self.success_counter = Metrics.counter(self.__class__.__name__, self.FETCH_HISTORY_SUCCESS)
+        self.error_counter = Metrics.counter(self.__class__.__name__, self.FETCH_HISTORY_ERRORS)
+        self.not_found_counter = Metrics.counter(self.__class__.__name__, self.FETCH_HISTORY_NOT_FOUND)
+        self.missing_uid_counter = Metrics.counter(self.__class__.__name__, self.FETCH_HISTORY_MISSING_UID)
+
+    def setup(self):
+        try:
+            self.db = firestore.Client(project=self.project_id)
+            self.logger.info(f"{self.__class__.__name__}: Firestore client initialized for project {self.project_id}.")
+        except Exception as e:
+            self.logger.error(f"{self.__class__.__name__}: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
+            # Allow pipeline to start, but process method will fail if db is None
+            # Alternatively, raise e to fail fast if DB is critical for all elements.
+            # For now, let process handle db being None.
+            # raise # Uncomment to fail fast
+
+    def process(self, element: Dict[str, Any]):
+        # Expected input element: Dict from ParseFirestoreTriggerEventDoFn, e.g., {'user_id': ..., 'qa_id': ...}
+        user_id = element.get('user_id')
+
+        if not user_id:
+            self.logger.warning(f"{self.__class__.__name__}: Missing user_id in input element: {element}")
+            self.missing_uid_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": "Missing user_id in input element",
+                "element": element,
+                "traceback": traceback.format_exc() # Will show where get was called on None if that's the case
+            })
+            return
+
+        if not self.db:
+            self.logger.error(f"{self.__class__.__name__}: Firestore client not initialized. Cannot fetch history for {user_id}.")
+            self.error_counter.inc() # Counts as a processing error
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": "Firestore client not initialized",
+                "user_id": user_id,
+                "element": element
+            })
+            return
+
+        try:
+            # self.logger.info(f"{self.__class__.__name__}: Fetching Q&A history for user: {user_id} from collection: {self.qa_collection_name}")
+            qas_doc_ref = self.db.collection(self.qa_collection_name).document(user_id)
+            qas_doc = qas_doc_ref.get()
+
+            questions_answers_map = {}
+            if qas_doc.exists:
+                qas_data = qas_doc.to_dict()
+                if qas_data and 'questions' in qas_data and isinstance(qas_data['questions'], dict):
+                    questions_answers_map = qas_data['questions']
+                    self.success_counter.inc()
+                    # self.logger.info(f"{self.__class__.__name__}: Successfully fetched history for {user_id} with {len(questions_answers_map)} QAs.")
+                else:
+                    self.logger.warning(f"{self.__class__.__name__}: Q&A document for user {user_id} found, but 'questions' field is missing, empty, or not a dict. Data: {qas_data}")
+                    self.not_found_counter.inc() # History technically not found in expected format
+                    # Yield empty map for this case, as user exists but history is malformed/empty
+            else:
+                self.logger.warning(f"{self.__class__.__name__}: No Q&A document found for user {user_id} in {self.qa_collection_name}. History will be empty.")
+                self.not_found_counter.inc()
+                # Yield empty map, user might be new or QAS doc not created yet
+
+            # Yield to main output: (user_id, questions_answers_map)
+            # This matches the expected structure for 'user_history_keyed' in streaming.py
+            yield (user_id, questions_answers_map)
+
+        except Exception as e:
+            self.logger.error(f"{self.__class__.__name__}: Error fetching Q&A history for user {user_id}: {str(e)}", exc_info=True)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": f"Failed to fetch Q&A history for {user_id}: {str(e)}",
+                "user_id": user_id,
+                "element": element, # Original input element for context
+                "traceback": traceback.format_exc()
+            })
+
+# --- Fetch Full Q&As for Summarization/Other Processing --- #
+FETCH_FULL_QAS_SUCCESS = 'FetchFullQAsSuccess'
+FETCH_FULL_QAS_ERRORS = 'FetchFullQAsErrors'
+FETCH_FULL_QAS_NOT_FOUND = 'FetchFullQAsNotFound'
+
+class FetchFullQAsDoFn(beam.DoFn):
+    """Fetches the full Q&A document (questions_answers map) for a user from Firestore."""
+    OUTPUT_ERROR_TAG = 'error'
+
+    def __init__(self, project_id: str, qa_collection_name: str):
+        self.project_id = project_id
+        self.qa_collection_name = qa_collection_name # e.g., COLLECTIONS['MARRIAGE']['QAS']
+        self.db = None
+        self.logger = logging.getLogger(__name__)
+        self.success_counter = Metrics.counter('FetchFullQAsDoFn', FETCH_FULL_QAS_SUCCESS)
+        self.error_counter = Metrics.counter('FetchFullQAsDoFn', FETCH_FULL_QAS_ERRORS)
+        self.not_found_counter = Metrics.counter('FetchFullQAsDoFn', FETCH_FULL_QAS_NOT_FOUND)
+
+    def setup(self):
+        try:
+            self.db = firestore.Client(project=self.project_id)
+            self.logger.info(f"FetchFullQAsDoFn: Firestore client initialized for project {self.project_id}.")
+        except Exception as e:
+            self.logger.error(f"FetchFullQAsDoFn: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
+            raise
+
+    def process(self, element: Tuple[str, Dict[str, Any]]):
+        # Input element: (user_id, passthrough_data_dict)
+        # passthrough_data_dict is the original element we want to enrich, e.g., output of ProcessAndValidateProfile
+        # which is like {'user_id': ..., 'profile_data': actual_profile_from_user_info_coll, ...other_fields}
+        user_id, passthrough_data = element
+
+        if not self.db:
+            self.logger.error("FetchFullQAsDoFn: Firestore client not initialized. Skipping Q&A fetch.")
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "Firestore client not initialized", "element": element})
+            return
+        
+        if not user_id:
+            self.logger.warning(f"FetchFullQAsDoFn: Missing user_id in input element: {element}")
+            self.error_counter.inc()
+            # Decide if this should go to error tag or just be dropped
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "Missing user_id in input", "element": element})
+            return
+
+        try:
+            # self.logger.info(f"Fetching Q&As for user: {user_id} from {self.qa_collection_name}")
+            qas_doc_ref = self.db.collection(self.qa_collection_name).document(user_id)
+            qas_doc = qas_doc_ref.get()
+
+            questions_answers_map = {}
+            if qas_doc.exists:
+                qas_data = qas_doc.to_dict()
+                if qas_data and 'questions' in qas_data: # 'questions' is the map as per marriage.ts
+                    questions_answers_map = qas_data['questions']
+                    self.success_counter.inc()
+                else:
+                    self.logger.warning(f"Q&A document for user {user_id} exists but has no 'questions' field or is empty. Data: {qas_data}")
+                    self.not_found_counter.inc() # Or a different counter for malformed data
+            else:
+                self.logger.warning(f"No Q&A document found for user {user_id} in {self.qa_collection_name}. Summary will be based on empty Q&As.")
+                self.not_found_counter.inc()
+            
+            # Enrich the passthrough_data. If it contains 'profile_data', add to it.
+            # Otherwise, create a new structure. 
+            # The goal is that the output element for GenerateProfileSummaryDoFn is (user_id, dict_containing_qas)
+            
+            # The output of ProcessAndValidateProfile is a dict, not a tuple.
+            # Let's assume the input to this DoFn will be the direct output of ProcessAndValidateProfile
+            # which is: {'user_id': ..., 'profile_data': profile_from_user_info, ...other_fields}
+            # So, `element` here should be that dict, and we should key it by user_id before this DoFn if it's not already.
+            # For now, let's stick to the (user_id, passthrough_data) input assumption for this DoFn.
+
+            # Construct the output. The PTransform wrapper will handle input keying.
+            # We are creating a new dictionary that will be the second element of the output tuple.
+            # It includes the original profile data and the fetched Q&As.
+            output_profile_data_for_summary = passthrough_data.get('profile_data', {})
+            output_profile_data_for_summary['questions_answers'] = questions_answers_map
+            
+            # Yield (user_id, enriched_profile_data_for_summary_input)
+            # where enriched_profile_data_for_summary_input is what GenerateProfileSummaryDoFn expects as its second tuple element.
+            yield (user_id, output_profile_data_for_summary)
+
+        except Exception as e:
+            self.logger.error(f"Error fetching Q&As for user {user_id}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Failed to fetch Q&As for {user_id}: {str(e)}", 
+                "user_id": user_id,
+                "original_passthrough_data": passthrough_data,
+                "traceback": traceback.format_exc()
+            })
+
+@beam.ptransform_fn
+def FetchFullQAsForUser(pcoll: beam.PCollection[Dict[str,Any]], 
+                        project_id: str, 
+                        qa_collection_name: str) -> beam.PCollectionTuple:
+    """ PTransform to fetch the full Q&A document for a user.
+        Input: PCollection of dictionaries (e.g., from ProcessAndValidateProfile) that contain a 'user_id'.
+        Output: PCollectionTuple with 'main' as (user_id, enriched_profile_data_dict) 
+                where enriched_profile_data_dict contains the original 'profile_data' 
+                from the input element, now augmented with a 'questions_answers' map.
+                And 'error' tag for errors.
+    """
+    return (
+        pcoll
+        # Key the input PCollection by user_id, passing through the original element as value
+        | 'KeyByUserForQAFetch' >> beam.Map(lambda x: (x['user_id'], x)) 
+        | 'FetchQADocument' >> beam.ParDo(
+            FetchFullQAsDoFn(project_id=project_id, qa_collection_name=qa_collection_name)
+          ).with_outputs(FetchFullQAsDoFn.OUTPUT_ERROR_TAG, main='main')
+    ) 
