@@ -119,11 +119,39 @@ export interface NextQuestionSuggestion extends Timestamping {
   // Other metadata related to suggestion state can be added here
 }
 
+// --- New Interfaces for Scoreboard and Profile Summaries ---
+
+/**
+ * Represents an entry in the match candidate scoreboard.
+ * Path: MATCH_CANDIDATE_SCOREBOARD/{triggering_user_id}/candidate_scores/{matched_user_id}
+ */
+export interface MatchCandidateScoreboardEntry extends Timestamping { // Assuming Timestamping is desired
+  triggering_user_id: string;
+  matched_user_id: string;
+  score: number; // Aggregated score from statement-level matches
+  // last_updated is covered by Timestamping.updatedAt if used, otherwise add explicitly
+}
+
+/**
+ * Represents a pre-generated LLM summary of a user's profile.
+ * Path: MARRIAGE_PROFILE_SUMMARIES/{userId}
+ */
+export interface MarriageProfileSummary extends Timestamping { // Assuming Timestamping is desired
+  userId: string;
+  profileSummaryText: string;
+  qasVersionHash: string; // MD5 hash of the Q&A data used for this summary
+  // lastGeneratedAt is covered by Timestamping.updatedAt if used, otherwise add explicitly
+}
+
+// --- End of New Interfaces ---
+
 export interface Matches extends Timestamping {
   userId: string;
   matches: { // This array holds the reranked matches
     userId: string; // The ID of the matched user
-    vector_score: number; // Assuming this is from an initial dense retrieval
+    // vector_score: number; // This was the old field. Replaced/augmented by aggregated_score and cross_encoder_score
+    aggregated_score?: number; // Score from the candidate scoreboard (sum of statement scores)
+    cross_encoder_score?: number; // Score from the cross-encoder model
     ai_score: number; // This is the raw AI score from the reranking LLM for THIS specific match
     suggested_questions: {
       question: string;
