@@ -3,184 +3,133 @@ import apache_beam as beam
 import logging
 import traceback
 import openai # Keep import here as it's specific to this DoFn
+import hashlib # For creating unique statement IDs if needed
 from apache_beam.metrics import Metrics
+from typing import Dict, Any, Tuple, List
 
 # Import constants and metrics from common
-from .common import MetricNames
-# Import utility functions
+# from .common import MetricNames # Assuming MetricNames might be defined elsewhere if needed globally
 from ..utils import access_secret
 
 logger = logging.getLogger(__name__)
 
-class GenerateUserEmbedding(beam.DoFn):
-    def __init__(self, project_id):
+# Specific metrics for this DoFn with its new responsibilities
+STATEMENT_EMBEDDING_ERRORS = 'StatementEmbeddingErrors'
+STATEMENTS_PROCESSED_FOR_EMBEDDING = 'StatementsProcessedForEmbedding'
+EMPTY_PARSED_STATEMENTS_LIST = 'EmptyParsedStatementsList'
+
+class GenerateStatementEmbeddingsDoFn(beam.DoFn): # Renamed class
+    """Generates embeddings for individual statements parsed from user answers."""
+    def __init__(self, project_id: str):
         self.project_id = project_id
         self.logger = logging.getLogger(__name__)
-        self.error_counter = Metrics.counter('GenerateUserEmbedding', MetricNames.ERRORS)
-        self.missing_qa_counter = Metrics.counter('GenerateUserEmbedding', 'missing_qa_counter')
-        self.client = None # Initialize client
-
-        # Define weights for different sections
-        # TODO: Consider making weights configurable (e.g., pipeline options)
-        self.section_weights = {
-            "religious_practice": 2.0,    # Higher weight for religious aspects
-            "family_values": 1.5,         # Important family values
-            "education": 1.2,             # Education background
-            "personality": 1.0,           # Base weight for personality traits
-            "hobbies": 0.8,              # Lower weight for hobbies
-            "default": 1.0               # Default weight for undefined sections
-        }
+        self.error_counter = Metrics.counter('GenerateStatementEmbeddingsDoFn', STATEMENT_EMBEDDING_ERRORS)
+        self.statements_processed_counter = Metrics.counter('GenerateStatementEmbeddingsDoFn', STATEMENTS_PROCESSED_FOR_EMBEDDING)
+        self.empty_statements_list_counter = Metrics.counter('GenerateStatementEmbeddingsDoFn', EMPTY_PARSED_STATEMENTS_LIST)
+        self.client = None
 
     def setup(self):
-        # Setup runs once per worker
-        self.logger.info("Setting up OpenAI client")
+        self.logger.info("Setting up OpenAI client for statement embedding generation.")
         try:
-            # Use the utility function to get the secret
             api_key = access_secret(self.project_id, "OPENAI_API_KEY")
-            # Ensure the library is initialized correctly
             self.client = openai.OpenAI(api_key=api_key)
-            self.logger.info("OpenAI client setup complete")
+            self.logger.info("OpenAI client setup complete for statement embedding.")
         except Exception as e:
-             self.logger.error(f"Failed to setup OpenAI client: {e}", exc_info=True)
-             # If setup fails, process will likely fail. Raising here is appropriate.
-             raise
-
-    def process(self, profile):
-        if not self.client:
-             self.logger.error("OpenAI client not initialized. Skipping embedding generation.")
-             self.error_counter.inc()
-             raise RuntimeError("OpenAI client failed to initialize in setup.")
-
-        profile_id = profile.get('id', '[UNKNOWN_ID]')
-        try:
-            # self.logger.info(f"Generating embedding for profile: {profile_id}")
-            qa_list = profile.get("questions_answers", [])
-
-            if not qa_list:
-                self.logger.warning(f"No questions_answers found for profile {profile_id}. Cannot generate embedding.")
-                self.missing_qa_counter.inc()
-                return # Don't yield if no data
-
-            # 1. Generate embeddings for each QA pair
-            qa_embeddings = []
-            for qa in qa_list:
-                # Ensure QA structure is as expected
-                question = qa.get('question')
-                answer = qa.get('answer')
-                if not question or not answer:
-                     self.logger.warning(f"Skipping QA item with missing question or answer for profile {profile_id}: {qa}")
-                     continue
-
-                qa_text = f"Q: {question}\nA: {answer}"
-                embedding = self._get_embedding(qa_text)
-                section = qa.get('section', 'default') # Get section, default if missing
-                # self.logger.info(f"Generated embedding for QA in section '{section}', length: {len(embedding)}")
-                qa_embeddings.append({
-                    'embedding': embedding,
-                    'section': section,
-                    'weight': qa.get('weight', 1.0) # Individual QA weight if specified
-                })
-
-            if not qa_embeddings:
-                 self.logger.warning(f"No valid QA pairs found to generate embedding for profile {profile_id}.")
-                 self.missing_qa_counter.inc()
-                 return
-
-            # 2. Group embeddings by section
-            section_groups = {}
-            for qa_emb in qa_embeddings:
-                section = qa_emb['section']
-                if section not in section_groups:
-                    section_groups[section] = []
-                section_groups[section].append(qa_emb)
-
-            # self.logger.info(f"Grouped QAs into {len(section_groups)} sections: {list(section_groups.keys())}")
-
-            # 3. Combine embeddings within each section (weighted average)
-            section_embeddings = {}
-            embedding_size = len(qa_embeddings[0]['embedding']) # Get embedding size
-
-            for section, items in section_groups.items():
-                section_weight = self.section_weights.get(section, self.section_weights['default'])
-                # self.logger.info(f"Processing section '{section}' with weight {section_weight}")
-                # self.logger.info(f"Found {len(items)} QAs in section '{section}'")
-
-                weighted_sum = [0.0] * embedding_size
-                total_item_weight = 0.0
-
-                for item in items:
-                    # Combine individual QA weight and section weight
-                    effective_weight = item['weight'] * section_weight
-                    # self.logger.info(f"Using weight {effective_weight} (QA weight: {item['weight']} * section weight: {section_weight})")
-                    for i, val in enumerate(item['embedding']):
-                        weighted_sum[i] += val * effective_weight
-                    total_item_weight += effective_weight
-
-                # Normalize section embedding if total weight is positive
-                if total_item_weight > 0:
-                    section_embeddings[section] = [x / total_item_weight for x in weighted_sum]
-                    # self.logger.info(f"Generated combined embedding for section '{section}', length: {len(section_embeddings[section])}")
-                else:
-                    self.logger.warning(f"Total weight for section '{section}' is zero. Skipping section embedding.")
-
-            if not section_embeddings:
-                self.logger.error(f"No section embeddings could be generated for profile {profile_id}. Cannot create final embedding.")
-                self.error_counter.inc()
-                return
-
-            # 4. Combine section embeddings into final profile embedding (weighted average)
-            final_embedding = [0.0] * embedding_size
-            total_section_weight = 0.0
-
-            for section, embedding in section_embeddings.items():
-                # Weight of the section itself (could use self.section_weights again or assume normalized sections)
-                weight = self.section_weights.get(section, self.section_weights['default']) # Use section weights for final combination
-                for i, val in enumerate(embedding):
-                    final_embedding[i] += val * weight
-                total_section_weight += weight
-
-            # Normalize final embedding
-            if total_section_weight > 0:
-                final_embedding = [x / total_section_weight for x in final_embedding]
-                # Log final embedding length
-                # self.logger.info(f"Generated final embedding of length: {len(final_embedding)} for profile {profile_id}")
-                yield (profile_id, final_embedding)
-            else:
-                self.logger.error(f"Total section weight is zero for profile {profile_id}. Cannot normalize final embedding.")
-                self.error_counter.inc()
-                return
-
-        except Exception as e:
-            self.error_counter.inc()
-            self.logger.error(f"Error generating embedding for profile {profile_id}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
+            self.logger.error(f"Failed to setup OpenAI client for statement embedding: {e}", exc_info=True)
             raise
 
-    def _get_embedding(self, text):
+    def _get_embedding(self, text: str) -> List[float]:
         """Get embedding for a single text using the initialized client."""
+        if not self.client:
+             # This should ideally be caught by setup or the main process block
+            raise RuntimeError("OpenAI client for embedding is not initialized.")
         try:
             response = self.client.embeddings.create(
-                model="text-embedding-3-large", # Consider making model configurable
+                model="text-embedding-3-large", # Consider making model configurable via config.py
                 input=text,
                 encoding_format="float"
             )
             return response.data[0].embedding
         except Exception as e:
-             self.logger.error(f"OpenAI embedding API call failed: {e}", exc_info=True)
-             raise # Propagate error to be caught by main process loop
+            self.logger.error(f"OpenAI embedding API call failed for text '{text[:100]}...': {e}", exc_info=True)
+            raise # Propagate error to be caught by the main process loop
 
+    def process(self, element: Dict[str, Any]):
+        """Processes an element containing parsed statements and generates embeddings for each."""
+        if not self.client:
+            self.logger.error("OpenAI client not initialized. Skipping statement embedding generation.")
+            self.error_counter.inc() # Count as one error for the whole element if client fails
+            # Potentially re-raise to DLQ the element, as no statements can be processed.
+            # For now, we will simply not yield anything.
+            return
+
+        parsed_statements = element.get('parsed_statements', [])
+        # user_id_from_element = element.get('user_id') # The top-level user_id from the element
+
+        if not parsed_statements:
+            self.logger.warning(f"No parsed_statements found in element for user '{element.get('user_id', 'UNKNOWN')}', original_qid '{element.get('question_id', 'UNKNOWN')}'. Element: {element}")
+            self.empty_statements_list_counter.inc()
+            return # Don't yield if no statements to process
+
+        for stmt_index, statement_data in enumerate(parsed_statements):
+            try:
+                user_id = statement_data.get('user_id')
+                original_question_id = statement_data.get('original_question_id')
+                original_question_text = statement_data.get('original_question_text')
+                statement_text = statement_data.get('statement_text')
+                facet = statement_data.get('facet') # This is crucial
+
+                if not all([user_id, original_question_id, original_question_text, statement_text, facet]):
+                    self.logger.warning(f"Skipping statement due to missing fields: {statement_data} from element for user '{element.get('user_id', 'UNKNOWN')}'")
+                    self.error_counter.inc() # Count this specific statement as an error
+                    continue
+
+                text_to_embed = f"Question: {original_question_text} [SEP] Statement: {statement_text}"
+                
+                embedding_vector = self._get_embedding(text_to_embed)
+
+                # Create a unique ID for the statement vector
+                # Using an index to ensure uniqueness within the context of a single original answer being processed.
+                # A more globally unique ID might be needed if these can be reprocessed independently.
+                vector_id = f"{user_id}|{original_question_id}|stmt_{stmt_index}"
+                # Alternative: hash the statement text for more deterministic ID if content doesn't change
+                # statement_hash = hashlib.md5(statement_text.encode()).hexdigest()[:8]
+                # vector_id = f"{user_id}|{original_question_id}|{statement_hash}"
+
+                metadata = {
+                    'user_id': str(user_id),
+                    'original_question_id': str(original_question_id),
+                    'original_question_text': original_question_text, # For context/inspection
+                    'statement_text': statement_text, # The actual text of the statement
+                    'facet': facet, # The determined facet for THIS statement
+                    'statement_index': stmt_index, # Useful for ordering/debugging
+                    # 'is_critical': False, # Placeholder, or derive from original question properties if available
+                    # 'section': original_question_data.get('section', 'default') # If section is tied to original question
+                }
+                
+                self.statements_processed_counter.inc()
+                yield (vector_id, embedding_vector, metadata)
+
+            except Exception as e:
+                # Catch errors for individual statements to allow other statements in the same element to proceed.
+                self.error_counter.inc()
+                statement_id_for_log = f"user '{element.get('user_id', 'UNKNOWN')}', original_qid '{statement_data.get('original_question_id', 'UNKNOWN')}', stmt_idx {stmt_index}"
+                self.logger.error(f"Error generating embedding for statement {statement_id_for_log}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
+                # Continue to the next statement
 
 @beam.ptransform_fn
-def GenerateProfileEmbedding(pcoll: beam.PCollection[dict], project_id: str) -> beam.PCollection[tuple[str, list[float]]]:
-    """Composite PTransform to generate embeddings for user profiles.
+def GenerateEmbeddingsForStatements(pcoll: beam.PCollection[Dict[str, Any]], project_id: str) -> beam.PCollection[Tuple[str, List[float], Dict[str, Any]]]:
+    """Composite PTransform to generate embeddings for individual parsed statements.
 
     Args:
-        pcoll: PCollection of profile dictionaries.
+        pcoll: PCollection of dictionaries (output from ParseAnswerIntoStatements), 
+               where each dict contains a 'parsed_statements' list.
         project_id: GCP Project ID.
 
     Returns:
-        PCollection of tuples (user_id, embedding_vector).
+        PCollection of tuples (vector_id, embedding_vector, metadata_dict) for each statement.
     """
     return (
         pcoll
-        | "GenerateEmbeddings" >> beam.ParDo(GenerateUserEmbedding(project_id))
+        | "GenerateStatementEmbeddings" >> beam.ParDo(GenerateStatementEmbeddingsDoFn(project_id))
     ) 

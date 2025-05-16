@@ -1,11 +1,2 @@
-[31m[1mInternal Error[22m[39m: [38;2;215;95;0m@liive/[39m[38;2;215;135;95mmarriage-ai[39m[38;2;0;175;175m@[39m[38;2;0;175;175mworkspace:.[39m: This package doesn't seem to be present in your lockfile; run "yarn install" to update the lockfile
-    at Xx.getCandidates (/Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:205:8149)
-    at Dd.getCandidates (/Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:141:1311)
-    at /Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:210:8409
-    at Ky (/Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:140:53916)
-    at Fe (/Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:210:8389)
-    at async Promise.allSettled (index 0)
-    at async Uc (/Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:140:53244)
-    at async /Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:210:9140
-    at async Qi.startProgressPromise (/Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:140:137284)
-    at async Pt.resolveEverything (/Users/mrr/.cache/node/corepack/v1/yarn/4.1.0/yarn.js:210:7138)
+[2K[1G[1myarn run v1.22.22[22m
+[2K[1G[2m$ tsc && vite build[22m

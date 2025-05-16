@@ -176,7 +176,7 @@ class Layer2CandidateDoFn(beam.DoFn):
             if not self._layer2_templates:
                 raise RuntimeError("Layer 2 templates are empty or failed to load during setup.")
             logger.info("Layer2CandidateDoFn setup complete.")
-    except Exception as e:
+        except Exception as e:
             logger.error(f"Failed Layer2CandidateDoFn setup: {e}", exc_info=True)
             # Propagate exception to potentially fail the pipeline startup
             raise
@@ -649,7 +649,7 @@ class SelectBestQuestionDoFn(beam.DoFn):
         if not self.prediction_client or not self.selector_model_endpoint:
             self.logger.error(f"Selector LLM client not initialized for user {user_id}. Cannot select question.")
             self.llm_selection_errors.inc()
-                return None
+            return None
 
         system_instruction = (
             "You are an AI assistant tasked with selecting the single best next question for a user building their relationship profile. "
@@ -756,25 +756,45 @@ class SelectBestQuestionDoFn(beam.DoFn):
 
             # --- Generate Layer 5 Candidate --- #
             layer5_candidates = []
-            if reranking_results_list: # Should be a list containing one dict
-                reranking_data = reranking_results_list[0]
-                ranked_matches = reranking_data.get('ranked_matches', [])
-                if ranked_matches:
-                    top_match = ranked_matches[0]
-                    suggested_questions = top_match.get('suggested_questions', [])
-                    if suggested_questions and isinstance(suggested_questions[0], str): # Ensure it's a string
-                        l5_text = suggested_questions[0]
-                        l5_candidate = {
-                            'question_text': l5_text,
-                            'layer': TOP_MATCH_LAYER, # Use constant
-                            'reasoning': f"Explore compatibility with top match ({top_match.get('match_id', 'Unknown')}) based on reranking.",
-                            'candidate_source': 'reranking_top_match'
-                        }
-                        layer5_candidates.append(l5_candidate)
-                        self.layer5_candidates_generated.inc()
-                        self.logger.info(f"SelectBest ({user_id}): Generated Layer 5 candidate: {l5_text[:50]}...")
+            if reranking_results_list and isinstance(reranking_results_list, list) and len(reranking_results_list) > 0:
+                reranking_data = reranking_results_list[0] # Get the first (and only) element from the flattened input
+                if isinstance(reranking_data, dict):
+                    matches_list = reranking_data.get('matches', []) # Correct key for the list of match objects
+                    
+                    if matches_list and isinstance(matches_list, list) and len(matches_list) > 0:
+                        top_match = matches_list[0] # Get the actual top match dictionary
+                        if isinstance(top_match, dict):
+                            suggested_questions = top_match.get('suggested_questions', []) # This is List[str]
 
-            all_candidates.extend(layer5_candidates) # Add L5 candidates to the list
+                            if suggested_questions and isinstance(suggested_questions, list) and len(suggested_questions) > 0:
+                                l5_text = suggested_questions[0] # Take the first suggested question
+                                if isinstance(l5_text, str) and l5_text.strip(): # Ensure it's a non-empty string
+                                    l5_candidate = {
+                                        'question_text': l5_text,
+                                        'text': l5_text, # Ensure 'text' field is present for _format_candidates_for_prompt
+                                        'layer': TOP_MATCH_LAYER,
+                                        'reasoning': f"Explore compatibility with top match ({top_match.get('match_id', 'Unknown')}) based on reranking insight.",
+                                        'candidate_source': 'reranking_top_match_suggestion',
+                                        'id': f"L5_{user_id}_{top_match.get('match_id', 'NOMA')}_{datetime.now().strftime('%H%M%S')}"
+                                    }
+                                    layer5_candidates.append(l5_candidate)
+                                    self.layer5_candidates_generated.inc()
+                                    self.logger.info(f"SelectBest ({user_id}): Generated Layer 5 candidate: {l5_text[:50]}...")
+                                else:
+                                    self.logger.warning(f"SelectBest ({user_id}): Top match suggested_questions[0] is not a valid string: '{l5_text}'")
+                            else:
+                                self.logger.info(f"SelectBest ({user_id}): No 'suggested_questions' list found, is empty, or not a list for the top match: {top_match.get('match_id', 'Unknown')}.")
+                        else:
+                            self.logger.warning(f"SelectBest ({user_id}): Top match object is not a dictionary.")
+                    else:
+                        self.logger.info(f"SelectBest ({user_id}): No 'matches' list found or is empty in reranking_data for Layer 5.")
+                else:
+                    self.logger.warning(f"SelectBest ({user_id}): reranking_data item is not a dictionary.")
+            else:
+                self.logger.info(f"SelectBest ({user_id}): No reranking_results_list available or is empty for Layer 5 generation.")
+
+            all_candidates.extend(layer5_candidates)
+
             candidate_count = len(all_candidates)
             self.logger.info(f"SelectBest ({user_id}): Total candidates (incl. L5={len(layer5_candidates)}): {candidate_count}")
 
@@ -1115,7 +1135,7 @@ class Layer1CandidateDoFn(beam.DoFn):
         # The initial trigger for Q_INITIAL_GOALS_OPEN must also include the tag.
 
         triggering_tag = element.get('clarificationTag')
-            user_id = element.get('user_id')
+        user_id = element.get('user_id')
         triggering_qa_id = element.get('qa_id')
 
         # --- Check if this trigger belongs to the target clarification sequence --- #
@@ -1292,18 +1312,18 @@ class Layer4CandidateDoFn(beam.DoFn):
         # element: (user_id, list_of_qa_dicts)
         user_id, user_history = element
 
-            if not user_id:
-             self.logger.warning("Layer 4: Received element without user_id.")
-             yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, ('UNKNOWN', []))
-             return
+        if not user_id:
+            self.logger.warning("Layer 4: Received element without user_id.")
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, ('UNKNOWN', []))
+            return
 
         if not self.db:
-             self.logger.error(f"Layer 4 ({user_id}): Firestore client not initialized. Skipping.")
-                Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'DoFn setup failed', 'user_id': user_id})
-             # Yield empty list for CoGroupByKey compatibility
-             yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, (user_id, []))
-                return
+            self.logger.error(f"Layer 4 ({user_id}): Firestore client not initialized. Skipping.")
+            Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'DoFn setup failed', 'user_id': user_id})
+            # Yield empty list for CoGroupByKey compatibility
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, (user_id, []))
+            return
 
         if not self._assessment_templates:
             self.logger.debug(f"Layer 4 ({user_id}): No assessment templates loaded. Cannot generate candidates.")

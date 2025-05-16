@@ -8,11 +8,20 @@
     "outDir": "lib",
     "sourceMap": true,
     "strict": true,
-    "target": "es2017"
+    "target": "es2017",
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@livve-1/database-types": ["../packages/database-types/src"],
+      "@liive-marriage-ai/database-types": ["../packages/database-types/src"]
+    }
   },
   "compileOnSave": true,
   "include": [
-    "src",
-    "node_modules/@google-cloud/firestore/types/firestore.d.ts"
+    "src"
+  ],
+  "exclude": [
+    "src/__tests__/**",
+    "node_modules/**"
   ]
 }

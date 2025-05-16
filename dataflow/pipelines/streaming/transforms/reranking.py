@@ -5,13 +5,14 @@ import json
 import traceback
 import io # For PDF reading
 from datetime import datetime # For lying score history formatting
-from typing import Dict, Any
+from typing import Dict, Any, Tuple, List
 
 # Import third-party libraries used within DoFns
 import openai
 import PyPDF2
 from google.cloud import firestore, storage, secretmanager # Add secretmanager
 from apache_beam.metrics import Metrics
+from sentence_transformers import CrossEncoder # Added import
 
 # Import constants and metrics from common
 from .common import MetricNames, COLLECTIONS # Import COLLECTIONS if needed here
@@ -229,9 +230,220 @@ class UpdateLyingScoreDoFn(beam.DoFn):
             raise # Propagate error for DLQ
 
 
-# --- DoFn for Reranking --- #
+# --- Metrics for CrossEncoder --- #
+CROSS_ENCODE_SUCCESS = 'CrossEncodeSuccess'
+CROSS_ENCODE_ERRORS = 'CrossEncodeErrors'
+PROFILE_FETCH_ERRORS_CROSS_ENCODE = 'ProfileFetchErrorsCrossEncode'
+
+class CrossEncodeDoFn(beam.DoFn):
+    """Reranks candidates using a Cross-Encoder model."""
+    OUTPUT_ERROR_TAG = 'error'
+
+    def __init__(self, project_id: str, 
+                 profiles_collection: str, # Main user profiles (e.g., USER_INFO)
+                 profile_summaries_collection: str, # Dedicated summaries collection
+                 model_name: str = 'cross-encoder/ms-marco-MiniLM-L-6-v2'):
+        self.project_id = project_id
+        self.profiles_collection = profiles_collection
+        self.profile_summaries_collection = profile_summaries_collection # New arg
+        self.model_name = model_name
+        self.logger = logging.getLogger(__name__)
+        self.db = None
+        self.cross_encoder_model = None
+        
+        self.success_counter = Metrics.counter('CrossEncodeDoFn', CROSS_ENCODE_SUCCESS)
+        self.error_counter = Metrics.counter('CrossEncodeDoFn', CROSS_ENCODE_ERRORS)
+        self.profile_fetch_error_counter = Metrics.counter('CrossEncodeDoFn', PROFILE_FETCH_ERRORS_CROSS_ENCODE)
+
+    def setup(self):
+        self.logger.info(f"Setting up CrossEncodeDoFn. Initializing Firestore and loading cross-encoder model: {self.model_name}")
+        try:
+            self.db = firestore.Client(project=self.project_id)
+            self.cross_encoder_model = CrossEncoder(self.model_name)
+            self.logger.info("CrossEncodeDoFn setup complete.")
+        except Exception as e:
+            self.logger.error(f"Failed CrossEncodeDoFn setup: {e}", exc_info=True)
+            raise # Critical setup failure
+
+    def _fetch_profile_text_for_cross_encoder(self, user_id: str) -> str | None:
+        """Fetches profile text, prioritizing dedicated summary, then fallback to Q&A concatenation."""
+        summary_text = None
+        try:
+            # 1. Attempt to fetch from dedicated summaries collection
+            summary_doc_ref = self.db.collection(self.profile_summaries_collection).document(user_id)
+            summary_doc = summary_doc_ref.get()
+            if summary_doc.exists:
+                summary_data = summary_doc.to_dict()
+                if summary_data and summary_data.get('profileSummaryText'):
+                    summary_text = summary_data['profileSummaryText']
+                    self.logger.info(f"Using dedicated summary for user {user_id} for cross-encoder.")
+                    # Optional: Implement staleness check here using qasVersionHash if needed in the future.
+                    # For now, if summary exists, we use it.
+                    return summary_text.strip()
+                else:
+                    self.logger.info(f"Dedicated summary document for {user_id} found but no profileSummaryText or empty.")
+            else:
+                self.logger.info(f"No dedicated summary found for user {user_id} in {self.profile_summaries_collection}. Attempting fallback.")
+
+        except Exception as e_summary_fetch:
+            self.logger.error(f"Error fetching dedicated summary for user {user_id}: {e_summary_fetch}. Attempting fallback.", exc_info=True)
+            # Do not increment profile_fetch_error_counter here yet, as fallback might succeed.
+
+        # 2. Fallback: Fetch full profile and use Q&As (or profileSummary field from main profile)
+        self.logger.info(f"Fallback: Fetching full profile for {user_id} from {self.profiles_collection} to generate text for cross-encoder.")
+        try:
+            main_profile_doc_ref = self.db.collection(self.profiles_collection).document(user_id)
+            main_profile_doc = main_profile_doc_ref.get()
+            if not main_profile_doc.exists:
+                self.logger.warning(f"Fallback: Main profile not found for cross-encoder: {user_id} in {self.profiles_collection}")
+                self.profile_fetch_error_counter.inc() # Increment here as this is the final attempt for this user_id
+                return None
+            
+            profile_data = main_profile_doc.to_dict()
+            text_parts = []
+            
+            # Check for 'profileSummary' field in the main profile document as a first fallback
+            main_profile_summary = profile_data.get('profileSummary') 
+            if main_profile_summary and isinstance(main_profile_summary, str) and main_profile_summary.strip():
+                self.logger.info(f"Fallback: Using profileSummary field from main profile for user {user_id}.")
+                text_parts.append(main_profile_summary.strip())
+            else:
+                self.logger.info(f"Fallback: profileSummary not in main profile or empty for user {user_id}. Using all Q&As.")
+                questions_answers = profile_data.get('questions_answers', {}) # Q&As might be in main profile doc or fetched separately by an earlier step
+                                                                        # This DoFn assumes if it reaches here, it needs to find QAs in this profile_data
+                if isinstance(questions_answers, dict):
+                    for qa_id, qa_item in questions_answers.items():
+                        question = qa_item.get('question', '')
+                        answer = qa_item.get('answer', '')
+                        if question and answer:
+                            text_parts.append(f"Q: {question} A: {answer}")
+                elif isinstance(questions_answers, list):
+                    for qa_item in questions_answers: 
+                        if isinstance(qa_item, dict):
+                            question = qa_item.get('question', '')
+                            answer = qa_item.get('answer', '')
+                            if question and answer:
+                                text_parts.append(f"Q: {question} A: {answer}")
+            
+            if not text_parts:
+                self.logger.warning(f"Fallback: Could not generate meaningful text for profile {user_id} from Q&As or summary in main profile.")
+                self.profile_fetch_error_counter.inc() # Increment as fallback also failed
+                return None
+            
+            full_text = " \n ".join(text_parts)
+            if len(full_text) > 3000: 
+                self.logger.warning(f"Fallback: Generated profile text for user {user_id} is very long ({len(full_text)} chars). May be truncated.")
+            return full_text
+
+        except Exception as e_main_fetch:
+            self.logger.error(f"Fallback: Error fetching/formatting main profile text for {user_id}: {e_main_fetch}", exc_info=True)
+            self.profile_fetch_error_counter.inc() # Increment as fallback also failed
+            return None
+
+    def process(self, element: Tuple[str, List[Dict[str, Any]]]):
+        # Input: (triggering_user_id, list_of_top_candidate_dicts from scoreboard)
+        # list_of_top_candidate_dicts: [{'matched_user_id': ..., 'aggregated_score': ...}, ...]
+        if not self.db or not self.cross_encoder_model:
+            self.logger.error("CrossEncodeDoFn not properly initialized in process. Skipping.")
+            self.error_counter.inc()
+            # Yield to error tag because this element cannot be processed
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "DoFn not initialized", "element": element})
+            return
+
+        triggering_user_id, candidates_list = element
+        
+        try:
+            triggering_user_profile_text = self._fetch_profile_text_for_cross_encoder(triggering_user_id)
+            if not triggering_user_profile_text:
+                self.logger.warning(f"Could not get profile text for triggering user {triggering_user_id}. Skipping cross-encoding for this user.")
+                self.error_counter.inc()
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                    "error_message": f"Failed to get profile text for triggering_user_id {triggering_user_id}", 
+                    "triggering_user_id": triggering_user_id,
+                    "candidates_list": candidates_list
+                })
+                return
+
+            enriched_candidates = []
+            sentence_pairs_to_score = []
+            original_candidate_info_map = [] # To map scores back
+
+            for candidate_info in candidates_list:
+                matched_user_id = candidate_info.get('matched_user_id')
+                if not matched_user_id:
+                    self.logger.warning(f"Skipping candidate with missing matched_user_id: {candidate_info}")
+                    continue
+
+                candidate_profile_text = self._fetch_profile_text_for_cross_encoder(matched_user_id)
+                if candidate_profile_text:
+                    sentence_pairs_to_score.append([triggering_user_profile_text, candidate_profile_text])
+                    original_candidate_info_map.append(candidate_info)
+                else:
+                    # If candidate profile text can't be fetched, keep original info but score will be low/default
+                    enriched_candidates.append({**candidate_info, 'cross_encoder_score': -1.0}) # Default low score
+            
+            if sentence_pairs_to_score:
+                cross_encoder_scores = self.cross_encoder_model.predict(sentence_pairs_to_score, show_progress_bar=False)
+                for i, original_info in enumerate(original_candidate_info_map):
+                    enriched_candidates.append({
+                        **original_info,
+                        'cross_encoder_score': float(cross_encoder_scores[i])
+                    })
+            
+            # Sort by new cross_encoder_score, highest first
+            enriched_candidates.sort(key=lambda x: x.get('cross_encoder_score', -1.0), reverse=True)
+            
+            self.success_counter.inc()
+            yield (triggering_user_id, enriched_candidates)
+
+        except Exception as e:
+            self.logger.error(f"Error in CrossEncodeDoFn for user {triggering_user_id}: {e}\nTraceback: {traceback.format_exc()}", exc_info=True)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Cross-encoding failed: {str(e)}", 
+                "triggering_user_id": triggering_user_id,
+                "candidates_list": candidates_list, # Original candidates list
+                "traceback": traceback.format_exc()
+            })
+
+@beam.ptransform_fn
+def CrossEncodeCandidates(pcoll: beam.PCollection[Tuple[str, List[Dict[str, Any]]]], 
+                        project_id: str, 
+                        profiles_collection: str, 
+                        profile_summaries_collection: str, # Add new arg
+                        model_name: str = 'cross-encoder/ms-marco-MiniLM-L-6-v2') -> beam.PCollectionTuple:
+    """
+    PTransform to rerank candidates using a Cross-Encoder model.
+
+    Args:
+        pcoll: PCollection of (triggering_user_id, list_of_top_candidate_dicts from scoreboard).
+        project_id: GCP Project ID.
+        profiles_collection: Firestore collection name for user profiles.
+        profile_summaries_collection: Firestore collection for dedicated profile summaries.
+        model_name: Name of the sentence-transformers CrossEncoder model.
+
+    Returns:
+        PCollectionTuple with:
+         - 'main': (triggering_user_id, list_of_candidates_with_cross_encoder_scores)
+         - 'error': PCollection of elements that failed processing.
+    """
+    return (
+        pcoll
+        | 'CrossEncodeCandidatePairs' >> beam.ParDo(
+            CrossEncodeDoFn(
+                project_id=project_id, 
+                profiles_collection=profiles_collection, 
+                profile_summaries_collection=profile_summaries_collection, # Pass to DoFn
+                model_name=model_name
+            )
+          ).with_outputs(CrossEncodeDoFn.OUTPUT_ERROR_TAG, main='main')
+    )
+
+
+# --- DoFn for Reranking (Existing RerankMatchesDoFn to be adapted) --- #
 
 class RerankMatchesDoFn(beam.DoFn):
+    OUTPUT_ERROR_TAG = 'error' # Define error tag
     # Uses OpenAI to rerank matches based on profile compatibility.
     # Expects scores to be provided in the input element.
     def __init__(self, project_id, profiles_collection, pdf_bucket, pdf_instructions_path):
@@ -282,54 +494,46 @@ class RerankMatchesDoFn(beam.DoFn):
             self.logger.error(f"Error fetching profile {user_id} during reranking: {e}", exc_info=True)
             return None # Return None instead of raising to allow partial reranking
 
-    def _format_profile_for_prompt(self, profile, per_qa_scores):
-        # Format profile Q&A for OpenAI prompt, using provided lying scores.
-        # profile: The fetched profile data dict.
-        # per_qa_scores: Dictionary of {qa_id: score} passed in the input element.
-        formatted_profile = ""
-        qa_data = profile.get("questions_answers", {}) # Use {} as default
+    def _format_profile_for_prompt(self, profile_data: Dict[str, Any]) -> str:
+        # Format profile Q&A for OpenAI prompt.
+        # Now directly uses aiLyingScore from the profile_data if available.
+        formatted_profile = "User Profile:\n"
+        
+        # Potentially add other key fields like age, occupation if readily available and useful for LLM context
+        # e.g., age = profile_data.get('profile', {}).get('personalInfo', {}).get('age') ...
+
+        qa_data = profile_data.get("questions_answers", {}) 
 
         if isinstance(qa_data, dict):
              for qa_id, qa in qa_data.items():
                 question = qa.get('question', '')
                 answer = qa.get('answer', '')
-                # Get score from the input dictionary, default to 0.0 if missing for this qa_id
-                lying_score = per_qa_scores.get(qa_id, 0.0)
-                formatted_profile += f"Q: {question}\nA: {answer} (AI Lying Score: {lying_score:.2f})\n"
-        # Handle list format if needed, requires QA items in list to have an 'id'
-        elif isinstance(qa_data, list):
-             for qa_item in qa_data:
-                 if isinstance(qa_item, dict) and 'id' in qa_item:
-                      qa_id = qa_item['id']
-                      question = qa_item.get('question', '')
-                      answer = qa_item.get('answer', '')
-                      lying_score = per_qa_scores.get(qa_id, 0.0)
-                      formatted_profile += f"Q: {question}\nA: {answer} (AI Lying Score: {lying_score:.2f})\n"
-                 else:
-                      self.logger.warning(f"Skipping QA list item without ID during formatting: {qa_item}")
-
-        # Add other profile fields if relevant for reranking
-        # formatted_profile += f"Other Info: {profile.get('some_other_field', '')}\n"
+                # Use aiLyingScore directly from the QA item in the profile
+                lying_score = qa.get('aiLyingScore') 
+                score_info = f" (Truthfulness Score: {lying_score:.2f})" if lying_score is not None else ""
+                formatted_profile += f"Q: {question}\nA: {answer}{score_info}\n"
+        # Handle list format if profiles store Q&A as list (ensure compatibility with your data model)
+        # elif isinstance(qa_data, list): ... (similar adaptation)
+        
         return formatted_profile.strip()
 
-    def _get_compatibility_score_and_questions(self, source_profile_fmt, match_profile_fmt, aggregate_score_source=None, aggregate_score_match=None):
-        # Get compatibility score and suggested questions from OpenAI.
-        # Optionally include aggregate scores in the context.
-
-        # TODO: Enhance prompt based on the 3-layer strategy (custom, foundational, cluster)
-
+    def _get_compatibility_score_and_questions(self, source_profile_fmt: str, match_profile_fmt: str, 
+                                               cross_encoder_score: float | None = None, 
+                                               scoreboard_score: float | None = None,
+                                               source_user_consistency_score: float | None = None):
+        # ... (LLM Prompt modification)
         context = ""
-        if aggregate_score_source is not None:
-            context += f"Note: Source User Overall Consistency Score: {aggregate_score_source:.2f} (0=Consistent, 1=Inconsistent based on edit history).\n"
-        # We don't have the match's aggregate score unless fetched separately or also passed in.
-        # if aggregate_score_match is not None:
-        #     context += f"Note: Potential Match Overall Consistency Score: {aggregate_score_match:.2f}\n"
-
-        # Using triple quotes for the prompt string for better readability
+        if source_user_consistency_score is not None:
+            context += f"Note: Source User Overall Consistency Score: {source_user_consistency_score:.2f} (0=Consistent, 1=Inconsistent based on edit history).\n"
+        if scoreboard_score is not None:
+            context += f"The initial system match score (from scoreboard) for this pair was: {scoreboard_score:.2f}.\n"
+        if cross_encoder_score is not None:
+            context += f"A cross-encoder model then refined this score to: {cross_encoder_score:.4f}.\n"
+        
         prompt = f"""
         You are an AI assistant for a Muslim marriage platform. Your task is to evaluate the compatibility between two user profiles for marriage and suggest insightful follow-up questions.
 
-        Analyze these two profiles for marriage compatibility based on Islamic values, personality, lifestyle, and goals. Consider the provided per-answer AI Lying Scores (0.0=trustworthy answer, 1.0=potential deception based on edit history) which indicate the stability and truthfulness of specific answers.
+        Analyze these two profiles for marriage compatibility based on Islamic values, personality, lifestyle, and goals. Consider the provided per-answer Truthfulness Scores (0.0=trustworthy answer, 1.0=potential deception based on edit history) which indicate the stability and truthfulness of specific answers, if available for Profile 1.
         {context}
         User Profile 1 (Source User):
         ---
@@ -342,8 +546,8 @@ class RerankMatchesDoFn(beam.DoFn):
         ---
 
         Instructions:
-        1. Calculate a compatibility score from 0 to 100, where 100 is highly compatible. Consider shared values, potential conflicts, complementary traits, and the reliability indicated by the per-answer lying scores.
-        2. Generate 3 concise, open-ended follow-up questions that the Source User could ask the Potential Match to clarify important areas, explore potential issues, or deepen understanding. Focus on questions related to:
+        1. Provide a final holistic compatibility score from 0 to 100, where 100 is highly compatible. Use all available information, including any previous scores provided in the context.
+        2. Generate 3 concise, open-ended follow-up questions that User Profile 1 could ask User Profile 2 to clarify important areas, explore potential issues, or deepen understanding. Focus on questions related to:
             - Core religious practices and beliefs
             - Family values and expectations
             - Life goals and aspirations
@@ -354,22 +558,22 @@ class RerankMatchesDoFn(beam.DoFn):
         Provide your response ONLY in the following JSON format:
         {{ "score": <number between 0-100>, "suggested_questions": [ {{ "question": "<question text>", "rationale": "<why this question is important>", "section": "<relevant section>" }} ] }}
         """
-
+        # ... (Rest of the LLM call and JSON parsing logic remains largely the same)
+        # Ensure error handling and default return values are robust.
         try:
             response = self.openai_client.chat.completions.create(
-                model="o1-mini", # Consider making model configurable
+                model="o1-mini", # Consider making model configurable via config.py or pipeline args
                 messages=[
-                    {"role": "system", "content": self.ai_instructions}, # Use loaded PDF content as system prompt
+                    {"role": "system", "content": self.ai_instructions}, 
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3, # Slightly creative but mostly factual
-                response_format={ "type": "json_object" } # Use json_object type
+                temperature=0.3, 
+                response_format={ "type": "json_object" } 
             )
             result_str = response.choices[0].message.content
             result = json.loads(result_str)
 
-            score = float(result.get('score', 0)) # Default score to 0
-            # Validate questions structure
+            score = float(result.get('score', 0)) 
             questions = []
             raw_questions = result.get('suggested_questions', [])
             if isinstance(raw_questions, list):
@@ -384,154 +588,134 @@ class RerankMatchesDoFn(beam.DoFn):
                            self.logger.warning(f"Malformed suggested question item: {q}")
             else:
                  self.logger.warning(f"Unexpected format for suggested_questions: {raw_questions}")
-
-            return min(max(score, 0), 100), questions # Ensure score is 0-100
+            return min(max(score, 0), 100), questions
         except (ValueError, KeyError, json.JSONDecodeError) as e:
-            # Corrected error logging f-string
             self.logger.error(f"Failed to call or parse AI response for compatibility: {str(e)}\nResponse string: '{result_str if 'result_str' in locals() else '[unavailable]'}'", exc_info=True)
             self.error_counter.inc()
-            return 0, [] # Return default on error
+            return 0, [] 
         except Exception as e:
              self.logger.error(f"Unexpected error during AI call for compatibility: {str(e)}", exc_info=True)
              self.error_counter.inc()
              return 0, []
 
-    def process(self, element: Dict[str, Any]):
-        user_id = element.get('user_id')
-        score_data = element.get('scores', {}) # Dict {'scores': {qa_id: score}, 'aggregate': agg_score}
-        matches = element.get('matches', []) # List of {'id': ..., 'score': ..., 'metadata': ...}
-        user_qas = element.get('user_qas', {}) # <<< NEW: Extract user_qas
+    def process(self, element: Tuple[str, Dict[str, Any]]):
+        # Expected input: (triggering_user_id, data_dict)
+        # data_dict = {'candidates': list_of_enriched_candidates, 'user_qas': user_qas_dict}
+        # list_of_enriched_candidates: [{'matched_user_id': ..., 'aggregated_score' (scoreboard), 'cross_encoder_score': ...}, ...]
+        
+        triggering_user_id, data_dict = element
+        candidates_list = data_dict.get('candidates', [])
+        user_qas_for_triggering_user = data_dict.get('user_qas', {})
+        # The 'scores' dict from old input (containing per-QA lying scores and aggregate) is no longer directly passed.
+        # Lying scores per QA should be part of the fetched profile data.
+        # Aggregate lying/consistency score might need to be fetched or computed if still used.
 
         if not self.db or not self.openai_client or not self.ai_instructions:
              self.logger.error("Clients or instructions not initialized in RerankMatchesDoFn. Skipping.")
              self.error_counter.inc()
-             # Use raise here because if setup fails, the worker is likely unusable
              raise RuntimeError("Setup failed for RerankMatchesDoFn")
 
-        # Validate input structure
-        if not isinstance(element, dict) or \
-           'user_id' not in element or \
-           'scores' not in element or \
-           'matches' not in element or \
-           not isinstance(element.get('scores'), dict) or \
-           'scores' not in element.get('scores', {}) or \
-           'aggregate' not in element.get('scores', {}):
-            self.logger.error(f"Invalid input element format for RerankMatchesDoFn: {element}")
+        if not triggering_user_id or not isinstance(candidates_list, list):
+            self.logger.error(f"Invalid input element format for RerankMatchesDoFn: triggering_user_id or candidates_list missing/malformed. Element: {element}")
             self.error_counter.inc()
-            # If input is invalid, cannot proceed. Depending on DLQ setup,
-            # returning might send the malformed element, raising might be better if unrecoverable.
-            # Let's return for now, assuming DLQ handles it.
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "Invalid input structure", "element": element})
             return
 
         try:
-            # self.logger.info(f"Reranking {len(matches)} matches for user {user_id}")
-            # Fetch source profile ONCE
-            source_profile = self._fetch_profile(user_id)
-            if not source_profile:
-                self.logger.error(f"Could not fetch source profile {user_id}. Cannot perform reranking.")
+            source_profile_data = self._fetch_profile(triggering_user_id)
+            if not source_profile_data:
+                self.logger.error(f"Could not fetch source profile {triggering_user_id}. Cannot perform LLM reranking.")
                 self.error_counter.inc()
-                yield {
-                    'user_id': user_id,
-                    'matches': [], # Empty list for reranked matches
-                    'user_qas': user_qas
-                 }
+                # Yield to error tag, as we can't proceed for this user_id
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                    "error_message": f"Failed to fetch source profile {triggering_user_id}", 
+                    "triggering_user_id": triggering_user_id
+                })
                 return
 
-            # Format source profile using the provided scores
-            source_profile_fmt = self._format_profile_for_prompt(source_profile, score_data.get('scores', {}))
+            # Format source profile (now uses aiLyingScore from fetched profile directly)
+            source_profile_fmt = self._format_profile_for_prompt(source_profile_data)
+            # Placeholder for source_user_consistency_score - this would need to be calculated or fetched
+            # e.g., from source_profile_data if stored there after lying score calculation
+            source_user_consistency_score = source_profile_data.get('aggregateLyingScore') # Example, adapt to actual field name
 
-            # Process each match
             reranked_matches = []
-            for match in matches:
-                match_id = match.get('id')
-                if not match_id:
-                     self.logger.warning(f"Skipping match with missing ID for user {user_id}: {match}")
+            for candidate_info in candidates_list:
+                matched_user_id = candidate_info.get('matched_user_id')
+                if not matched_user_id:
+                     self.logger.warning(f"Skipping candidate with missing matched_user_id for user {triggering_user_id}: {candidate_info}")
                      continue
 
-                # Fetch matched profile
-                matched_profile = self._fetch_profile(match_id)
-                if not matched_profile:
-                    self.logger.warning(f"Could not fetch profile for match {match_id}. Skipping rerank for this match.")
-                    continue # Skip this match if profile fetch fails
+                matched_profile_data = self._fetch_profile(matched_user_id)
+                if not matched_profile_data:
+                    self.logger.warning(f"Could not fetch profile for match {matched_user_id}. Skipping LLM rerank for this candidate.")
+                    # Add to reranked_matches with existing scores but no new AI score, or skip entirely
+                    # For now, let's add with a default low AI score to keep it in the list if needed downstream
+                    reranked_matches.append({
+                        'id': matched_user_id,
+                        'scoreboard_score': candidate_info.get('aggregated_score'),
+                        'cross_encoder_score': candidate_info.get('cross_encoder_score'),
+                        'ai_score': 0, # Default if LLM rerank fails for this candidate
+                        'suggested_questions': [],
+                        'notes': 'Profile fetch failed for LLM reranking'
+                    })
+                    continue
+                
+                # Format matched profile (currently without its own lying scores in the prompt)
+                matched_profile_fmt = self._format_profile_for_prompt(matched_profile_data)
 
-                # Format matched profile. NOTE: We don't have the matched user's scores here unless fetched separately.
-                # The prompt currently only shows scores for Profile 1 (Source User).
-                # Fetching scores for every match would add significant latency & cost.
-                # For now, format without scores for the match.
-                matched_profile_fmt = self._format_profile_for_prompt(matched_profile, {}) # Pass empty scores for match
-
-                # Get AI score and questions, passing the source user's aggregate score
                 ai_score, suggested_questions = self._get_compatibility_score_and_questions(
                     source_profile_fmt,
                     matched_profile_fmt,
-                    aggregate_score_source=score_data.get('aggregate')
+                    cross_encoder_score=candidate_info.get('cross_encoder_score'),
+                    scoreboard_score=candidate_info.get('aggregated_score'),
+                    source_user_consistency_score=source_user_consistency_score
                 )
 
-                # Format the output to include both scores and questions
                 reranked_matches.append({
-                    'id': match_id,
-                    'vector_score': match.get('score', 0.0), # Original Pinecone score
-                    'ai_score': ai_score, # Score from OpenAI reranking
-                    'suggested_questions': suggested_questions, # List of question dicts
-                    'metadata': match.get('metadata') # Pass original metadata through
+                    'id': matched_user_id,
+                    'scoreboard_score': candidate_info.get('aggregated_score'), 
+                    'cross_encoder_score': candidate_info.get('cross_encoder_score'),
+                    'ai_score': ai_score, # Score from LLM reranking
+                    'suggested_questions': suggested_questions,
+                    # 'metadata': candidate_info.get('original_pinecone_metadata') # If we passed original metadata through cross-encoder
                 })
 
-            # Sort by AI score (highest first)
             reranked_matches.sort(key=lambda x: x['ai_score'], reverse=True)
-
             self.rerank_success_counter.inc(len(reranked_matches))
 
-            # Yield the final result for this user_id
             yield {
-                'user_id': user_id,
-                'matches': reranked_matches, # The list of reranked match dictionaries
-                'user_qas': user_qas
+                'user_id': triggering_user_id,
+                'matches': reranked_matches,
+                'user_qas': user_qas_for_triggering_user # Pass through for downstream calculation
             }
 
         except Exception as e:
             self.error_counter.inc()
-            self.logger.error(f"Error in RerankMatchesDoFn for user {user_id}: {e}", exc_info=True)
-            # Optionally yield a tagged error or a specific structure if the main output path isn't taken
-            # For now, let's assume it might re-raise or be handled by with_outputs in the main pipeline file.
-            # To ensure the main output path structure is somewhat met for CalculateAdjustedTopMatchPercentage if an error happens before yielding:
-            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
-                 'user_id': user_id,
-                 'error': str(e),
-                 'original_element': element # or specific parts of it
+            self.logger.error(f"Error in RerankMatchesDoFn for user {triggering_user_id}: {e}", exc_info=True)
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                 'user_id': triggering_user_id, # Changed from 'error' to 'user_id' for consistency
+                 'error_message': str(e),
+                 'original_element_tuple_part2': data_dict, 
+                 'traceback': traceback.format_exc()
             })
 
-# --- Composite PTransform --- #
-
 @beam.ptransform_fn
-def RerankAndScoreMatches(pcoll: beam.PCollection[dict], project_id: str, profiles_collection: str, pdf_bucket: str, pdf_instructions_path: str) -> beam.PCollection[dict]:
-    """Composite PTransform to rerank matches using AI.
-
-    Assumes the input PCollection provides elements like:
-    {'user_id': ..., 'scores': {'scores': {qa_id: score}, 'aggregate': agg_score}, 'matches': [...]}
-    Scores are used directly by the internal RerankMatchesDoFn.
-
-    Args:
-        pcoll: PCollection of dictionaries from Pinecone query
-               ({'user_id': ..., 'scores': {'scores': {qa_id: score}, 'aggregate': agg_score}, 'matches': [...]}).
-        project_id: GCP Project ID.
-        profiles_collection: Firestore collection for user profiles.
-        pdf_bucket: GCS bucket for AI instructions PDF.
-        pdf_instructions_path: Path to AI instructions PDF within the bucket.
-
-    Returns:
-        PCollection of dictionaries with reranked matches
-               ({'user_id': ..., 'matches': [...]}).
+def RerankAndScoreMatches(pcoll: beam.PCollection[Tuple[str, Dict[str, Any]]], 
+                          project_id: str, 
+                          profiles_collection: str, 
+                          pdf_bucket: str, 
+                          pdf_instructions_path: str) -> beam.PCollectionTuple:
+    """Composite PTransform to rerank matches using an LLM.
+       Input: PCollection of (triggering_user_id, data_dict) 
+              where data_dict = {'candidates': list_of_enriched_candidates, 'user_qas': user_qas_dict}
     """
-
-    reranked = (
+    return (
         pcoll
-        | "RerankMatchesWithAI" >> beam.ParDo(RerankMatchesDoFn(
+        | "RerankWithLLM" >> beam.ParDo(RerankMatchesDoFn(
             project_id=project_id,
             profiles_collection=profiles_collection,
             pdf_bucket=pdf_bucket,
             pdf_instructions_path=pdf_instructions_path
-        ))
-        # Add error handling output here if RerankMatchesDoFn is modified to yield tagged errors
-        # .with_outputs(...)
+        )).with_outputs(RerankMatchesDoFn.OUTPUT_ERROR_TAG, main='main')
     )
-    return reranked 

@@ -1,9 +1,11 @@
-import * as admin from 'firebase-admin';
-import { beforeEach, afterEach, describe, it, expect, jest } from '@jest/globals';
-import * as lk from '@livekit/server-sdk';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import * as admin from "firebase-admin";
+import { beforeEach, afterEach, describe, it, expect, jest } from "@jest/globals";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import * as lk from "@livekit/server-sdk";
 
 // Mock firebase-admin
-jest.mock('firebase-admin', () => {
+jest.mock("firebase-admin", () => {
   return {
     initializeApp: jest.fn(),
     firestore: jest.fn().mockReturnValue({
@@ -15,7 +17,7 @@ jest.mock('firebase-admin', () => {
         get: jest.fn().mockResolvedValue({
           empty: false,
           docs: [{
-            id: 'test-doc-id',
+            id: "test-doc-id",
             exists: true,
             data: jest.fn().mockReturnValue({}),
             ref: { update: jest.fn().mockResolvedValue({}) }
@@ -49,15 +51,15 @@ jest.mock('firebase-admin', () => {
       )
     }),
     auth: jest.fn().mockReturnValue({
-      createUser: jest.fn().mockResolvedValue({ uid: 'test-user-id' }),
-      getUserByEmail: jest.fn().mockResolvedValue({ uid: 'test-user-id' }),
-      getUser: jest.fn().mockResolvedValue({ uid: 'test-user-id' })
+      createUser: jest.fn().mockResolvedValue({ uid: "test-user-id" }),
+      getUserByEmail: jest.fn().mockResolvedValue({ uid: "test-user-id" }),
+      getUser: jest.fn().mockResolvedValue({ uid: "test-user-id" })
     }),
     messaging: jest.fn().mockReturnValue({
-      send: jest.fn().mockResolvedValue('message-id')
+      send: jest.fn().mockResolvedValue("message-id")
     }),
     FieldValue: {
-      serverTimestamp: jest.fn().mockReturnValue('server-timestamp'),
+      serverTimestamp: jest.fn().mockReturnValue("server-timestamp"),
       arrayUnion: jest.fn((...args) => args),
       delete: jest.fn()
     },
@@ -81,7 +83,7 @@ jest.mock('firebase-admin', () => {
 });
 
 // Mock firebase-functions
-jest.mock('firebase-functions', () => {
+jest.mock("firebase-functions", () => {
   return {
     https: {
       onCall: jest.fn(handler => handler),
@@ -103,17 +105,17 @@ jest.mock('firebase-functions', () => {
     },
     config: jest.fn().mockReturnValue({
       liivekit: {
-        api_key: 'test-api-key',
-        api_secret: 'test-api-secret',
-        server_url: 'test-server-url',
+        api_key: "test-api-key",
+        api_secret: "test-api-secret",
+        server_url: "test-server-url",
       },
       openai: {
-        api_key: 'test-api-key',
+        api_key: "test-api-key",
       },
       telnyx: {
-        api_key: 'test-api-key',
-        messaging_profile_id: 'test-profile-id',
-        phone_number: '+1234567890',
+        api_key: "test-api-key",
+        messaging_profile_id: "test-profile-id",
+        phone_number: "+1234567890",
       },
     }),
   };
@@ -123,10 +125,10 @@ jest.mock('firebase-functions', () => {
 // Mock telnyx
 const telnyxMock = {
   messages: {
-    create: jest.fn().mockResolvedValue({ id: 'test-message-id' })
+    create: jest.fn().mockResolvedValue({ id: "test-message-id" })
   }
 } as any;
-jest.mock('telnyx', () => ({
+jest.mock("telnyx", () => ({
   default: jest.fn(() => telnyxMock)
 }));
 
@@ -135,27 +137,27 @@ const openaiMock = {
   chat: {
     completions: {
       create: jest.fn().mockResolvedValue({
-        choices: [{ message: { content: 'test response' } }],
+        choices: [{ message: { content: "test response" } }],
       })
     }
   }
 } as any;
-jest.mock('openai', () => ({
+jest.mock("openai", () => ({
   OpenAI: jest.fn(() => openaiMock)
 }));
 
 // Mock @livekit/server-sdk without requiring the actual module
-jest.mock('@livekit/server-sdk', () => {
+jest.mock("@livekit/server-sdk", () => {
   const mockRoomServiceClient = {
-    createRoom: jest.fn().mockResolvedValue({ name: 'test-room' }),
-    listRooms: jest.fn().mockResolvedValue([{ name: 'test-room' }]),
-    listParticipants: jest.fn().mockResolvedValue([{ identity: 'test-user' }]),
+    createRoom: jest.fn().mockResolvedValue({ name: "test-room" }),
+    listRooms: jest.fn().mockResolvedValue([{ name: "test-room" }]),
+    listParticipants: jest.fn().mockResolvedValue([{ identity: "test-user" }]),
     deleteRoom: jest.fn().mockResolvedValue({})
   } as any;
   
   const mockAccessToken = {
     addGrant: jest.fn(),
-    toJwt: jest.fn().mockReturnValue('test-token')
+    toJwt: jest.fn().mockReturnValue("test-token")
   } as any;
   
   return {
@@ -166,16 +168,16 @@ jest.mock('@livekit/server-sdk', () => {
 }, { virtual: true });
 
 // Mock stripe without requiring the module
-jest.mock('stripe', () => {
+jest.mock("stripe", () => {
   const mockVerificationSession = {
-    id: 'test-session',
-    status: 'verified',
+    id: "test-session",
+    status: "verified",
     last_verification_report: {
-      id: 'test-report',
-      document: { type: 'driving_license' },
-      selfie: { selfie_image_id: 'test-image' },
+      id: "test-report",
+      document: { type: "driving_license" },
+      selfie: { selfie_image_id: "test-image" },
       id_number: { dob: { day: 1, month: 1, year: 1990 } },
-      address: { city: 'Test City', country: 'US' }
+      address: { city: "Test City", country: "US" }
     }
   };
 
@@ -191,20 +193,20 @@ jest.mock('stripe', () => {
 // A placeholder for the imported functions
 let myFunctions: any;
 
-describe('Cloud Functions Tests', () => {
+describe("Cloud Functions Tests", () => {
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
     
     // Mock Date object for consistent time-based tests
-    jest.useFakeTimers().setSystemTime(new Date('2023-01-01T12:00:00Z'));
+    jest.useFakeTimers().setSystemTime(new Date("2023-01-01T12:00:00Z"));
     
     // Import the functions fresh for each test
     jest.isolateModules(() => {
       try {
-        myFunctions = require('../index');
+        myFunctions = require("../index");
       } catch (error) {
-        console.error('Error importing functions:', error);
+        console.error("Error importing functions:", error);
       }
     });
   });
@@ -214,16 +216,16 @@ describe('Cloud Functions Tests', () => {
   });
 
   // Basic smoke test
-  it('should be able to import the functions module', () => {
+  it("should be able to import the functions module", () => {
     expect(myFunctions).not.toBeUndefined();
   });
 
   // Testing utility functions
-  describe('Utility Functions', () => {
+  describe("Utility Functions", () => {
     // Test any exposed utility functions
-    it('should expose key functions', () => {
+    it("should expose key functions", () => {
       const functionNames = Object.keys(myFunctions);
-      console.log('Available functions:', functionNames);
+      console.log("Available functions:", functionNames);
       
       // Verify that some expected functions exist
       expect(functionNames.length).toBeGreaterThan(0);
@@ -237,23 +239,23 @@ describe('Cloud Functions Tests', () => {
   });
 
   // Simply test that HTTP functions exist
-  describe('HTTP Functions', () => {
-    it('createWali should be defined', () => {
+  describe("HTTP Functions", () => {
+    it("createWali should be defined", () => {
       expect(myFunctions.createWali).toBeDefined();
     });
 
-    it('sendPushNotification should be defined', () => {
+    it("sendPushNotification should be defined", () => {
       expect(myFunctions.sendPushNotification).toBeDefined();
     });
   });
 
   // Simply test that Firestore trigger functions exist
-  describe('Firestore Trigger Functions', () => {
-    it('onMatchUpdate should be defined', () => {
+  describe("Firestore Trigger Functions", () => {
+    it("onMatchUpdate should be defined", () => {
       expect(myFunctions.onMatchUpdate).toBeDefined();
     });
 
-    it('onUserQuestionsUpdate should be defined', () => {
+    it("onUserQuestionsUpdate should be defined", () => {
       expect(myFunctions.onUserQuestionsUpdate).toBeDefined();
     });
   });

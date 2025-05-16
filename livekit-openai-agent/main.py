@@ -256,11 +256,11 @@ class ConversationPersistor(EventEmitter):
         @self._session.on("user_input_transcribed")
         def on_user_input_transcribed(event: UserInputTranscribedEvent):
             if event.final: # Log only final transcription
-                transcription = TranscriptionLog(
-                    role="user",
+            transcription = TranscriptionLog(
+                role="user", 
                     transcription=event.transcript
-                )
-                self._log_q.put_nowait(transcription)
+            )
+            self._log_q.put_nowait(transcription)
                 # Also log the commit event itself
                 commit_event = EventLog(eventname="user_speech_committed") 
                 self._log_q.put_nowait(commit_event)
@@ -271,15 +271,15 @@ class ConversationPersistor(EventEmitter):
             if item.role == 'assistant':
                 # Log agent transcription
                 if item.text_content:
-                     transcription = TranscriptionLog(
-                         role="agent",
+            transcription = TranscriptionLog(
+                role="agent",
                          transcription=item.text_content,
-                     )
-                     self._log_q.put_nowait(transcription)
+            )
+            self._log_q.put_nowait(transcription)   
                      # Log commit event
                      commit_event = EventLog(eventname="agent_speech_committed")
                      self._log_q.put_nowait(commit_event)
-                
+
                 # Check for interruption
                 if item.interrupted:
                     interrupt_event = EventLog(eventname="agent_speech_interrupted")
@@ -326,7 +326,7 @@ class ConversationPersistor(EventEmitter):
             for line in lines:
                 if not line:
                     continue
-                
+                    
                 parts = line.split(' ', 2)  # Split into [timestamp, type/role, content]
                 if len(parts) < 2:
                     continue # Malformed line
@@ -423,13 +423,13 @@ class SessionManager:
                 logger.error("Rotation called but no current session exists.")
                 return None
             
-            logger.info("Starting session rotation")
+        logger.info("Starting session rotation")
             old_session = self.current_session
             
             # 1. Get chat context by reading from persistor logs
             chat_ctx = await self.persistor.get_chat_context()
             logger.info(f"Loaded chat context from logs with {len(chat_ctx.messages)} messages.")
-
+        
             # 2. Close the old session
             try:
                 await old_session.aclose()
@@ -438,7 +438,7 @@ class SessionManager:
                 logger.error(f"Error closing old session: {e}")
             
             # 3. Create a new AgentSession
-            logger.info("Creating new session")
+        logger.info("Creating new session")
             new_agent_session = AgentSession(
                 vad=self.vad_plugin,
             )
@@ -473,8 +473,8 @@ class SessionManager:
 
             # 6. Update the manager
             self.set_current_session(new_agent_session)
-            logger.info("Session rotation complete")
-            
+        logger.info("Session rotation complete")
+        
             return new_agent_session
 
 # Constants for Gemini Config
@@ -499,11 +499,11 @@ async def entrypoint(ctx: JobContext):
     tmp_cred_file_path = None # To store temp file path for potential cleanup
     try:
         logger.info("ENTRYPOINT: Initializing Firebase Admin, extracting Project ID, and setting ADC env var...") # Updated log
-        firebase_admin_sdk_key = os.environ.get("FIREBASE_ADMIN_SDK_KEY")
-        if firebase_admin_sdk_key is None:
+    firebase_admin_sdk_key = os.environ.get("FIREBASE_ADMIN_SDK_KEY")
+    if firebase_admin_sdk_key is None:
             logger.error("CRITICAL: FIREBASE_ADMIN_SDK_KEY missing from environment")
-            raise ValueError("FIREBASE_ADMIN_SDK_KEY missing")
-        base64_bytes = base64.b64decode(firebase_admin_sdk_key).decode("ascii")
+      raise ValueError("FIREBASE_ADMIN_SDK_KEY missing")
+    base64_bytes = base64.b64decode(firebase_admin_sdk_key).decode("ascii")
         cred_json = json.loads(base64_bytes) # Parsed JSON
 
         # ==> Extract Project ID from JSON <==
@@ -523,10 +523,10 @@ async def entrypoint(ctx: JobContext):
         logger.info(f"ENTRYPOINT: Set GOOGLE_APPLICATION_CREDENTIALS to temp file: {tmp_cred_file_path}")
 
         # Initialize Firebase Admin using the parsed JSON dictionary
-        cred = credentials.Certificate(cred_json)
-        app = firebase_admin.initialize_app(cred, {'storageBucket': 'marriage-ai-289c6.firebasestorage.app'})
-        db = firestore.client()
-        bucket = storage.bucket()
+    cred = credentials.Certificate(cred_json)
+    app = firebase_admin.initialize_app(cred, {'storageBucket': 'marriage-ai-289c6.firebasestorage.app'})
+    db = firestore.client()
+    bucket = storage.bucket()
         logger.info("ENTRYPOINT: Firebase Admin initialized successfully.")
     except Exception as e:
         logger.error(f"CRITICAL: Failed during Firebase Admin initialization/ADC setup: {e}", exc_info=True) # Updated log
@@ -1001,7 +1001,7 @@ async def entrypoint(ctx: JobContext):
             realtime_llm = google.beta.realtime.RealtimeModel(
                 model=GEMINI_MODEL_NAME,
                 voice=voice,
-                temperature=0.8,
+        temperature=0.8,
                 vertexai=True,
                 project=gcp_project_id_from_creds, 
                 location=GCP_LOCATION
@@ -1047,7 +1047,7 @@ async def entrypoint(ctx: JobContext):
     # Initialize AgentSession (VAD only)
     vad_plugin = silero.VAD.load()
     session = AgentSession(vad=vad_plugin)
-
+    
     # Initialize ConversationPersistor
     cp = ConversationPersistor(
         session=session,
@@ -1105,27 +1105,27 @@ async def entrypoint(ctx: JobContext):
 
             except asyncio.CancelledError:
                 logger.info("Session rotation task cancelled.")
-                break
-            except Exception as e:
+                            break
+                        except Exception as e:
                 logger.error(f"Error during session rotation check: {e}")
                 await asyncio.sleep(5) # Wait before retrying check loop
 
     rotation_task = asyncio.create_task(check_session_rotation())
-
+    
     # -- Cleanup Function -- 
     # Ensure it cleans up the temp file
     async def cleanup():
         logger.info("Starting cleanup")
         try:
             if not rotation_task.done():
-                rotation_task.cancel()
+            rotation_task.cancel()
                 try:
                     await rotation_task # Wait for cancellation to complete
                 except asyncio.CancelledError:
                     logger.info("Session rotation task successfully cancelled.")
             # Close the *current* session held by the manager
             if session_manager.current_session:
-                await session_manager.current_session.aclose()
+            await session_manager.current_session.aclose()
                 logger.info("Closed current AgentSession from manager")
             # If rotation failed or never happened, the original session might still be the one to close
             # elif session and not session._closed: # Check if initial session exists and isn't closed

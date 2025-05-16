@@ -1,49 +1,27 @@
-import { z as zod } from 'zod';
-// Database collection names as constants
-export const COLLECTIONS = {
-    USERS: 'USERS', // Core user data
-    USER_INFO: 'USER_INFO', // Profile metadata
-    USER_SETTINGS: 'USER_SETTINGS', // User notification and preferences settings
-    QUESTIONS_ANSWERS: 'QAS', // All QAs for a user
-    QA_EDIT_LOGS: 'QA_EDIT_LOGS', // Edit history for QAs
-    IDENTITY_VERIFICATIONS: 'ID_VERIFICATIONS', // Identity verification status/data
-    USER_WALI_RELATION_VERIFICATIONS: 'USER_WALI_RELATION_VERIFICATIONS', // Wali verification status/data
-    WALI_USER_PROVIDED_INFO: 'WALI_USER_PROVIDED_INFO', // Wali info entered by user
-    WALI_INFO: 'WALI_INFO', // Wali info entered by wali
-    MATCHES: 'MATCHES', // Match results
-    AUDIT_LOGS: 'AUDIT_LOGS', // Audit logs
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
-// 2. Enums for Type Safety
-export var VerificationStatus;
-(function (VerificationStatus) {
-    VerificationStatus["PENDING"] = "pending";
-    VerificationStatus["VERIFIED"] = "verified";
-    VerificationStatus["REQUIRES_INPUT"] = "requires_input";
-    VerificationStatus["CANCELED"] = "canceled";
-})(VerificationStatus || (VerificationStatus = {}));
-export var RelationshipType;
-(function (RelationshipType) {
-    RelationshipType["FATHER"] = "father";
-    RelationshipType["BROTHER"] = "brother";
-    RelationshipType["UNCLE"] = "uncle";
-    RelationshipType["OTHER"] = "other";
-})(RelationshipType || (RelationshipType = {}));
-// 8. Enhanced Zod Schema for Wali
-export const NewWaliSchema = zod.object({
-    name: zod.object({
-        first: zod.string().min(1),
-        last: zod.string().min(1)
-    }),
-    contact: zod.object({
-        phone: zod.string().regex(/^\+?[1-9]\d{1,14}$/),
-        email: zod.string().email()
-    }),
-    address: zod.object({
-        street: zod.string(),
-        city: zod.string(),
-        state: zod.string().optional(),
-        postalCode: zod.string(),
-        country: zod.string().length(2) // ISO 3166-1 alpha-2
-    }),
-    relationship: zod.nativeEnum(RelationshipType),
-});
+Object.defineProperty(exports, "__esModule", { value: true });
+// Export common types first
+__exportStar(require("./common-types"), exports);
+// Export from domain files
+__exportStar(require("./database-model"), exports);
+__exportStar(require("./system"), exports);
+__exportStar(require("./identity-verification"), exports);
+__exportStar(require("./users"), exports);
+__exportStar(require("./meal-planning"), exports);
+__exportStar(require("./marriage"), exports);
+__exportStar(require("./hijra"), exports);
+__exportStar(require("./hajj"), exports);

@@ -2,13 +2,13 @@
 
 // Collection names
 export const COLLECTIONS = {
-  USER_INFO: 'USER_INFO',
-  USER_SETTINGS: 'USER_SETTINGS',
-  USER_QAS: 'USER_QAS',
-  QA_EDIT_LOGS: 'QA_EDIT_LOGS',
-  MATCHES: 'MATCHES',
-  WALIS: 'WALIS',
-  MATCH_USER_UPDATES: 'MATCH_USER_UPDATES'
+  USER_INFO: "USER_INFO",
+  USER_SETTINGS: "USER_SETTINGS",
+  USER_QAS: "USER_QAS",
+  QA_EDIT_LOGS: "QA_EDIT_LOGS",
+  MATCHES: "MATCHES",
+  WALIS: "WALIS",
+  MATCH_USER_UPDATES: "MATCH_USER_UPDATES"
 };
 
 // Question interfaces
@@ -84,15 +84,15 @@ export interface Matches {
 
 // Wali interfaces
 export enum WaliRelationship {
-  FATHER = 'FATHER',
-  MOTHER = 'MOTHER',
-  BROTHER = 'BROTHER',
-  SISTER = 'SISTER',
-  UNCLE = 'UNCLE',
-  AUNT = 'AUNT',
-  COUSIN = 'COUSIN',
-  FRIEND = 'FRIEND',
-  OTHER = 'OTHER'
+  FATHER = "FATHER",
+  MOTHER = "MOTHER",
+  BROTHER = "BROTHER",
+  SISTER = "SISTER",
+  UNCLE = "UNCLE",
+  AUNT = "AUNT",
+  COUSIN = "COUSIN",
+  FRIEND = "FRIEND",
+  OTHER = "OTHER"
 }
 
 export interface WaliContact {
@@ -134,4 +134,4 @@ export const NewWaliSchema = {
   shape: {}
 };
 
-export type StripeOutputsType = any; 
+export type StripeOutputsType = unknown; 

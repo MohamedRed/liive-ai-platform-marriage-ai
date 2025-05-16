@@ -17,7 +17,14 @@
     "re:start": "yarn rm:all && yarn install && yarn dev",
     "re:build": "yarn rm:all && yarn install && yarn build",
     "re:build-npm": "npm run rm:all && npm install && npm run build",
-    "dev:host": "vite --host"
+    "dev:host": "vite --host",
+    "use-local": "cd packages/database-types && yarn link && cd ../../ && yarn link @livve-1/database-types && cd functions-nodejs && yarn link @livve-1/database-types && cd ../",
+    "use-published": "yarn unlink @livve-1/database-types || true && yarn add @livve-1/database-types && cd functions-nodejs && yarn unlink @livve-1/database-types || true && yarn add @livve-1/database-types && cd ../",
+    "dev-mode": "./scripts/database-types/dev-mode.sh",
+    "prod-mode": "./scripts/database-types/prod-mode.sh",
+    "integrate-db-types": "./scripts/database-types/integrate-database-types.sh",
+    "deploy": "./scripts/deployment/deploy.sh",
+    "deploy:meal-planning": "./scripts/deployment/deploy-meal-planning.sh"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.2.4",
@@ -43,6 +50,7 @@
     "@iconify/react": "^5.0.1",
     "@livekit/components-react": "^2.6.7",
     "@livekit/components-styles": "^1.1.4",
+    "@livve-1/database-types": "latest",
     "@mui/icons-material": "^6.4.6",
     "@mui/lab": "^5.0.0-alpha.170",
     "@mui/material": "^5.15.20",
@@ -67,6 +75,7 @@
     "autosuggest-highlight": "^3.3.4",
     "aws-amplify": "^6.3.6",
     "axios": "^1.7.2",
+    "date-fns": "^4.1.0",
     "dayjs": "^1.11.11",
     "embla-carousel": "^8.1.5",
     "embla-carousel-auto-height": "^8.1.5",

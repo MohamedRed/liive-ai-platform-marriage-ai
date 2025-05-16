@@ -1,0 +1,1 @@
+export { FriendsView } from './view/friends-view'; 

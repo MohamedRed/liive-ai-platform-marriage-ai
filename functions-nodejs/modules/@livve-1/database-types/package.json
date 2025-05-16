@@ -1,0 +1,30 @@
+{
+  "name": "@livve-1/database-types",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/livve-1/marriage-ai.git",
+    "directory": "apps/marriage-ai/packages/database-types"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "yarn build",
+    "dev": "tsc -w",
+    "update-version": "node -e \"const pkg = require('./package.json'); const [major, minor, patch] = pkg.version.split('.'); pkg.version = `${major}.${minor}.${parseInt(patch) + 1}`; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n')\"",
+    "publish-update": "./update.sh"
+  },
+  "description": "Shared database types for the Liive Marriage AI platform",
+  "author": "Liive AI",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.1.0"
+  }
+}

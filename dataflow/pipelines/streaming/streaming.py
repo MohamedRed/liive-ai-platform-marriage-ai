@@ -111,6 +111,10 @@ def parse_pipeline_options(argv=None):
     parser.add_argument('--pinecone_region', required=True, help='Pinecone region (environment, e.g., us-west1-gcp)')
     parser.add_argument('--top_k', type=int, default=20, help='Number of nearest neighbors to query from Pinecone (per statement)')
 
+    # Scoreboard Weights (New)
+    parser.add_argument('--weight_preference_fulfillment', type=float, default=1.0, help='Weight for AP/PA matches in scoreboard')
+    parser.add_argument('--weight_attribute_similarity', type=float, default=0.4, help='Weight for AA matches in scoreboard')
+
     # Reranking Config
     parser.add_argument('--pdf_bucket', required=True, help='GCS bucket containing the AI instructions PDF')
     parser.add_argument('--pdf_instructions_path', default='agent-instructions-1.0.pdf', help='Path to AI instructions PDF within the bucket')
@@ -344,7 +348,9 @@ def run_streaming_pipeline(argv=None):
             statement_match_hits_results.main
             | "UpdateMatchScoreboard" >> WriteToScoreboard(
                 project_id=known_args.project,
-                collection_name=match_candidate_scoreboard_collection 
+                collection_name=match_candidate_scoreboard_collection,
+                weight_preference_fulfillment=known_args.weight_preference_fulfillment,
+                weight_attribute_similarity=known_args.weight_attribute_similarity
             )
         )
         scoreboard_update_results.error | "DLQ_ScoreboardUpdateErrors" >> dlq_sink("ScoreboardUpdateErrors")
