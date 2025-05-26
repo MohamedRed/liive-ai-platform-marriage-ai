@@ -16,3 +16,13 @@ package-lock.json
 .idea/
 .vercel
 .eslintcache
+
+# Specific ignores for apps/marriage-ai/packages/database-types
+packages/database-types/node_modules/
+packages/database-types/dist/
+packages/database-types/build/
+packages/database-types/lib/
+packages/database-types/*.tsbuildinfo
+packages/database-types/npm-debug.log*
+packages/database-types/yarn-debug.log*
+packages/database-types/yarn-error.log*
