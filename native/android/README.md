@@ -15,7 +15,7 @@ Requires JDK 17+ and the Android SDK. From this directory:
 ./gradlew assembleDebug
 ```
 
-This repository currently does not include a Gradle wrapper. Open the folder in Android Studio or run `gradle wrapper` from a local Android toolchain to add one before using the command above. Hermes validation is limited to structural checks because this Linux environment has JDK 17 but no Android SDK/Gradle wrapper.
+The Gradle wrapper is committed with Gradle 8.10.2 so Android builds do not depend on a globally installed Gradle. Hermes verified the wrapper with `./gradlew --version --no-daemon`. `./gradlew assembleDebug --no-daemon` currently reaches Android SDK resolution and then fails in this Linux environment because `ANDROID_HOME` / `sdk.dir` is not configured. Run the same command on a machine or CI runner with Android SDK 35 installed for full platform validation.
 
 ## Design system source
 
