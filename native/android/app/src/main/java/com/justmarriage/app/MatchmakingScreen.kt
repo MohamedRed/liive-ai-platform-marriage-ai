@@ -3,11 +3,15 @@ package com.justmarriage.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,8 +27,9 @@ import com.justmarriage.design.*
 @Composable
 fun MatchmakingScreen(modifier: Modifier = Modifier) {
     var showDetail by remember { mutableStateOf(false) }
+    var serviceNotice by remember { mutableStateOf(false) }
 
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
+    Column(modifier.fillMaxSize().background(JMColors.surfacePage).verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
 
         SectionHeader("Matches") { JMBadge("1 new", tone = JMBadgeTone.Pink, soft = true, uppercase = true) }
@@ -50,12 +55,12 @@ fun MatchmakingScreen(modifier: Modifier = Modifier) {
         Text("SEARCHING FOR A 99% MATCH", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans,
             fontWeight = FontWeight.Bold, fontSize = 13.sp)
 
-        Mock.prospects.forEach { p -> ProspectRow(p) }
+        Mock.prospects.take(2).forEach { p -> ProspectRow(p) }
     }
 
     if (showDetail) {
         ModalBottomSheet(onDismissRequest = { showDetail = false }, containerColor = JMColors.surfaceCard) {
-            MatchDetail(Mock.bestMatch) { showDetail = false }
+            MatchDetail(Mock.bestMatch, serviceNotice, onClose = { showDetail = false }) { serviceNotice = true }
         }
     }
 }
@@ -80,25 +85,52 @@ private fun ProspectRow(p: Prospect) {
 }
 
 @Composable
-private fun MatchDetail(p: Prospect, onClose: () -> Unit) {
+private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit, onAccept: () -> Unit) {
     val highlights = listOf(
         "Both practising, family-oriented",
         "Wants children in 1–2 years",
         "Open to relocating within UK",
     )
+    val waliNotificationAvailable = false
     Column(Modifier.fillMaxWidth().padding(JMSpace.x5).padding(bottom = JMSpace.x6),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
+        Box(Modifier.size(width = 44.dp, height = 5.dp).clip(JMShapes.pill).background(JMPalette.Ink200))
+        Box(Modifier.align(Alignment.End).size(34.dp).clip(CircleShape).background(JMPalette.Ink100).clickable(onClick = onClose),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Close, "Close", tint = JMColors.textSecondary, modifier = Modifier.size(18.dp))
+        }
         Text("Best match · ${p.score}%", style = JMText.headingMd)
         JMProgressRing(value = p.score.toFloat(), size = 130.dp, sublabel = "compatibility")
         JMAvatar(locked = true, size = 56.dp)
         Text("Photos stay private until you both accept. Your wali reviews this match with you.",
             color = JMColors.textSecondary, fontSize = 14.sp, style = JMText.bodySm)
+        if (!waliNotificationAvailable) {
+            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
+                Text("Wali notification service is required before this acceptance can be sent.",
+                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+        } else if (serviceNotice) {
+            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
+                Text("Acceptance is ready, but wali notification service is not connected yet.",
+                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+        }
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             highlights.forEach { Text("•  $it", fontFamily = JMFontFamily.Sans, fontSize = 14.sp) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
             JMButton("Not now", onClick = onClose, variant = JMButtonVariant.Outline, modifier = Modifier.weight(1f))
-            JMButton("Accept & notify wali", onClick = onClose, variant = JMButtonVariant.Primary, modifier = Modifier.weight(1f))
+            JMButton(
+                "Accept & notify wali",
+                onClick = onAccept,
+                variant = JMButtonVariant.Primary,
+                modifier = Modifier.weight(1f),
+                enabled = waliNotificationAvailable,
+            )
         }
     }
 }

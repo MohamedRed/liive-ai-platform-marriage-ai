@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ProfileQuestionnaireView: View {
     @State private var rating: Int? = 8
+    @State private var savedNotice = false
     private let sections: [(String, String)] = [
         ("Personal & family background", "done"),
         ("Religious understanding", "done"),
@@ -46,8 +47,18 @@ struct ProfileQuestionnaireView: View {
                         Text("How important is it that household responsibilities follow Islamic guidance?")
                             .font(JMFont.sans(17, .bold)).padding(.vertical, 4)
                         JMScaleRating(value: $rating, lowLabel: "Flexible", highLabel: "Essential")
-                        JMButton("Save & continue", variant: .ink, fullWidth: true, systemIcon: "arrow.right") {}
-                            .padding(.top, JMSpace.x3)
+                            .onChange(of: rating) { _ in savedNotice = false }
+                        if savedNotice {
+                            JMBadge("Saved to draft", tone: .success, soft: true)
+                                .padding(.top, JMSpace.x2)
+                        }
+                        JMButton("Save & continue", variant: .ink, fullWidth: true, systemIcon: "arrow.right") {
+                            guard rating != nil else { return }
+                            savedNotice = true
+                        }
+                        .disabled(rating == nil)
+                        .opacity(rating == nil ? 0.55 : 1)
+                        .padding(.top, JMSpace.x3)
                     }
 
                     Text("SECTIONS").font(JMFont.sans(13, .bold)).tracking(0.6).foregroundColor(JMColor.textTertiary)

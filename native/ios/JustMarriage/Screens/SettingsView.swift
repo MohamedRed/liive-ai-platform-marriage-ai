@@ -5,6 +5,7 @@ struct SettingsView: View {
     @State private var matchNotif = true
     @State private var notifyWali = true
     @State private var hidePhoto = false
+    @State private var signOutBlocked = false
 
     var body: some View {
         ZStack {
@@ -15,6 +16,11 @@ struct SettingsView: View {
 
                     HStack(spacing: JMSpace.x4) {
                         JMAvatar(initials: "AB", size: 60)
+                            .overlay(Circle().strokeBorder(JMColor.pink500, lineWidth: 3))
+                            .overlay(alignment: .bottomTrailing) {
+                                Circle().fill(JMColor.cyanBright).frame(width: 16, height: 16)
+                                    .overlay(Circle().strokeBorder(JMColor.white, lineWidth: 2))
+                            }
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Aisha B.").font(JMFont.headingSM)
                             JMBadge("Identity verified", tone: .success, soft: true)
@@ -39,10 +45,17 @@ struct SettingsView: View {
                     .overlay(RoundedRectangle(cornerRadius: JMRadius.lg).strokeBorder(JMColor.borderSubtle, lineWidth: 1))
                     .clipShape(RoundedRectangle(cornerRadius: JMRadius.lg))
 
-                    JMButton("Sign out", variant: .outline, fullWidth: true, systemIcon: "rectangle.portrait.and.arrow.right") {}
+                    JMButton("Sign out", variant: .outline, fullWidth: true, systemIcon: "rectangle.portrait.and.arrow.right") {
+                        signOutBlocked = true
+                    }
                 }
                 .padding(JMSpace.gutter)
             }
+        }
+        .alert("Sign out", isPresented: $signOutBlocked) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Auth sign-out is handled by the service layer; this native preview keeps you signed in.")
         }
     }
 

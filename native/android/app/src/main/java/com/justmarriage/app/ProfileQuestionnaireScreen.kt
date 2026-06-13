@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -24,6 +25,7 @@ import com.justmarriage.design.*
 @Composable
 fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
     var rating by remember { mutableStateOf<Int?>(8) }
+    var saved by remember { mutableStateOf(false) }
     val sections = listOf(
         "Personal & family background" to "done",
         "Religious understanding" to "done",
@@ -32,7 +34,7 @@ fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
         "Finances & lifestyle" to "todo",
     )
 
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
+    Column(modifier.fillMaxSize().background(JMColors.surfacePage).verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
 
         SectionHeader("Profile")
@@ -52,7 +54,6 @@ fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        // Current question
         JMCard(variant = JMCardVariant.Tinted, tint = JMPalette.Pink50) {
             Text("ROLES & RESPONSIBILITIES", color = JMPalette.Pink700, fontFamily = JMFontFamily.Sans,
                 fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -60,9 +61,17 @@ fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
             Text("How important is it that household responsibilities follow Islamic guidance?",
                 fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 17.sp, lineHeight = 23.sp)
             Spacer(Modifier.height(JMSpace.x4))
-            JMScaleRating(value = rating, onChange = { rating = it }, lowLabel = "Flexible", highLabel = "Essential")
+            JMScaleRating(value = rating, onChange = { rating = it; saved = false }, lowLabel = "Flexible", highLabel = "Essential")
             Spacer(Modifier.height(JMSpace.x3))
-            JMButton("Save & continue", onClick = {}, variant = JMButtonVariant.Ink, fullWidth = true)
+            JMButton("Save & continue", onClick = { saved = true }, variant = JMButtonVariant.Ink,
+                fullWidth = true, enabled = rating != null)
+            if (saved) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.CloudDone, null, tint = JMColors.success, modifier = Modifier.size(18.dp))
+                    Text("Saved locally. The next profile section is available when the profile service syncs.",
+                        color = JMColors.textSecondary, fontFamily = JMFontFamily.Sans, fontSize = 12.5.sp)
+                }
+            }
         }
 
         Text("SECTIONS", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp)

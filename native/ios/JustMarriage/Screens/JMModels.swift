@@ -14,6 +14,7 @@ enum AppTab: Hashable { case talk, matches, profile, wali, settings }
 final class AppState: ObservableObject {
     @Published var tab: AppTab = .talk
     @Published var onboarded = false
+    @Published var matchAcceptanceNeedsWaliService = false
 
     let bestMatch = Prospect(label: "Sister · 27", city: "London, UK", score: 99)
     let prospects = [
@@ -34,6 +35,22 @@ struct JMSectionHeader: View {
                 .foregroundColor(JMColor.ink900)
             Spacer()
             if let t = trailing { t }
+        }
+    }
+}
+
+struct JMBrandWordmark: View {
+    var compact = false
+    var body: some View {
+        HStack(spacing: compact ? 5 : 6) {
+            Text("JUST").font(JMFont.display(compact ? 22 : 34)).foregroundColor(.white)
+            Text("MARRIAGE")
+                .font(JMFont.display(compact ? 18 : 28))
+                .foregroundColor(JMColor.pink500)
+                .padding(.horizontal, compact ? 6 : 8)
+                .padding(.vertical, compact ? 1 : 2)
+                .background(JMColor.cyanBright)
+                .clipShape(RoundedRectangle(cornerRadius: compact ? 5 : 7))
         }
     }
 }

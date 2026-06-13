@@ -39,6 +39,7 @@ IOS_SCREEN_FILES = [
 
 REQUIRED = [
     ROOT / "README.md",
+    ROOT / "VISUAL_PARITY.md",
     ROOT / "android/.gitignore",
     ROOT / "android/README.md",
     ROOT / "android/settings.gradle.kts",

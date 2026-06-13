@@ -3,6 +3,7 @@ package com.justmarriage.app
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +37,7 @@ private enum class Mode { Voice, Text }
 fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) {
     var mode by remember { mutableStateOf(Mode.Voice) }
     var connected by remember { mutableStateOf(true) }
+    var boundaryNotice by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier.fillMaxSize().background(JMColors.ink).padding(JMSpace.x5),
@@ -50,7 +52,22 @@ fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) 
                     modifier = Modifier.clip(JMShapes.xs).background(JMColors.secondary).padding(horizontal = 6.dp, vertical = 1.dp))
             }
             Spacer(Modifier.weight(1f))
-            Icon(Icons.Filled.Notifications, contentDescription = null, tint = JMPalette.White.copy(alpha = 0.8f))
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = "Notifications",
+                tint = JMPalette.White.copy(alpha = 0.8f),
+                modifier = Modifier.clickable { boundaryNotice = "Notifications require push-service wiring before production." },
+            )
+        }
+
+        boundaryNotice?.let {
+            Text(
+                it,
+                color = JMPalette.White.copy(alpha = 0.72f),
+                fontFamily = JMFontFamily.Sans,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.End),
+            )
         }
 
         // Toggle
@@ -90,22 +107,46 @@ private fun ColumnScope.VoiceBody(connected: Boolean, onToggleConnect: () -> Uni
     Spacer(Modifier.weight(1f))
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(JMSpace.x6)) {
-        JMBadge("AI marriage counselor", tone = JMBadgeTone.Cyan, uppercase = true)
+        JMBadge("AI MARRIAGE COUNSELOR", tone = JMBadgeTone.Cyan)
         Box(
-            Modifier.size(150.dp).clip(CircleShape)
-                .background(Brush.radialGradient(listOf(JMColors.primary.copy(alpha = 0.35f), JMColors.secondary.copy(alpha = 0.12f), Color.Transparent))),
+            Modifier.size(164.dp).clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        listOf(
+                            JMColors.primary.copy(alpha = if (connected) 0.42f else 0.18f),
+                            JMColors.secondary.copy(alpha = if (connected) 0.18f else 0.08f),
+                            Color.Transparent,
+                        ),
+                    ),
+                ),
             contentAlignment = Alignment.Center,
-        ) { JMVoiceBars(active = connected, tint = JMColors.primary, height = 64.dp) }
-        Text(
-            if (connected) "“What matters most to you in a spouse?”" else "Tap to start your session",
-            color = JMPalette.White, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold,
-            fontSize = 19.sp, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 300.dp),
-        )
+        ) { JMVoiceBars(active = connected, tint = JMColors.primary, height = 66.dp) }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                if (connected) "Listening..." else "Tap to start your session",
+                color = JMPalette.White,
+                fontFamily = JMFontFamily.Sans,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 22.sp,
+                textAlign = TextAlign.Center,
+            )
+            if (connected) Text(
+                "“What matters most to you in a spouse?”",
+                color = JMPalette.White.copy(alpha = 0.72f),
+                fontFamily = JMFontFamily.Sans,
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 300.dp),
+            )
+        }
         if (connected) {
-            Row(Modifier.clip(CircleShape).clickable(onClick = onToggleConnect)
-                .padding(horizontal = 22.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.Mic, null, tint = JMPalette.White, modifier = Modifier.size(18.dp))
+            Row(
+                Modifier.clip(CircleShape).border(1.5.dp, JMPalette.White.copy(alpha = 0.45f), CircleShape)
+                    .clickable(onClick = onToggleConnect).padding(horizontal = 22.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Icons.Filled.MicOff, null, tint = JMPalette.White, modifier = Modifier.size(18.dp))
                 Text("End session", color = JMPalette.White, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         } else {
