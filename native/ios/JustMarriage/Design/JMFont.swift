@@ -1,15 +1,6 @@
-// JMFont.swift — typography (SwiftUI)
-//
-// FONT SETUP (one-time):
-// 1. Add the bundled fonts to the app target: Anton-Regular.ttf, PublicSans (variable or
-//    static weights 400/500/600/700/800/900, plus italics if needed).
-//    NOTE: Anton & Public Sans are Google-Fonts substitutes pending the licensed display
-//    face — see native_handoff/SKILL.md.
-// 2. In Info.plist add the file names under "Fonts provided by application"
-//    (UIAppFonts), e.g. <string>Anton-Regular.ttf</string> ...
-// 3. The PostScript names used below: "Anton-Regular", "PublicSans-Regular",
-//    "PublicSans-SemiBold", "PublicSans-Bold", "PublicSans-ExtraBold", "PublicSans-Black".
-//    Verify with: for f in UIFont.familyNames { print(UIFont.fontNames(forFamilyName: f)) }
+// JMFont.swift — bundled typography (SwiftUI).
+// Anton and Public Sans are OFL-licensed Google Fonts bundled in Resources/Fonts
+// and registered through UIAppFonts in Info.plist.
 
 import SwiftUI
 
@@ -26,12 +17,12 @@ public enum JMFont {
         case regular, medium, semibold, bold, extrabold, black
         var psName: String {
             switch self {
-            case .regular:   return "PublicSans-Regular"
-            case .medium:    return "PublicSans-Medium"
-            case .semibold:  return "PublicSans-SemiBold"
-            case .bold:      return "PublicSans-Bold"
-            case .extrabold: return "PublicSans-ExtraBold"
-            case .black:     return "PublicSans-Black"
+            case .regular:   return "PublicSansRoman_400wght"
+            case .medium:    return "PublicSansRoman_500wght"
+            case .semibold:  return "PublicSansRoman_600wght"
+            case .bold:      return "PublicSansRoman_700wght"
+            case .extrabold: return "PublicSansRoman_800wght"
+            case .black:     return "PublicSansRoman_900wght"
             }
         }
     }

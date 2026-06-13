@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -40,7 +40,7 @@ fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone:
             Box(
                 Modifier.size(38.dp).clip(CircleShape).background(JMPalette.Ink100).clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.ArrowBack, "Back", tint = JMPalette.Ink700, modifier = Modifier.size(18.dp)) }
+            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = JMPalette.Ink700, modifier = Modifier.size(18.dp)) }
         }
 
         Text("VERIFICATION", fontFamily = JMFontFamily.Display, fontSize = 42.sp, color = JMColors.ink)

@@ -11,8 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -49,7 +49,7 @@ fun ChatScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(Modifier.size(34.dp).clip(CircleShape).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.ArrowBack, "Back", tint = JMPalette.Ink700)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = JMPalette.Ink700)
             }
             JMAvatar(initials = "A", size = 40.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -105,7 +105,7 @@ fun ChatScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
                         draft = ""
                     },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Send, null, tint = JMPalette.White, modifier = Modifier.size(19.dp)) }
+            ) { Icon(Icons.AutoMirrored.Filled.Send, null, tint = JMPalette.White, modifier = Modifier.size(19.dp)) }
         }
     }
 }

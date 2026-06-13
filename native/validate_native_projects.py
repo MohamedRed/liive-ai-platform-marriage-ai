@@ -54,10 +54,16 @@ REQUIRED = [
     ROOT / "android/app/src/main/java/com/justmarriage/app/MainActivity.kt",
     ROOT / "android/app/src/main/res/values/strings.xml",
     ROOT / "android/app/src/main/res/values/styles.xml",
+    ROOT / "android/app/src/main/res/font/anton_regular.ttf",
+    ROOT / "android/app/src/main/res/font/public_sans.ttf",
     ROOT / "ios/README.md",
     ROOT / "ios/project.yml",
     ROOT / "ios/JustMarriage/JustMarriageApp.swift",
     ROOT / "ios/JustMarriage/Info.plist",
+    ROOT / "ios/JustMarriage/Resources/Fonts/Anton-Regular.ttf",
+    ROOT / "ios/JustMarriage/Resources/Fonts/PublicSans[wght].ttf",
+    ROOT / "fonts/licenses/anton-OFL.txt",
+    ROOT / "fonts/licenses/public-sans-OFL.txt",
     *[
         ROOT / "android/app/src/main/java/com/justmarriage/design" / name
         for name in ANDROID_DESIGN_FILES
@@ -91,6 +97,7 @@ checks = {
         "SettingsScreen",
     ],
     ROOT / "ios/JustMarriage/JustMarriageApp.swift": ["@main", "RootView()"],
+    ROOT / "ios/JustMarriage/Info.plist": ["UIAppFonts", "Fonts/Anton-Regular.ttf", "Fonts/PublicSans[wght].ttf"],
     ROOT / "ios/JustMarriage/Screens/RootView.swift": [
         "TabView",
         "OnboardingView",

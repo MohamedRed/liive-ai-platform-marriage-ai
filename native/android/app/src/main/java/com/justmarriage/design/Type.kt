@@ -1,13 +1,5 @@
-// Type.kt — typography (Jetpack Compose)
-//
-// FONT SETUP (one-time):
-// 1. Put font files in res/font/ (lowercase, underscores):
-//      anton_regular.ttf
-//      public_sans_regular.ttf, public_sans_medium.ttf, public_sans_semibold.ttf,
-//      public_sans_bold.ttf, public_sans_extrabold.ttf, public_sans_black.ttf
-//    NOTE: Anton & Public Sans are Google-Fonts substitutes pending the licensed
-//    display face — see ../SKILL.md.
-// 2. R.font references below assume those names.
+// Type.kt — bundled typography (Jetpack Compose).
+// Anton and Public Sans are OFL-licensed Google Fonts bundled under res/font/.
 package com.justmarriage.design
 
 import androidx.compose.material3.Typography
@@ -15,25 +7,20 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-// import com.justmarriage.app.R   // <-- point this at your app's R
+import com.justmarriage.R
 
-// Replace these Font(...) calls with R.font.* references once fonts are in res/font/.
-// They are written as comments to keep this file compiling standalone; uncomment & wire R.
 object JMFontFamily {
-    // val Display = FontFamily(Font(R.font.anton_regular))
-    // val Sans = FontFamily(
-    //     Font(R.font.public_sans_regular,   FontWeight.Normal),
-    //     Font(R.font.public_sans_medium,    FontWeight.Medium),
-    //     Font(R.font.public_sans_semibold,  FontWeight.SemiBold),
-    //     Font(R.font.public_sans_bold,      FontWeight.Bold),
-    //     Font(R.font.public_sans_extrabold, FontWeight.ExtraBold),
-    //     Font(R.font.public_sans_black,     FontWeight.Black),
-    // )
-    val Display: FontFamily = FontFamily.Default // TODO: replace with Anton
-    val Sans: FontFamily = FontFamily.Default     // TODO: replace with Public Sans
+    val Display = FontFamily(Font(R.font.anton_regular, FontWeight.Normal))
+    val Sans = FontFamily(
+        Font(R.font.public_sans, FontWeight.Normal),
+        Font(R.font.public_sans, FontWeight.Medium),
+        Font(R.font.public_sans, FontWeight.SemiBold),
+        Font(R.font.public_sans, FontWeight.Bold),
+        Font(R.font.public_sans, FontWeight.ExtraBold),
+        Font(R.font.public_sans, FontWeight.Black),
+    )
 }
 
 // Display = Anton, ALL CAPS at call site (use .uppercase()). Tight leading.

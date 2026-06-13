@@ -6,7 +6,7 @@ The user-provided screenshots are the source of truth for the native UI. The iOS
 
 - Device canvas: tall phone portrait layout with generous safe-area padding and a white/warm off-white app surface except Talk/onboarding dark states.
 - Brand: `JUST` wordmark in heavy condensed uppercase, `MARRIAGE` in hot pink inside a cyan rounded tag when shown.
-- Typography: large condensed uppercase section titles (`MATCHES`, `PROFILE`, `WALI`, `SETTINGS`, `VERIFICATION`), compact bold labels/badges, readable sans body copy.
+- Typography: bundled Anton for large condensed uppercase section titles (`MATCHES`, `PROFILE`, `WALI`, `SETTINGS`, `VERIFICATION`) and bundled Public Sans for compact bold labels/badges and readable body copy.
 - Palette: hot pink primary, bright cyan accent, black/ink primary text, warm cream page background, white cards, soft green success, yellow warning.
 - Components use thick rounded rectangles, visible borders, pill badges, circular locked avatars, progress/rating rings, and exact CTA prominence from the screenshots.
 - Bottom navigation is white, compact, icon + label, and visibly marks the active tab with pink.
