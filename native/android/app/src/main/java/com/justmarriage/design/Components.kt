@@ -251,9 +251,10 @@ fun JMAvatar(
 @Composable
 private fun Modifier.clickableNoRipple(enabled: Boolean, onClick: () -> Unit): Modifier {
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    return this.then(
-        androidx.compose.foundation.clickable(
-            interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick,
-        )
+    return this.clickable(
+        interactionSource = interaction,
+        indication = null,
+        enabled = enabled,
+        onClick = onClick,
     )
 }

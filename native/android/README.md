@@ -15,7 +15,7 @@ Requires JDK 17+ and the Android SDK. From this directory:
 ./gradlew assembleDebug
 ```
 
-The Gradle wrapper is committed with Gradle 8.10.2 so Android builds do not depend on a globally installed Gradle. Hermes verified the wrapper with `./gradlew --version --no-daemon`. `./gradlew assembleDebug --no-daemon` currently reaches Android SDK resolution and then fails in this Linux environment because `ANDROID_HOME` / `sdk.dir` is not configured. Run the same command on a machine or CI runner with Android SDK 35 installed for full platform validation.
+The Gradle wrapper is committed with Gradle 8.10.2 so Android builds do not depend on a globally installed Gradle. Hermes verified the wrapper with `./gradlew --version --no-daemon` and built the debug APK with `ANDROID_HOME=/home/hermes/android-sdk ./gradlew assembleDebug --no-daemon` after installing Android SDK 35 command-line packages locally. The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Design system source
 

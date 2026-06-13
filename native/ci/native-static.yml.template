@@ -31,12 +31,22 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Run Linux-safe native validator
         run: python3 native/validate_native_projects.py
 
       - name: Check Android Gradle wrapper
         working-directory: native/android
         run: ./gradlew --version --no-daemon
+
+      - name: Build Android debug APK
+        working-directory: native/android
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Check for whitespace errors
         run: git diff --check HEAD
@@ -45,9 +55,8 @@ jobs:
         run: |
           cat <<'MSG'
           Linux static validation passed.
-          Android Gradle wrapper is committed and can be checked with:
-          - cd native/android && ./gradlew --version --no-daemon
-          Full platform validation still requires:
-          - Android: JDK 17 + Android SDK 35 + ./gradlew assembleDebug
+          Android Gradle wrapper is committed and CI can build the debug APK with:
+          - cd native/android && ./gradlew assembleDebug --no-daemon
+          Remaining platform validation still requires:
           - iOS: macOS + Xcode + XcodeGen + xcodebuild
           MSG
