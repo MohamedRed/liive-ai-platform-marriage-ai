@@ -1,0 +1,87 @@
+{
+  "$schema": "https://design-tokens.org/format",
+  "_comment": "Just Marriage design tokens — platform-agnostic reference. Source: tokens/*.css. Fonts are Google-Fonts substitutes (Anton, Public Sans) pending licensed faces.",
+  "color": {
+    "pink": {
+      "50":  { "$value": "#FFE9F6" }, "100": { "$value": "#FFCDEA" },
+      "200": { "$value": "#FF9FD6" }, "300": { "$value": "#FB6FC0" },
+      "400": { "$value": "#F846AC" }, "500": { "$value": "#F5269B" },
+      "600": { "$value": "#D60E82" }, "700": { "$value": "#A80866" },
+      "800": { "$value": "#7A0A4C" }, "900": { "$value": "#4F0731" }
+    },
+    "cyan": {
+      "50":  { "$value": "#E2FBF9" }, "100": { "$value": "#BAF6F0" },
+      "200": { "$value": "#84ECE3" }, "300": { "$value": "#4DE2D6" },
+      "400": { "$value": "#22D8C9" }, "500": { "$value": "#11C6B8" },
+      "600": { "$value": "#0BA194" }, "700": { "$value": "#0C7E75" },
+      "800": { "$value": "#0E625C" }, "900": { "$value": "#0A413D" },
+      "bright": { "$value": "#1FE6D8" }
+    },
+    "yellow": { "300": { "$value": "#FFE38A" }, "400": { "$value": "#FFD23E" }, "500": { "$value": "#F5B600" } },
+    "ink": {
+      "50":  { "$value": "#FAFAFB" }, "100": { "$value": "#F2F3F6" },
+      "200": { "$value": "#E7E9EE" }, "300": { "$value": "#D2D5DC" },
+      "400": { "$value": "#A9ADB7" }, "500": { "$value": "#80848F" },
+      "600": { "$value": "#585C6B" }, "700": { "$value": "#3A3D4A" },
+      "800": { "$value": "#232530" }, "900": { "$value": "#15161B" }
+    },
+    "white": { "$value": "#FFFFFF" }, "black": { "$value": "#000000" },
+    "canvas": { "$value": "#FBFAF8" }, "canvasSunken": { "$value": "#F4F2EE" },
+    "green": { "50": { "$value": "#DEF7EC" }, "500": { "$value": "#1FB873" } },
+    "amber": { "50": { "$value": "#FFF3D6" }, "500": { "$value": "#FFB020" } },
+    "red":   { "50": { "$value": "#FFE3E6" }, "500": { "$value": "#FF4D5E" } }
+  },
+  "semantic": {
+    "primary":       { "$value": "{color.pink.500}" },
+    "primaryHover":  { "$value": "{color.pink.600}" },
+    "primaryPress":  { "$value": "{color.pink.700}" },
+    "primarySoft":   { "$value": "{color.pink.50}" },
+    "onPrimary":     { "$value": "{color.white}" },
+    "secondary":     { "$value": "{color.cyan.bright}" },
+    "secondaryHover":{ "$value": "{color.cyan.400}" },
+    "secondaryPress":{ "$value": "{color.cyan.500}" },
+    "secondarySoft": { "$value": "{color.cyan.50}" },
+    "onSecondary":   { "$value": "{color.ink.900}" },
+    "ink":           { "$value": "{color.ink.900}" },
+    "accent":        { "$value": "{color.yellow.400}" },
+    "textPrimary":   { "$value": "{color.ink.900}" },
+    "textSecondary": { "$value": "{color.ink.600}" },
+    "textTertiary":  { "$value": "{color.ink.500}" },
+    "textDisabled":  { "$value": "{color.ink.400}" },
+    "surfacePage":   { "$value": "{color.canvas}" },
+    "surfaceCard":   { "$value": "{color.white}" },
+    "surfaceSunken": { "$value": "{color.canvasSunken}" },
+    "surfaceInverse":{ "$value": "{color.ink.900}" },
+    "borderSubtle":  { "$value": "{color.ink.200}" },
+    "borderDefault": { "$value": "{color.ink.300}" },
+    "borderStrong":  { "$value": "{color.ink.900}" },
+    "success": { "$value": "{color.green.500}" },
+    "warning": { "$value": "{color.amber.500}" },
+    "error":   { "$value": "{color.red.500}" },
+    "info":    { "$value": "{color.cyan.600}" }
+  },
+  "spacing": {
+    "0": { "$value": "0" }, "1": { "$value": "4" }, "2": { "$value": "8" },
+    "3": { "$value": "12" }, "4": { "$value": "16" }, "5": { "$value": "20" },
+    "6": { "$value": "24" }, "8": { "$value": "32" }, "10": { "$value": "40" },
+    "12": { "$value": "48" }, "16": { "$value": "64" }, "20": { "$value": "80" }, "24": { "$value": "96" }
+  },
+  "radius": {
+    "xs": { "$value": "6" }, "sm": { "$value": "10" }, "md": { "$value": "14" },
+    "lg": { "$value": "20" }, "xl": { "$value": "28" }, "2xl": { "$value": "36" }, "pill": { "$value": "999" }
+  },
+  "borderWidth": { "default": { "$value": "1.5" }, "bold": { "$value": "2.5" } },
+  "typography": {
+    "fontFamily": { "display": { "$value": "Anton" }, "sans": { "$value": "Public Sans" } },
+    "weight": { "regular": 400, "medium": 500, "semibold": 600, "bold": 700, "extrabold": 800, "black": 900 },
+    "displaySize": { "2xl": 88, "xl": 64, "lg": 48, "md": 36, "sm": 28 },
+    "headingSize": { "xl": 32, "lg": 26, "md": 21, "sm": 18, "xs": 16 },
+    "bodySize": { "lg": 18, "md": 16, "sm": 14, "xs": 13 },
+    "labelSize": { "md": 14, "sm": 12 },
+    "lineHeight": { "display": 0.96, "heading": 1.25, "body": 1.55 }
+  },
+  "motion": {
+    "duration": { "fast": 120, "base": 200, "slow": 360 },
+    "easing": { "out": "cubic-bezier(0.22,1,0.36,1)", "spring": "cubic-bezier(0.34,1.56,0.64,1)" }
+  }
+}
