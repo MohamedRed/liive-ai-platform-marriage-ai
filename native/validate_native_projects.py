@@ -7,6 +7,7 @@ Full platform builds must still be run on macOS/Android CI.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parent
@@ -107,5 +108,63 @@ root_view = (ROOT / "ios/JustMarriage/Screens/RootView.swift").read_text(encodin
 if "#Preview" in root_view:
     print("RootView.swift uses #Preview but project.yml targets iOS 16.0")
     sys.exit(1)
+
+# Product-trust gates: preview scaffolds must not fake verification or notifications.
+FORBIDDEN_STRINGS = [
+    "Phone verified locally",
+    "Wali notified",
+    "Checking code",
+    "Acceptance saved locally",
+    "is notified at every step",
+]
+for path in ROOT.rglob("*"):
+    if not path.is_file() or path.suffix not in {".kt", ".swift", ".md"}:
+        continue
+    text = path.read_text(encoding="utf-8")
+    for forbidden in FORBIDDEN_STRINGS:
+        if forbidden in text:
+            print(f"{path.relative_to(ROOT)} contains forbidden scaffold/product-trust copy: {forbidden}")
+            sys.exit(1)
+
+otp_initializers = {
+    ROOT / "ios/JustMarriage/Screens/VerifyView.swift": r"code:\s*\[String\]\s*=\s*\[\s*\"\d\"",
+    ROOT / "android/app/src/main/java/com/justmarriage/app/VerifyScreen.kt": r"mutableStateListOf\(\s*\"\d\"",
+}
+for path, pattern in otp_initializers.items():
+    if re.search(pattern, path.read_text(encoding="utf-8")):
+        print(f"{path.relative_to(ROOT)} pre-fills an OTP digit; OTP fields must start empty")
+        sys.exit(1)
+
+service_boundary_checks = {
+    ROOT / "ios/JustMarriage/Screens/MatchmakingView.swift": [
+        "private let waliNotificationAvailable = false",
+        ".disabled(!waliNotificationAvailable)",
+        "Wali notification service is required before this acceptance can be sent.",
+    ],
+    ROOT / "android/app/src/main/java/com/justmarriage/app/MatchmakingScreen.kt": [
+        "val waliNotificationAvailable = false",
+        "enabled = waliNotificationAvailable",
+        "Wali notification service is required before this acceptance can be sent.",
+    ],
+    ROOT / "ios/JustMarriage/Screens/VerifyView.swift": [
+        "Verification service is not connected yet",
+    ],
+    ROOT / "android/app/src/main/java/com/justmarriage/app/VerifyScreen.kt": [
+        "Verification service is not connected yet",
+    ],
+}
+for path, needles in service_boundary_checks.items():
+    text = path.read_text(encoding="utf-8")
+    for needle in needles:
+        if needle not in text:
+            print(f"{path.relative_to(ROOT)} is missing service-boundary marker: {needle}")
+            sys.exit(1)
+
+for path in ROOT.rglob("*"):
+    if path.is_file() and path.suffix in {".kt", ".swift"}:
+        line_count = sum(1 for _ in path.open(encoding="utf-8"))
+        if line_count > 300:
+            print(f"{path.relative_to(ROOT)} is {line_count} lines; split files over 300 lines")
+            sys.exit(1)
 
 print("Native project skeleton validation passed.")

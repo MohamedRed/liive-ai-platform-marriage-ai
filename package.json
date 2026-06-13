@@ -24,7 +24,8 @@
     "prod-mode": "./scripts/database-types/prod-mode.sh",
     "integrate-db-types": "./scripts/database-types/integrate-database-types.sh",
     "deploy": "./scripts/deployment/deploy.sh",
-    "deploy:meal-planning": "./scripts/deployment/deploy-meal-planning.sh"
+    "deploy:meal-planning": "./scripts/deployment/deploy-meal-planning.sh",
+    "validate:native": "python3 native/validate_native_projects.py"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.2.4",

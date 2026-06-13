@@ -1,0 +1,47 @@
+name: Native static validation
+
+on:
+  pull_request:
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-static.yml'
+  push:
+    branches:
+      - before-release
+      - main
+      - 'codex/**'
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-static.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-static:
+    name: Validate native project skeletons and safety gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Linux-safe native validator
+        run: python3 native/validate_native_projects.py
+
+      - name: Check for whitespace errors
+        run: git diff --check HEAD
+
+      - name: Report platform build requirements
+        run: |
+          cat <<'MSG'
+          Linux static validation passed.
+          Full platform validation still requires:
+          - Android: JDK 17 + Android SDK + Gradle wrapper / Android Studio build
+          - iOS: macOS + Xcode + XcodeGen + xcodebuild
+          MSG

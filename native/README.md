@@ -11,7 +11,15 @@ The current scope is UI shell + mock-data screens from `native_handoff`: onboard
 
 ```bash
 python3 validate_native_projects.py
+# or from the repository root:
+yarn validate:native
 ```
+
+The validator is intentionally Linux-safe and now fails if native preview code regresses into misleading production behavior, including fake OTP success, prefilled OTP digits, fake wali notification success, missing service-boundary copy, or oversized Swift/Kotlin files.
+
+## CI
+
+`.github/workflows/native-static.yml` runs the Linux-safe native validator and `git diff --check` on PRs/pushes touching `native/**`. This does not replace platform builds; it prevents scaffold/product-trust regressions before Android SDK or Xcode jobs are available.
 
 ## Platform build requirements
 
