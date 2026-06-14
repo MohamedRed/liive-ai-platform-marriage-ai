@@ -3,7 +3,7 @@ import SwiftUI
 
 struct WaliView: View {
     @State private var showVerify = false
-    @State private var inviteBlocked = false
+    @State private var inviteNotice: String? = nil
 
     var body: some View {
         ZStack {
@@ -50,12 +50,12 @@ struct WaliView: View {
                         showVerify = true
                     }
                     JMButton("Invite a different wali", variant: .outline, fullWidth: true, systemIcon: "person.badge.plus") {
-                        inviteBlocked = true
+                        inviteNotice = PreviewJustMarriageServices.current.wali.inviteDifferentWali().message
                     }
-                    if inviteBlocked {
+                    if let inviteNotice {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "info.circle.fill").foregroundColor(JMColor.amber500)
-                            Text("Invites are blocked while Yusuf's verification is in progress. Finish or cancel verification before changing wali.")
+                            Text(inviteNotice)
                                 .font(JMFont.sans(12.5, .semibold))
                                 .foregroundColor(JMColor.ink700)
                         }

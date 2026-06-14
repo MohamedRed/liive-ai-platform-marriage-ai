@@ -6,22 +6,23 @@ struct CounselorHomeView: View {
     enum Mode { case voice, text }
     @State private var mode: Mode = .voice
     @State private var listening = true
-    @State private var showNotificationBoundary = false
+    @State private var notificationNotice: String? = nil
 
     var body: some View {
         ZStack {
             JMColor.ink900.ignoresSafeArea()
             VStack(spacing: JMSpace.x4) {
                 header
+                if let notificationNotice {
+                    Text(notificationNotice)
+                        .font(JMFont.sans(12, .semibold))
+                        .foregroundColor(.white.opacity(0.72))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
                 toggle
                 if mode == .voice { voiceBody } else { TextCounselView() }
             }
             .padding(JMSpace.x5)
-        }
-        .alert("Notifications", isPresented: $showNotificationBoundary) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Notification preferences are available in Settings in this native preview.")
         }
     }
 
@@ -29,7 +30,9 @@ struct CounselorHomeView: View {
         HStack {
             JMBrandWordmark(compact: true)
             Spacer()
-            Button { showNotificationBoundary = true } label: {
+            Button {
+                notificationNotice = PreviewJustMarriageServices.current.notifications.openNotifications().message
+            } label: {
                 Image(systemName: "bell.fill")
                     .foregroundColor(.white.opacity(0.88))
                     .frame(width: 38, height: 38)

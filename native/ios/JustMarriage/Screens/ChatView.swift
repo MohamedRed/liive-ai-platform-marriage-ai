@@ -5,7 +5,7 @@ struct ChatView: View {
     @Environment(\.dismiss) private var dismiss
     struct Msg: Identifiable { let id = UUID(); let me: Bool; let text: String }
     @State private var draft = ""
-    @State private var showVideoBoundary = false
+    @State private var videoNotice: String? = nil
     @State private var msgs: [Msg] = [
         .init(me: false, text: "Assalamu alaikum — our walis have connected us. Looking forward to getting to know your family."),
         .init(me: true, text: "Wa alaikum assalam. Likewise, alhamdulillah."),
@@ -19,11 +19,6 @@ struct ChatView: View {
             composer
         }
         .background(JMColor.white.ignoresSafeArea())
-        .alert("Supervised call", isPresented: $showVideoBoundary) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Video calls open after both walis approve a weekend time.")
-        }
     }
 
     private var header: some View {
@@ -41,7 +36,9 @@ struct ChatView: View {
                 JMBadge("Wali-supervised", tone: .success, soft: true)
             }
             Spacer()
-            Button { showVideoBoundary = true } label: {
+            Button {
+                videoNotice = PreviewJustMarriageServices.current.chat.startSupervisedVideoCall().message
+            } label: {
                 Image(systemName: "video.fill")
                     .foregroundColor(.white)
                     .frame(width: 42, height: 42)
@@ -65,6 +62,15 @@ struct ChatView: View {
                     .background(JMColor.ink100)
                     .clipShape(Capsule())
                     .padding(.bottom, 6)
+                if let videoNotice {
+                    Text(videoNotice)
+                        .font(JMFont.sans(12.5, .semibold))
+                        .foregroundColor(JMColor.textSecondary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity)
+                        .background(JMColor.amber50)
+                        .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
+                }
                 ForEach(msgs) { m in bubble(m) }
             }
             .padding(18)

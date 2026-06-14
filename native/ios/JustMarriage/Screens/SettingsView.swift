@@ -5,7 +5,7 @@ struct SettingsView: View {
     @State private var matchNotif = true
     @State private var notifyWali = true
     @State private var hidePhoto = false
-    @State private var signOutBlocked = false
+    @State private var signOutNotice: String? = nil
 
     var body: some View {
         ZStack {
@@ -45,17 +45,17 @@ struct SettingsView: View {
                     .overlay(RoundedRectangle(cornerRadius: JMRadius.lg).strokeBorder(JMColor.borderSubtle, lineWidth: 1))
                     .clipShape(RoundedRectangle(cornerRadius: JMRadius.lg))
 
+                    if let signOutNotice {
+                        Text(signOutNotice)
+                            .font(JMFont.sans(13, .semibold))
+                            .foregroundColor(JMColor.textTertiary)
+                    }
                     JMButton("Sign out", variant: .outline, fullWidth: true, systemIcon: "rectangle.portrait.and.arrow.right") {
-                        signOutBlocked = true
+                        signOutNotice = PreviewJustMarriageServices.current.auth.signOut().message
                     }
                 }
                 .padding(JMSpace.gutter)
             }
-        }
-        .alert("Sign out", isPresented: $signOutBlocked) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Auth sign-out is handled by the service layer; this native preview keeps you signed in.")
         }
     }
 

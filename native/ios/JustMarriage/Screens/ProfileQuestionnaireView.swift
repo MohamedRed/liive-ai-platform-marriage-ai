@@ -3,7 +3,7 @@ import SwiftUI
 
 struct ProfileQuestionnaireView: View {
     @State private var rating: Int? = 8
-    @State private var savedNotice = false
+    @State private var savedNotice: String? = nil
     private let sections: [(String, String)] = [
         ("Personal & family background", "done"),
         ("Religious understanding", "done"),
@@ -47,14 +47,16 @@ struct ProfileQuestionnaireView: View {
                         Text("How important is it that household responsibilities follow Islamic guidance?")
                             .font(JMFont.sans(17, .bold)).padding(.vertical, 4)
                         JMScaleRating(value: $rating, lowLabel: "Flexible", highLabel: "Essential")
-                            .onChange(of: rating) { _ in savedNotice = false }
-                        if savedNotice {
-                            JMBadge("Saved to draft", tone: .success, soft: true)
+                            .onChange(of: rating) { _ in savedNotice = nil }
+                        if let savedNotice {
+                            JMBadge(savedNotice, tone: .success, soft: true)
                                 .padding(.top, JMSpace.x2)
                         }
                         JMButton("Save & continue", variant: .ink, fullWidth: true, systemIcon: "arrow.right") {
-                            guard rating != nil else { return }
-                            savedNotice = true
+                            guard let rating else { return }
+                            savedNotice = PreviewJustMarriageServices.current.profile
+                                .saveQuestionnaireAnswer(section: "roles_responsibilities", rating: rating)
+                                .message
                         }
                         .disabled(rating == nil)
                         .opacity(rating == nil ? 0.55 : 1)

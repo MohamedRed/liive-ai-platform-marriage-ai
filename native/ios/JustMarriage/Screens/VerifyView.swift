@@ -106,6 +106,8 @@ struct VerifyView: View {
             validationMessage = "Enter all 4 digits before continuing."
             return
         }
-        validationMessage = "Verification service is not connected yet. Code entry is ready for the secure provider integration."
+        validationMessage = PreviewJustMarriageServices.current.verification
+            .verifyPhoneCode(code.joined())
+            .message
     }
 }

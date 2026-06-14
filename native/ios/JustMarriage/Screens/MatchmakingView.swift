@@ -93,7 +93,8 @@ struct MatchDetailSheet: View {
         ("house.fill", "Wants children in 1–2 years"),
         ("map.fill", "Open to relocating within UK"),
     ]
-    private let waliNotificationAvailable = false
+    private var services: JustMarriageServices { PreviewJustMarriageServices.current }
+    private var waliNotificationAvailable: Bool { services.matching.canNotifyWali }
 
     var body: some View {
         VStack(spacing: JMSpace.x4) {
@@ -132,7 +133,7 @@ struct MatchDetailSheet: View {
             .padding(.vertical, JMSpace.x2)
 
             if !waliNotificationAvailable {
-                Text("Wali notification service is required before this acceptance can be sent.")
+                Text(services.matching.acceptAndNotifyWali(prospect: prospect).message)
                     .font(JMFont.sans(13, .semibold))
                     .foregroundColor(JMColor.textSecondary)
                     .multilineTextAlignment(.center)

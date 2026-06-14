@@ -5,7 +5,7 @@ This folder turns the `native_handoff` design system into standalone native app 
 - `android/` — Jetpack Compose Android app using `RootScreen()`
 - `ios/` — SwiftUI iOS app using `RootView()` with an XcodeGen project spec
 
-The current scope is UI shell + mock-data screens from `native_handoff`: onboarding, counselor talk/type, matchmaking, questionnaire, wali flow, verification, chat, and settings. Android now exposes explicit `AuthService`, `VerificationService`, `ProfileService`, `MatchingService`, `WaliService`, `ChatService`, and `NotificationService` contracts so production integrations can replace preview blockers without scattering fake success states through screens.
+The current scope is UI shell + mock-data screens from `native_handoff`: onboarding, counselor talk/type, matchmaking, questionnaire, wali flow, verification, chat, and settings. Android and iOS now expose explicit `AuthService`, `VerificationService`, `ProfileService`, `MatchingService`, `WaliService`, `ChatService`, and `NotificationService` contracts so production integrations can replace preview blockers without scattering fake success states through screens.
 
 ## Validate on this Linux environment
 

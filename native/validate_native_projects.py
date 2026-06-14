@@ -61,6 +61,7 @@ REQUIRED = [
     ROOT / "ios/project.yml",
     ROOT / "ios/JustMarriage/JustMarriageApp.swift",
     ROOT / "ios/JustMarriage/Info.plist",
+    ROOT / "ios/JustMarriage/Services.swift",
     ROOT / "ios/JustMarriage/Resources/Fonts/Anton-Regular.ttf",
     ROOT / "ios/JustMarriage/Resources/Fonts/PublicSans[wght].ttf",
     ROOT / "fonts/licenses/anton-OFL.txt",
@@ -149,8 +150,19 @@ for path, pattern in otp_initializers.items():
 
 service_boundary_checks = {
     ROOT / "ios/JustMarriage/Screens/MatchmakingView.swift": [
-        "private let waliNotificationAvailable = false",
+        "private var waliNotificationAvailable: Bool { services.matching.canNotifyWali }",
         ".disabled(!waliNotificationAvailable)",
+        "services.matching.acceptAndNotifyWali(prospect: prospect).message",
+    ],
+    ROOT / "ios/JustMarriage/Services.swift": [
+        "protocol AuthService",
+        "protocol VerificationService",
+        "protocol ProfileService",
+        "protocol MatchingService",
+        "protocol WaliService",
+        "protocol ChatService",
+        "protocol NotificationService",
+        "Verification service is not connected yet",
         "Wali notification service is required before this acceptance can be sent.",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/MatchmakingScreen.kt": [
@@ -170,7 +182,7 @@ service_boundary_checks = {
         "Wali notification service is required before this acceptance can be sent.",
     ],
     ROOT / "ios/JustMarriage/Screens/VerifyView.swift": [
-        "Verification service is not connected yet",
+        "PreviewJustMarriageServices.current.verification",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/VerifyScreen.kt": [
         "PreviewJustMarriageServices.current.verification.verifyPhoneCode",
