@@ -56,6 +56,10 @@ REQUIRED = [
     ROOT / "android/app/src/main/java/com/justmarriage/app/MainActivity.kt",
     ROOT / "android/app/src/main/res/values/strings.xml",
     ROOT / "android/app/src/main/res/values/styles.xml",
+    ROOT / "android/app/src/main/res/values/colors.xml",
+    ROOT / "android/app/src/main/res/drawable/ic_launcher_foreground.xml",
+    ROOT / "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+    ROOT / "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
     ROOT / "android/app/src/main/res/font/anton_regular.ttf",
     ROOT / "android/app/src/main/res/font/public_sans.ttf",
     ROOT / "ios/README.md",
@@ -88,7 +92,7 @@ if missing:
 
 # Ensure generated app sources still carry the intended product entry points.
 checks = {
-    ROOT / "android/app/src/main/AndroidManifest.xml": [".app.MainActivity"],
+    ROOT / "android/app/src/main/AndroidManifest.xml": [".app.MainActivity", "@mipmap/ic_launcher", "@mipmap/ic_launcher_round", "@string/app_name"],
     ROOT / "android/app/src/main/java/com/justmarriage/app/MainActivity.kt": ["ComponentActivity", "RootScreen()"],
     ROOT / "android/app/src/main/java/com/justmarriage/app/RootScreen.kt": [
         "JustMarriageTheme",

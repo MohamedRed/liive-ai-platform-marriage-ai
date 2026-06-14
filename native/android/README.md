@@ -1,6 +1,6 @@
 # Just Marriage Android
 
-Native Android implementation for Just Marriage using Jetpack Compose and the `native_handoff` design system.
+Native Android implementation for Just Marriage using Jetpack Compose and the `native_handoff` design system. The Android project includes bundled Anton/Public Sans typography assets and a branded adaptive launcher icon.
 
 ## Entry point
 
