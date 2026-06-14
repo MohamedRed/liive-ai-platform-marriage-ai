@@ -57,6 +57,29 @@ jobs:
           Linux static validation passed.
           Android Gradle wrapper is committed and CI can build the debug APK with:
           - cd native/android && ./gradlew assembleDebug --no-daemon
-          Remaining platform validation still requires:
-          - iOS: macOS + Xcode + XcodeGen + xcodebuild
+          iOS validation is covered by the macOS template job below when this file is installed as an active workflow.
           MSG
+
+  ios-build:
+    name: Generate and build iOS project
+    runs-on: macos-14
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: native/ios
+        run: xcodegen generate
+
+      - name: Build iOS app
+        working-directory: native/ios
+        run: |
+          xcodebuild \
+            -project JustMarriage.xcodeproj \
+            -scheme JustMarriage \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build

@@ -21,7 +21,7 @@ The validator is intentionally Linux-safe and now fails if native preview code r
 
 ## CI
 
-`.github/workflows/native-static.yml` runs the Linux-safe native validator, Android Gradle wrapper check, Android `assembleDebug`, and `git diff --check` on PRs/pushes touching `native/**`. The workflow is currently stored as `native/ci/native-static.yml.template` because pushing active workflow files requires a GitHub token with `workflow` scope.
+`.github/workflows/native-static.yml` runs the Linux-safe native validator, Android Gradle wrapper check, Android `assembleDebug`, macOS XcodeGen generation, iOS `xcodebuild`, and `git diff --check` on PRs/pushes touching `native/**`. The workflow is currently stored as `native/ci/native-static.yml.template` because pushing active workflow files requires a GitHub token with `workflow` scope.
 
 ## Platform build requirements
 
