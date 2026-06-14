@@ -1,6 +1,6 @@
 # Just Marriage iOS
 
-Native iOS implementation for Just Marriage using SwiftUI and the `native_handoff` design system.
+Native iOS implementation for Just Marriage using SwiftUI and the `native_handoff` design system. The iOS project includes bundled Anton/Public Sans typography assets and a generated AppIcon asset catalog.
 
 ## Entry point
 

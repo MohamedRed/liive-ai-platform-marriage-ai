@@ -67,6 +67,8 @@ REQUIRED = [
     ROOT / "ios/JustMarriage/JustMarriageApp.swift",
     ROOT / "ios/JustMarriage/Info.plist",
     ROOT / "ios/JustMarriage/Services.swift",
+    ROOT / "ios/JustMarriage/Assets.xcassets/AppIcon.appiconset/Contents.json",
+    ROOT / "ios/JustMarriage/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png",
     ROOT / "ios/JustMarriage/Resources/Fonts/Anton-Regular.ttf",
     ROOT / "ios/JustMarriage/Resources/Fonts/PublicSans[wght].ttf",
     ROOT / "fonts/licenses/anton-OFL.txt",
@@ -104,6 +106,7 @@ checks = {
         "SettingsScreen",
     ],
     ROOT / "ios/JustMarriage/JustMarriageApp.swift": ["@main", "RootView()"],
+    ROOT / "ios/project.yml": ["ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon"],
     ROOT / "ios/JustMarriage/Info.plist": ["UIAppFonts", "Fonts/Anton-Regular.ttf", "Fonts/PublicSans[wght].ttf"],
     ROOT / "ios/JustMarriage/Screens/RootView.swift": [
         "TabView",
