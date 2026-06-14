@@ -48,6 +48,17 @@ jobs:
         working-directory: native/android
         run: ./gradlew assembleDebug --no-daemon
 
+      - name: Upload Android APK to Appetize
+        if: ${{ secrets.APPETIZE_API_TOKEN != '' }}
+        uses: appetizeio/github-action-appetize@v1.0.5
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          publicKey: ${{ secrets.APPETIZE_PUBLIC_KEY }}
+          appFile: native/android/app/build/outputs/apk/debug/app-debug.apk
+          platform: android
+          fileType: apk
+          note: Just Marriage Android debug build from ${{ github.sha }}
+
       - name: Check for whitespace errors
         run: git diff --check HEAD
 

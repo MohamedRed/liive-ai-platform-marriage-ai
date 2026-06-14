@@ -19,6 +19,31 @@ yarn validate:native
 
 The validator is intentionally Linux-safe and now fails if native preview code regresses into misleading production behavior, including fake OTP success, prefilled OTP digits, fake wali notification success, missing service-boundary copy, or oversized Swift/Kotlin files.
 
+Run the same Linux-safe validation/build gates locally:
+
+```bash
+native/scripts/run-native-ci-locally.sh
+```
+
+This runs the native validator, Swift/Kotlin file-size gate, iOS AppIcon JSON validation, Android Gradle wrapper check, Android `assembleDebug`, and whitespace checks. On macOS with `xcodegen` and `xcodebuild` installed, the same script also generates and builds the iOS project.
+
+## Appetize/Appetizer upload
+
+After the Android debug APK is built, upload it to Appetize from a developer machine or CI environment with:
+
+```bash
+APPETIZE_API_TOKEN=... native/scripts/upload-android-to-appetize.sh
+```
+
+Optional environment variables:
+
+- `APPETIZE_PUBLIC_KEY` — update an existing Appetize app instead of creating a new one
+- `APK_PATH` — upload a specific APK path
+- `APPETIZE_TIMEOUT` — Appetize session timeout; default `120`
+- `APPETIZE_NOTE` — management-dashboard note for the upload
+
+The script prints `APPETIZE_PUBLIC_KEY` and `APPETIZE_URL` on success. It refuses to upload when `APPETIZE_API_TOKEN` is missing, so credentials are never faked or embedded in the repo.
+
 ## CI
 
 `.github/workflows/native-static.yml` runs the Linux-safe native validator, Android Gradle wrapper check, Android `assembleDebug`, macOS XcodeGen generation, iOS `xcodebuild`, and `git diff --check` on PRs/pushes touching `native/**`. The workflow is currently stored as `native/ci/native-static.yml.template` because pushing active workflow files requires a GitHub token with `workflow` scope.

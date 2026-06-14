@@ -42,6 +42,8 @@ IOS_SCREEN_FILES = [
 REQUIRED = [
     ROOT / "README.md",
     ROOT / "docs/SERVICE_CONTRACTS.md",
+    ROOT / "scripts/run-native-ci-locally.sh",
+    ROOT / "scripts/upload-android-to-appetize.sh",
     ROOT / "VISUAL_PARITY.md",
     ROOT / "android/.gitignore",
     ROOT / "android/README.md",
@@ -126,6 +128,17 @@ checks = {
         "ChatService",
         "NotificationService",
         "Release gate checklist",
+    ],
+    ROOT / "scripts/run-native-ci-locally.sh": [
+        "validate_native_projects.py",
+        "./gradlew assembleDebug --no-daemon",
+        "xcodebuild",
+    ],
+    ROOT / "scripts/upload-android-to-appetize.sh": [
+        "APPETIZE_API_TOKEN",
+        "https://api.appetize.io",
+        "/v1/apps/",
+        "APPETIZE_URL=https://appetize.io/app/",
     ],
 }
 for path, needles in checks.items():
