@@ -7,6 +7,8 @@ This folder turns the `native_handoff` design system into standalone native app 
 
 The current scope is UI shell + mock-data screens from `native_handoff`: onboarding, counselor talk/type, matchmaking, questionnaire, wali flow, verification, chat, and settings. Android and iOS now expose explicit `AuthService`, `VerificationService`, `ProfileService`, `MatchingService`, `WaliService`, `ChatService`, and `NotificationService` contracts so production integrations can replace preview blockers without scattering fake success states through screens.
 
+Production backend requirements are captured in `docs/SERVICE_CONTRACTS.md`; it maps the Android/iOS service interfaces to the API semantics required before preview blockers can become real user flows.
+
 ## Validate on this Linux environment
 
 ```bash

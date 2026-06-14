@@ -41,6 +41,7 @@ IOS_SCREEN_FILES = [
 
 REQUIRED = [
     ROOT / "README.md",
+    ROOT / "docs/SERVICE_CONTRACTS.md",
     ROOT / "VISUAL_PARITY.md",
     ROOT / "android/.gitignore",
     ROOT / "android/README.md",
@@ -108,6 +109,16 @@ checks = {
         "ProfileQuestionnaireView",
         "WaliView",
         "SettingsView",
+    ],
+    ROOT / "docs/SERVICE_CONTRACTS.md": [
+        "AuthService",
+        "VerificationService",
+        "ProfileService",
+        "MatchingService",
+        "WaliService",
+        "ChatService",
+        "NotificationService",
+        "Release gate checklist",
     ],
 }
 for path, needles in checks.items():
