@@ -66,7 +66,7 @@ fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone:
             onClick = {
                 attempted = true
                 serviceNotice = if (complete) {
-                    "Verification service is not connected yet. Code entry is ready for the secure provider integration."
+                    PreviewJustMarriageServices.current.verification.verifyPhoneCode(code.joinToString("")).message()
                 } else null
             },
             variant = JMButtonVariant.Primary,

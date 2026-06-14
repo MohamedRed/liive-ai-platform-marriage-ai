@@ -91,7 +91,8 @@ private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit
         "Wants children in 1–2 years",
         "Open to relocating within UK",
     )
-    val waliNotificationAvailable = false
+    val services = PreviewJustMarriageServices.current
+    val waliNotificationAvailable = services.matching.canNotifyWali
     Column(Modifier.fillMaxWidth().padding(JMSpace.x5).padding(bottom = JMSpace.x6),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
         Box(Modifier.size(width = 44.dp, height = 5.dp).clip(JMShapes.pill).background(JMPalette.Ink200))
@@ -108,7 +109,7 @@ private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit
             Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
-                Text("Wali notification service is required before this acceptance can be sent.",
+                Text(services.matching.acceptAndNotifyWali(p).message(),
                     color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
         } else if (serviceNotice) {

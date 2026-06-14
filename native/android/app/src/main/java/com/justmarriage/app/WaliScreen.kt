@@ -84,7 +84,7 @@ fun WaliScreen(modifier: Modifier = Modifier) {
             showVerify = true
         }, variant = JMButtonVariant.Primary, fullWidth = true)
         JMButton("Invite a different wali", onClick = {
-            boundaryNotice = "Alternative wali invite is blocked until contact-service wiring is available. Yusuf remains the active wali."
+            boundaryNotice = PreviewJustMarriageServices.current.wali.inviteDifferentWali().message()
         }, variant = JMButtonVariant.Ghost, fullWidth = true)
     }
 }

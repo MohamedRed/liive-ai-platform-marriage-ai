@@ -25,7 +25,7 @@ import com.justmarriage.design.*
 @Composable
 fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
     var rating by remember { mutableStateOf<Int?>(8) }
-    var saved by remember { mutableStateOf(false) }
+    var savedMessage by remember { mutableStateOf<String?>(null) }
     val sections = listOf(
         "Personal & family background" to "done",
         "Religious understanding" to "done",
@@ -61,15 +61,19 @@ fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
             Text("How important is it that household responsibilities follow Islamic guidance?",
                 fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 17.sp, lineHeight = 23.sp)
             Spacer(Modifier.height(JMSpace.x4))
-            JMScaleRating(value = rating, onChange = { rating = it; saved = false }, lowLabel = "Flexible", highLabel = "Essential")
+            JMScaleRating(value = rating, onChange = { rating = it; savedMessage = null }, lowLabel = "Flexible", highLabel = "Essential")
             Spacer(Modifier.height(JMSpace.x3))
-            JMButton("Save & continue", onClick = { saved = true }, variant = JMButtonVariant.Ink,
-                fullWidth = true, enabled = rating != null)
-            if (saved) {
+            JMButton("Save & continue", onClick = {
+                savedMessage = rating?.let {
+                    PreviewJustMarriageServices.current.profile
+                        .saveQuestionnaireAnswer("roles_responsibilities", it)
+                        .message()
+                }
+            }, variant = JMButtonVariant.Ink, fullWidth = true, enabled = rating != null)
+            savedMessage?.let {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Filled.CloudDone, null, tint = JMColors.success, modifier = Modifier.size(18.dp))
-                    Text("Saved locally. The next profile section is available when the profile service syncs.",
-                        color = JMColors.textSecondary, fontFamily = JMFontFamily.Sans, fontSize = 12.5.sp)
+                    Text(it, color = JMColors.textSecondary, fontFamily = JMFontFamily.Sans, fontSize = 12.5.sp)
                 }
             }
         }

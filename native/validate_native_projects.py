@@ -20,6 +20,7 @@ ANDROID_SCREEN_FILES = [
     "OnboardingScreen.kt",
     "ProfileQuestionnaireScreen.kt",
     "RootScreen.kt",
+    "Services.kt",
     "SettingsScreen.kt",
     "VerifyScreen.kt",
     "WaliScreen.kt",
@@ -153,15 +154,26 @@ service_boundary_checks = {
         "Wali notification service is required before this acceptance can be sent.",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/MatchmakingScreen.kt": [
-        "val waliNotificationAvailable = false",
+        "val waliNotificationAvailable = services.matching.canNotifyWali",
         "enabled = waliNotificationAvailable",
+        "services.matching.acceptAndNotifyWali(p).message()",
+    ],
+    ROOT / "android/app/src/main/java/com/justmarriage/app/Services.kt": [
+        "interface AuthService",
+        "interface VerificationService",
+        "interface ProfileService",
+        "interface MatchingService",
+        "interface WaliService",
+        "interface ChatService",
+        "interface NotificationService",
+        "Verification service is not connected yet",
         "Wali notification service is required before this acceptance can be sent.",
     ],
     ROOT / "ios/JustMarriage/Screens/VerifyView.swift": [
         "Verification service is not connected yet",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/VerifyScreen.kt": [
-        "Verification service is not connected yet",
+        "PreviewJustMarriageServices.current.verification.verifyPhoneCode",
     ],
 }
 for path, needles in service_boundary_checks.items():

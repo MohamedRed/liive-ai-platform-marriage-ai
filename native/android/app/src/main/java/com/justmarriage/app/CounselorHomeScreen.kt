@@ -57,7 +57,9 @@ fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) 
                 Icons.Filled.Notifications,
                 contentDescription = "Notifications",
                 tint = JMPalette.White.copy(alpha = 0.8f),
-                modifier = Modifier.clickable { boundaryNotice = "Notifications require push-service wiring before production." },
+                modifier = Modifier.clickable {
+                    boundaryNotice = PreviewJustMarriageServices.current.notifications.openNotifications().message()
+                },
             )
         }
 

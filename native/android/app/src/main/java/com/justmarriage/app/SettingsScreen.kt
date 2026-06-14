@@ -25,7 +25,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var matchNotif by remember { mutableStateOf(true) }
     var notifyWali by remember { mutableStateOf(true) }
     var hidePhoto by remember { mutableStateOf(false) }
-    var signOutBlocked by remember { mutableStateOf(false) }
+    var signOutNotice by remember { mutableStateOf<String?>(null) }
 
     Column(modifier.fillMaxSize().background(JMColors.surfacePage).verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
@@ -58,11 +58,12 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        if (signOutBlocked) {
-            Text("Sign out is blocked in this native preview until the auth service boundary is wired.",
-                color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans, fontSize = 13.sp, lineHeight = 18.sp)
+        signOutNotice?.let {
+            Text(it, color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans, fontSize = 13.sp, lineHeight = 18.sp)
         }
-        JMButton("Sign out", onClick = { signOutBlocked = true }, variant = JMButtonVariant.Outline, fullWidth = true)
+        JMButton("Sign out", onClick = {
+            signOutNotice = PreviewJustMarriageServices.current.auth.signOut().message()
+        }, variant = JMButtonVariant.Outline, fullWidth = true)
     }
 }
 

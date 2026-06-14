@@ -39,7 +39,7 @@ fun ChatScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
         )
     }
     var draft by remember { mutableStateOf("") }
-    var callBlocked by remember { mutableStateOf(false) }
+    var callNotice by remember { mutableStateOf<String?>(null) }
     val canSend = draft.trim().isNotEmpty()
 
     Column(modifier.fillMaxSize().background(JMColors.surfacePage)) {
@@ -64,21 +64,25 @@ fun ChatScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
                 )
             }
             Box(
-                Modifier.size(40.dp).clip(CircleShape).background(JMColors.primary).clickable { callBlocked = true },
+                Modifier.size(40.dp).clip(CircleShape).background(JMColors.primary).clickable {
+                    callNotice = PreviewJustMarriageServices.current.chat.startSupervisedVideoCall().message()
+                },
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Filled.Videocam, null, tint = JMPalette.White, modifier = Modifier.size(20.dp)) }
         }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item { SupervisionPill() }
-            if (callBlocked) item {
-                Text(
-                    "Supervised video calls require wali scheduling service wiring.",
-                    color = JMColors.textSecondary,
-                    fontFamily = JMFontFamily.Sans,
-                    fontSize = 12.5.sp,
-                    modifier = Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Amber50).padding(10.dp),
-                )
+            callNotice?.let {
+                item {
+                    Text(
+                        it,
+                        color = JMColors.textSecondary,
+                        fontFamily = JMFontFamily.Sans,
+                        fontSize = 12.5.sp,
+                        modifier = Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Amber50).padding(10.dp),
+                    )
+                }
             }
             items(msgs) { m -> Bubble(m.me, m.text) }
         }
