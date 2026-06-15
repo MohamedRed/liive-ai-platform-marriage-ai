@@ -108,8 +108,8 @@ checks = {
         "SettingsScreen",
     ],
     ROOT / "ios/JustMarriage/JustMarriageApp.swift": ["@main", "RootView()"],
-    ROOT / "ios/project.yml": ["ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon"],
-    ROOT / "ios/JustMarriage/Info.plist": ["UIAppFonts", "Fonts/Anton-Regular.ttf", "Fonts/PublicSans[wght].ttf"],
+    ROOT / "ios/project.yml": ["ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon", "UIAppFonts"],
+    ROOT / "ios/JustMarriage/Info.plist": ["UIAppFonts", "Anton-Regular.ttf", "PublicSans[wght].ttf"],
     ROOT / "ios/JustMarriage/Screens/RootView.swift": [
         "TabView",
         "OnboardingView",
