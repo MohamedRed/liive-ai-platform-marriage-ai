@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -24,38 +25,50 @@ import com.justmarriage.design.*
 fun MatchmakingScreen(modifier: Modifier = Modifier) {
     var showDetail by remember { mutableStateOf(false) }
 
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
+    Box(modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .blur(if (showDetail) 4.dp else 0.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(JMSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(JMSpace.x5),
+        ) {
 
-        SectionHeader("Matches") { JMBadge("1 new", tone = JMBadgeTone.Pink, soft = true, uppercase = true) }
+            SectionHeader("Matches") { JMBadge("1 new", tone = JMBadgeTone.Pink, soft = true, uppercase = true) }
 
-        JMCard(variant = JMCardVariant.Hard) {
-            JMBadge("BEST MATCH YET", tone = JMBadgeTone.Ink, tilt = true)
-            Spacer(Modifier.height(JMSpace.x2))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
-                JMProgressRing(value = Mock.bestMatch.score.toFloat(), size = 104.dp, sublabel = "match")
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    JMAvatar(locked = true, size = 44.dp)
-                    Text(Mock.bestMatch.label, style = JMText.headingSm)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Filled.LocationOn, null, tint = JMColors.textSecondary, modifier = Modifier.size(14.dp))
-                        Text(Mock.bestMatch.city, color = JMColors.textSecondary, fontSize = 13.sp)
+            JMCard(variant = JMCardVariant.Hard) {
+                JMBadge("BEST MATCH YET", tone = JMBadgeTone.Ink, tilt = true)
+                Spacer(Modifier.height(JMSpace.x2))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
+                    JMProgressRing(value = Mock.bestMatch.score.toFloat(), size = 104.dp, sublabel = "match")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        JMAvatar(locked = true, size = 44.dp)
+                        Text(Mock.bestMatch.label, style = JMText.headingSm)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Filled.LocationOn, null, tint = JMColors.textSecondary, modifier = Modifier.size(14.dp))
+                            Text(Mock.bestMatch.city, color = JMColors.textSecondary, fontSize = 13.sp)
+                        }
                     }
                 }
+                Spacer(Modifier.height(JMSpace.x4))
+                JMButton("Review match", onClick = { showDetail = true }, variant = JMButtonVariant.Primary, fullWidth = true)
             }
-            Spacer(Modifier.height(JMSpace.x4))
-            JMButton("Review match", onClick = { showDetail = true }, variant = JMButtonVariant.Primary, fullWidth = true)
+
+            Text("SEARCHING FOR A 99% MATCH", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans,
+                fontWeight = FontWeight.Bold, fontSize = 13.sp)
+
+            Mock.prospects.forEach { p -> ProspectRow(p) }
         }
 
-        Text("SEARCHING FOR A 99% MATCH", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans,
-            fontWeight = FontWeight.Bold, fontSize = 13.sp)
-
-        Mock.prospects.forEach { p -> ProspectRow(p) }
-    }
-
-    if (showDetail) {
-        ModalBottomSheet(onDismissRequest = { showDetail = false }, containerColor = JMColors.surfaceCard) {
-            MatchDetail(Mock.bestMatch) { showDetail = false }
+        if (showDetail) {
+            ModalBottomSheet(
+                onDismissRequest = { showDetail = false },
+                containerColor = JMColors.surfaceCard,
+                scrimColor = JMColors.ink.copy(alpha = 0.42f),
+            ) {
+                MatchDetail(Mock.bestMatch) { showDetail = false }
+            }
         }
     }
 }

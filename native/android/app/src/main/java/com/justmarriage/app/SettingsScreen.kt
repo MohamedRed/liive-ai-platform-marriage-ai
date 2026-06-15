@@ -34,8 +34,18 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         SectionHeader("Settings")
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
-            Box(Modifier.size(66.dp).clip(CircleShape).border(3.dp, JMColors.primary, CircleShape).padding(3.dp)) {
-                JMAvatar(initials = "AB", size = 60.dp)
+            Box(Modifier.size(70.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(66.dp).clip(CircleShape).border(3.dp, JMColors.primary, CircleShape).padding(3.dp)) {
+                    JMAvatar(initials = "AB", size = 60.dp)
+                }
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(JMColors.secondary)
+                        .border(2.dp, JMColors.surfacePage, CircleShape)
+                )
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Aisha B.", style = JMText.headingSm)
