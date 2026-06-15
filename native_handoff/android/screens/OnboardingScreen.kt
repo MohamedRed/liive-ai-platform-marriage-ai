@@ -53,7 +53,8 @@ fun OnboardingScreen(onDone: () -> Unit) {
         Spacer(Modifier.weight(1f))
 
         JMButton("Create my profile", onClick = onDone, variant = JMButtonVariant.Primary,
-            size = JMButtonSize.Lg, pill = true, fullWidth = true, enabled = role != null)
+            size = JMButtonSize.Lg, pill = true, fullWidth = true, enabled = role != null,
+            icon = Icons.Filled.ArrowForward)
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text("Already a member? Sign in", color = JMPalette.White.copy(alpha = 0.7f), fontSize = 13.sp)
         }

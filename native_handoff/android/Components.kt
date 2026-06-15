@@ -10,6 +10,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,8 +24,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -42,6 +46,7 @@ fun JMButton(
     pill: Boolean = false,
     fullWidth: Boolean = false,
     enabled: Boolean = true,
+    icon: ImageVector? = null,
 ) {
     val height = when (size) { JMButtonSize.Sm -> 36.dp; JMButtonSize.Md -> 46.dp; JMButtonSize.Lg -> 56.dp }
     val fontSize = when (size) { JMButtonSize.Sm -> 13.sp; JMButtonSize.Md -> 15.sp; JMButtonSize.Lg -> 16.sp }
@@ -68,7 +73,15 @@ fun JMButton(
             .padding(horizontal = if (size == JMButtonSize.Lg) 30.dp else 22.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = fg, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = fontSize)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            icon?.let {
+                Icon(it, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+            }
+            Text(text, color = fg, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = fontSize)
+        }
     }
 }
 
@@ -233,9 +246,8 @@ fun JMAvatar(
         contentAlignment = Alignment.Center,
     ) {
         if (locked) {
-            // Replace with a Solar lock vector drawable; text shown as a placeholder.
-            Text("\uD83D\uDD12".let { "" }, color = JMColors.textTertiary) // intentionally blank; use Icon(painterResource(R.drawable.ic_lock))
-            Text("•", color = JMColors.textTertiary, fontSize = (size.value * 0.4).sp)
+            Icon(Icons.Filled.Lock, contentDescription = "Locked photo", tint = JMColors.textTertiary,
+                modifier = Modifier.size(size * 0.42f))
         } else {
             Text(initials, color = JMPalette.Pink700, fontFamily = JMFontFamily.Sans,
                 fontWeight = FontWeight.Bold, fontSize = (size.value * 0.38).sp)

@@ -23,7 +23,7 @@ import com.justmarriage.design.*
 fun SettingsScreen(modifier: Modifier = Modifier) {
     var matchNotif by remember { mutableStateOf(true) }
     var notifyWali by remember { mutableStateOf(true) }
-    var hidePhoto by remember { mutableStateOf(false) }
+    var hidePhoto by remember { mutableStateOf(true) }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
@@ -54,7 +54,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        JMButton("Sign out", onClick = {}, variant = JMButtonVariant.Outline, fullWidth = true)
+        JMButton("Sign out", onClick = {}, variant = JMButtonVariant.Outline,
+            fullWidth = true, icon = Icons.Filled.Logout)
     }
 }
 

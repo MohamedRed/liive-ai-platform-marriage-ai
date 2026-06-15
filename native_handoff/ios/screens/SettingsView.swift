@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @State private var matchNotif = true
     @State private var notifyWali = true
-    @State private var hidePhoto = false
+    @State private var hidePhoto = true
 
     var body: some View {
         ZStack {
