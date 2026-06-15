@@ -42,7 +42,7 @@ fun ChatScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
     var callNotice by remember { mutableStateOf<String?>(null) }
     val canSend = draft.trim().isNotEmpty()
 
-    Column(modifier.fillMaxSize().background(JMColors.surfacePage)) {
+    Column(modifier.fillMaxSize().background(JMPalette.White)) {
         Row(
             Modifier.fillMaxWidth().background(JMColors.surfaceCard).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
