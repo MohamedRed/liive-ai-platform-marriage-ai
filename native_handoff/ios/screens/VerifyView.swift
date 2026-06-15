@@ -27,7 +27,7 @@ struct VerifyView: View {
                     }
                 }
 
-                JMBadge("STEP 1 OF 2 · PHONE", tone: .pink, soft: true, uppercased: true)
+                JMBadge("STEP 1 OF 2 · PHONE", tone: .pink, uppercased: true)
                     .padding(.top, JMSpace.x2)
                 Text("Verify your phone").font(JMFont.headingLG)
                 Text("Enter the 4-digit code we sent to +44 7•• ••• 204")

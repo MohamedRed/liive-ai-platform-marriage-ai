@@ -101,7 +101,7 @@ public struct JMBadge: View {
             .padding(.vertical, 4).padding(.horizontal, 11)
             .background(pair.bg)
             .foregroundColor(pair.fg)
-            .clipShape(RoundedRectangle(cornerRadius: JMRadius.xs, style: .continuous))
+            .clipShape(Capsule())
             .rotationEffect(.degrees(tilt ? -4 : 0))
     }
 }
