@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/just_marriage_ink"
+        android:pathData="M0,0h108v108h-108z" />
+    <path
+        android:fillColor="@color/just_marriage_cyan"
+        android:pathData="M18,66c0,-6 4,-10 10,-10h52c6,0 10,4 10,10v12c0,6 -4,10 -10,10h-52c-6,0 -10,-4 -10,-10z" />
+    <path
+        android:fillColor="@color/just_marriage_pink"
+        android:pathData="M27,24c10,-10 26,-5 27,10c1,-15 17,-20 27,-10c9,9 8,24 -3,35l-24,23l-24,-23c-11,-11 -12,-26 -3,-35z" />
+    <path
+        android:fillColor="@color/just_marriage_white"
+        android:pathData="M31,64h7v17h-7zM43,64h6l5,8l5,-8h6v17h-6v-8l-5,8l-5,-8v8h-6zM70,64h7v17h-7z" />
+</vector>

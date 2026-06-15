@@ -1,0 +1,5 @@
+functions-framework
+firebase-functions>=0.4.2
+firebase-admin>=6.5.0
+livekit-api>=0.7.1
+google-cloud-secret-manager>=2.21.0

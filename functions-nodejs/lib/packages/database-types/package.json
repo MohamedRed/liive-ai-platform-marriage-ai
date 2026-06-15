@@ -1,0 +1,21 @@
+{
+  "name": "@liive-marriage-ai/database-types",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "prepare": "yarn build",
+    "dev": "tsc -w"
+  },
+  "description": "Shared database types for the Liive Marriage AI platform",
+  "author": "Liive AI",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.1.0"
+  }
+}

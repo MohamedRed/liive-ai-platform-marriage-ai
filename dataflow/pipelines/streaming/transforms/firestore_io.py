@@ -1,0 +1,123 @@
+# apps/marriage-ai/dataflow/pipelines/streaming/transforms/firestore_io.py
+import apache_beam as beam
+import logging
+import traceback
+from google.cloud import firestore # Keep specific client import here
+from apache_beam.metrics import Metrics
+
+# Import constants and metrics from common
+from .common import MetricNames, COLLECTIONS
+
+logger = logging.getLogger(__name__)
+
+class UpdateFirestoreDoFn(beam.DoFn):
+    """DoFn for updating Firestore with reranked matches"""
+
+    def __init__(self, project_id: str, collection_name: str):
+        self.project_id = project_id
+        self.collection_name = collection_name # e.g., COLLECTIONS["MATCHES"]
+        self.logger = logging.getLogger(__name__)
+        self.error_counter = Metrics.counter('UpdateFirestoreDoFn', MetricNames.ERRORS)
+        self.update_success_counter = Metrics.counter('UpdateFirestoreDoFn', 'firestore_updates_success')
+        self.missing_user_id_counter = Metrics.counter('UpdateFirestoreDoFn', 'missing_user_id')
+        self.db = None
+
+    def setup(self):
+        try:
+            self.db = firestore.Client(project=self.project_id)
+            self.logger.info(f"UpdateFirestoreDoFn setup complete for project {self.project_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Firestore client in UpdateFirestoreDoFn setup: {str(e)}", exc_info=True)
+            raise
+
+    def process(self, element):
+        # Expecting element like {
+        #   'user_id': ...,
+        #   'matches': [...],
+        #   'topMatchPercentage': ..., 
+        #   'rawTopMatchAiScore': ..., 
+        #   'currentUserCoreProfileCompletenessFactor': ..., 
+        #   'currentUserAnsweredCoreQuestionsCount': ..., 
+        #   'totalCoreQuestionsInSystem': ..., 
+        #   'minConfidenceWeightUsed': ...
+        # }
+        if not self.db:
+            self.logger.error("Firestore client not initialized in UpdateFirestoreDoFn. Skipping.")
+            self.error_counter.inc()
+            raise RuntimeError("Setup failed for UpdateFirestoreDoFn")
+
+        if not isinstance(element, dict) or 'user_id' not in element or 'matches' not in element:
+            self.logger.error(f"Invalid input element format for UpdateFirestoreDoFn (missing user_id or matches): {element}")
+            self.error_counter.inc()
+            raise TypeError(f"Invalid input element format for UpdateFirestoreDoFn: {type(element)}")
+
+        user_id = element.get('user_id')
+        matches_list = element.get('matches', [])
+        
+        # Extract all new and existing fields for Firestore
+        top_match_percentage = element.get('topMatchPercentage') # Adjusted percentage
+        raw_top_match_ai_score = element.get('rawTopMatchAiScore')
+        completeness_factor = element.get('currentUserCoreProfileCompletenessFactor')
+        answered_core_count = element.get('currentUserAnsweredCoreQuestionsCount')
+        total_core_system = element.get('totalCoreQuestionsInSystem')
+        min_confidence_weight = element.get('minConfidenceWeightUsed')
+
+        if not user_id:
+            self.logger.warning("No user_id found in element for Firestore update.")
+            self.missing_user_id_counter.inc()
+            return
+
+        try:
+            doc_ref = self.db.collection(self.collection_name).document(user_id)
+
+            update_data = {
+                "matches": matches_list,
+                "topMatchPercentage": top_match_percentage,
+                "rawTopMatchAiScore": raw_top_match_ai_score,
+                "currentUserCoreProfileCompletenessFactor": completeness_factor,
+                "currentUserAnsweredCoreQuestionsCount": answered_core_count,
+                "totalCoreQuestionsInSystem": total_core_system,
+                "minConfidenceWeightUsed": min_confidence_weight,
+                "last_updated": firestore.SERVER_TIMESTAMP
+            }
+
+            # Clean up any None values to avoid writing them explicitly as null in Firestore, if desired.
+            # topMatchPercentage could be None if calculation failed.
+            if top_match_percentage is None:
+                del update_data['topMatchPercentage']
+            # rawTopMatchAiScore could be None if no matches or score extraction failed
+            if raw_top_match_ai_score is None:
+                del update_data['rawTopMatchAiScore']
+            # Other numeric fields will default to 0 or 0.0 if not found by .get() and calculation had issues,
+            # which is usually fine for Firestore.
+            
+            doc_ref.set(update_data, merge=True)
+
+            self.update_success_counter.inc()
+            yield element
+
+        except Exception as e:
+            self.error_counter.inc()
+            self.logger.error(f"Firestore update failed for user {user_id}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
+            raise
+
+
+@beam.ptransform_fn
+def WriteMatchesToFirestore(pcoll: beam.PCollection[dict], project_id: str, collection_name: str) -> beam.PCollection[dict]:
+    """Composite PTransform to write reranked matches to Firestore.
+
+    Args:
+        pcoll: PCollection of dictionaries containing user_id and reranked matches.
+        project_id: GCP Project ID.
+        collection_name: Firestore collection name to write matches to.
+
+    Returns:
+        Input PCollection passed through.
+    """
+    return (
+        pcoll
+        | "UpdateFirestore" >> beam.ParDo(UpdateFirestoreDoFn(
+            project_id=project_id,
+            collection_name=collection_name
+        ))
+    ) 

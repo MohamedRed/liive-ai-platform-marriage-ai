@@ -1,0 +1,83 @@
+name: Android Appetize Demo
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - before-release
+      - "codex/**"
+    paths:
+      - ".github/workflows/android-appetize.yml"
+      - "native/android/**"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-and-upload:
+    name: Build Android APK and upload to Appetize
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    env:
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      APPETIZE_PUBLIC_KEY: ${{ secrets.APPETIZE_PUBLIC_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build debug APK
+        working-directory: native/android
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: just-marriage-debug-apk
+          path: native/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload to Appetize
+        id: appetize
+        if: ${{ env.APPETIZE_API_TOKEN != '' }}
+        uses: appetizeio/github-action-appetize@v1.0.5
+        with:
+          apiToken: ${{ env.APPETIZE_API_TOKEN }}
+          publicKey: ${{ env.APPETIZE_PUBLIC_KEY }}
+          platform: android
+          appFile: native/android/app/build/outputs/apk/debug/app-debug.apk
+          fileType: apk
+          note: "Just Marriage Android debug APK from ${{ github.sha }}"
+          timeout: "120"
+
+      - name: Publish Appetize link
+        if: ${{ steps.appetize.outputs.publicKey != '' }}
+        run: |
+          URL="https://appetize.io/app/${{ steps.appetize.outputs.publicKey }}"
+          echo "### Android Appetize demo" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "APPETIZE_ANDROID_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Missing Appetize token note
+        if: ${{ env.APPETIZE_API_TOKEN == '' }}
+        run: |
+          echo "### Android APK built" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Set the APPETIZE_API_TOKEN repository secret to enable automatic upload to Appetize." >> "$GITHUB_STEP_SUMMARY"

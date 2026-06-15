@@ -1,0 +1,120 @@
+name: iOS Appetize Demo
+
+on:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-and-upload:
+    name: Build iOS simulator app and upload to Appetize
+    runs-on: macos-26-intel
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    env:
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      APPETIZE_IOS_PUBLIC_KEY: ${{ secrets.APPETIZE_IOS_PUBLIC_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          for xcode in \
+            /Applications/Xcode_26.5.app \
+            /Applications/Xcode_26.4.1.app \
+            /Applications/Xcode_26.3.app \
+            /Applications/Xcode_26.2.app \
+            /Applications/Xcode.app
+          do
+            if [ -d "$xcode" ]; then
+              sudo xcode-select -s "$xcode"
+              break
+            fi
+          done
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: native/ios
+        run: xcodegen generate --spec project.yml
+
+      - name: Build simulator app
+        working-directory: native/ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project JustMarriage.xcodeproj \
+            -scheme JustMarriage \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Verify bundled fonts
+        working-directory: native/ios
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find build/DerivedData/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          test -n "$APP_PATH"
+          for font in Anton-Regular.ttf 'PublicSans[wght].ttf'; do
+            test -f "$APP_PATH/$font"
+          done
+          /usr/libexec/PlistBuddy -c "Print :UIAppFonts" "$APP_PATH/Info.plist"
+
+      - name: Package simulator app
+        working-directory: native/ios
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find build/DerivedData/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found"
+            exit 1
+          fi
+          ditto -c -k --keepParent "$APP_PATH" build/JustMarriage-iOS-Simulator.zip
+          echo "APP_ZIP=native/ios/build/JustMarriage-iOS-Simulator.zip" >> "$GITHUB_ENV"
+
+      - name: Upload iOS app artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: just-marriage-ios-simulator-app
+          path: ${{ env.APP_ZIP }}
+          if-no-files-found: error
+
+      - name: Upload to Appetize
+        id: appetize
+        if: ${{ env.APPETIZE_API_TOKEN != '' }}
+        uses: appetizeio/github-action-appetize@v1.0.5
+        with:
+          apiToken: ${{ env.APPETIZE_API_TOKEN }}
+          publicKey: ${{ env.APPETIZE_IOS_PUBLIC_KEY }}
+          platform: ios
+          appFile: ${{ env.APP_ZIP }}
+          fileType: zip
+          note: "Just Marriage iOS simulator build from ${{ github.sha }}"
+          timeout: "120"
+
+      - name: Publish Appetize link
+        if: ${{ steps.appetize.outputs.publicKey != '' }}
+        run: |
+          URL="https://appetize.io/app/${{ steps.appetize.outputs.publicKey }}"
+          echo "### iOS Appetize demo" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "APPETIZE_IOS_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Missing Appetize token note
+        if: ${{ env.APPETIZE_API_TOKEN == '' }}
+        run: |
+          echo "### iOS simulator app built" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Set APPETIZE_API_TOKEN to enable automatic upload to Appetize." >> "$GITHUB_STEP_SUMMARY"

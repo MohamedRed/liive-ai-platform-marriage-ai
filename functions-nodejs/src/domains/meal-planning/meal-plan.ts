@@ -1,0 +1,1350 @@
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import axios from "axios";
+import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
+import { Pinecone } from "@pinecone-database/pinecone";
+import OpenAI from "openai";
+
+// Import the types from the database-types package
+import { 
+  MealPlanRequest, 
+  MealStep, 
+  Meal, 
+  DayPlan, 
+  MealPlan,
+  NutritionInfo
+} from "@livve-1/database-types";
+
+// Define local interfaces for types not in the database-types package
+/* 
+ * Potential future types - currently not used but preserved for reference
+ *
+interface RecipeIngredient {
+  name: string;
+  quantity: string;
+  unit: string;
+}
+
+interface Recipe {
+  name: string;
+  ingredients: RecipeIngredient[];
+}
+
+interface MealPlanDay {
+  date: Date;
+  meals: Meal[];
+}
+
+interface ShoppingList {
+  userId: string;
+  items: ShoppingListItem[];
+  createdAt: Date;
+}
+
+interface ShoppingListItem {
+  name: string;
+  quantity: string;
+  checked: boolean;
+}
+*/
+
+// Define the video-related interfaces
+interface VideoSearchResult {
+  id: string;
+  title: string;
+  thumbnail: string;
+  url: string;
+}
+
+interface VideoDetails {
+  id: string;
+  title: string;
+  thumbnail: string;
+  duration: string;
+}
+
+interface TranscriptSegment {
+  text: string;
+  start: number;
+  duration: number;
+}
+
+// Pinecone client instance
+let pineconeClient: Pinecone | null = null;
+let openAIClient: OpenAI | null = null;
+const PINECONE_INDEX_NAME = "meal-plans";
+const PINECONE_NAMESPACE = "user-preferences";
+const EMBEDDING_MODEL = "text-embedding-3-small";
+const OPENAI_MODEL = "gpt-4o-2024-08-06";
+
+// Initialize Pinecone vector database
+const initVectorDb = async (): Promise<Pinecone> => {
+  if (pineconeClient) {
+    return pineconeClient;
+  }
+
+  try {
+    // Get Pinecone API key from Secret Manager
+    const apiKey = await getSecret("PINECONE_API_KEY");
+    
+    // Initialize Pinecone client
+    pineconeClient = new Pinecone({
+      apiKey,
+    });
+    
+    console.log("Pinecone client initialized successfully");
+    return pineconeClient;
+  } catch (error) {
+    console.error("Error initializing Pinecone client:", error);
+    throw new Error("Failed to initialize Pinecone client");
+  }
+};
+
+// Initialize OpenAI client
+const initOpenAI = async (): Promise<OpenAI> => {
+  if (openAIClient) {
+    return openAIClient;
+  }
+
+  try {
+    // Get OpenAI API key from Secret Manager
+    const apiKey = await getSecret("OPENAI_API_KEY");
+    
+    // Initialize OpenAI client
+    openAIClient = new OpenAI({
+      apiKey,
+    });
+    
+    console.log("OpenAI client initialized successfully");
+    return openAIClient;
+  } catch (error) {
+    console.error("Error initializing OpenAI client:", error);
+    throw new Error("Failed to initialize OpenAI client");
+  }
+};
+
+// Function to get embeddings for text
+const getEmbeddings = async (text: string): Promise<number[]> => {
+  try {
+    const openai = await initOpenAI();
+    
+    // Generate embeddings using OpenAI
+    const response = await openai.embeddings.create({
+      model: EMBEDDING_MODEL,
+      input: text,
+    });
+    
+    // Return the embedding vector
+    return response.data[0].embedding;
+  } catch (error) {
+    console.error("Error generating embeddings:", error);
+    throw new Error("Failed to generate embeddings from OpenAI");
+  }
+};
+
+// Function to get secret exclusively from Google Cloud Secret Manager
+async function getSecret(secretName: string): Promise<string> {
+  try {
+    // Use Google Cloud Secret Manager exclusively
+    const client = new SecretManagerServiceClient();
+    
+    // Get project ID from Firebase Admin
+    const projectId = admin.app().options.projectId;
+    
+    if (!projectId) {
+      throw new Error("Project ID not available from Firebase Admin");
+    }
+    
+    const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
+    
+    const [version] = await client.accessSecretVersion({ name });
+    
+    if (!version || !version.payload || !version.payload.data) {
+      throw new Error(`Secret ${secretName} not found in Secret Manager`);
+    }
+    
+    return version.payload.data.toString();
+  } catch (error) {
+    console.error(`Error accessing secret ${secretName} from Secret Manager:`, error);
+    throw new Error(`Could not access secret: ${secretName} from Secret Manager`);
+  }
+}
+
+// Function to optimize search query using OpenAI
+const optimizeSearchQuery = async (request: MealPlanRequest, mealType: string): Promise<string> => {
+  try {
+    const openai = await initOpenAI();
+    
+    let prompt = `Optimize this search query for finding ${mealType} recipes:
+User's description: "${request.description}"`;
+
+    // Add image information if available
+    if (request.imageUrl) {
+      prompt += `\nUser provided an image: ${request.imageUrl}
+Please consider what ingredients might be visible in this image.`;
+    }
+
+    // Add video information if available
+    if (request.videoUrl) {
+      prompt += `\nUser provided a video: ${request.videoUrl}
+Please consider what cooking technique or style might be shown in this video.`;
+    }
+
+    prompt += `\nYour task: Create a specific, detailed YouTube search query that will find the best ${mealType} recipes matching the user's preferences.
+Return ONLY the optimized search query without any explanation or additional text.`;
+
+    // Generate optimized query using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a culinary expert specializing in recipe search optimization." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 100,
+    });
+
+    const optimizedQuery = response.choices[0].message.content?.trim() || `${request.description} ${mealType} recipe`;
+    console.log(`Optimized query for ${mealType}: ${optimizedQuery}`);
+    return optimizedQuery;
+  } catch (error) {
+    console.error("Error optimizing search query:", error);
+    // Fall back to basic query if optimization fails
+    return `${request.description} ${mealType} recipe`;
+  }
+};
+
+// Helper function to search YouTube for cooking videos
+const searchYouTubeVideos = async (query: string, maxResults = 5): Promise<VideoSearchResult[]> => {
+  try {
+    // Get YouTube API key from Secret Manager
+    const apiKey = await getSecret("YOUTUBE_API_KEY");
+    
+    // Search for videos
+    const response = await axios.get("https://www.googleapis.com/youtube/v3/search", {
+      params: {
+        key: apiKey,
+        part: "snippet",
+        type: "video",
+        q: query,
+        maxResults,
+        videoEmbeddable: true,
+      },
+    });
+
+    return response.data.items.map((item: { 
+      id: { videoId: string }; 
+      snippet: { 
+        title: string; 
+        thumbnails: { 
+          medium: { url: string } 
+        } 
+      } 
+    }) => ({
+      id: item.id.videoId,
+      title: item.snippet.title,
+      thumbnail: item.snippet.thumbnails.medium.url,
+      url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+    }));
+  } catch (error) {
+    console.error("Error searching YouTube:", error);
+    return [];
+  }
+};
+
+// Get video details
+const getVideoDetails = async (videoId: string): Promise<VideoDetails | null> => {
+  try {
+    // Get YouTube API key from Secret Manager
+    const apiKey = await getSecret("YOUTUBE_API_KEY");
+    
+    // Get video details
+    const response = await axios.get("https://www.googleapis.com/youtube/v3/videos", {
+      params: {
+        key: apiKey,
+        part: "snippet,contentDetails",
+        id: videoId,
+      },
+    });
+
+    const video = response.data.items[0];
+    if (!video) return null;
+
+    return {
+      id: videoId,
+      title: video.snippet.title,
+      thumbnail: video.snippet.thumbnails.high.url,
+      duration: video.contentDetails.duration,
+    };
+  } catch (error) {
+    console.error("Error getting video details:", error);
+    return null;
+  }
+};
+
+// Helper function to get video transcript
+const getVideoTranscript = async (videoId: string): Promise<TranscriptSegment[]> => {
+  try {
+    // Get YouTube API key from Secret Manager
+    const apiKey = await getSecret("YOUTUBE_API_KEY");
+    
+    // Step 1: Get the caption tracks for the video
+    const captionResponse = await axios.get("https://www.googleapis.com/youtube/v3/captions", {
+      params: {
+        key: apiKey,
+        part: "snippet",
+        videoId: videoId,
+      },
+      headers: {
+        // If we have OAuth credentials, we would include them here
+        // For now, we're using API key which has limited access
+      }
+    });
+    
+    // Step 2: Find the English caption track (or default if English not available)
+    let captionTrackId = "";
+    if (captionResponse.data.items && captionResponse.data.items.length > 0) {
+      // First look for English captions
+      const englishCaptions = captionResponse.data.items.find(
+        (item: { snippet: { language: string } }) => item.snippet.language === "en" || item.snippet.language === "en-US"
+      );
+      
+      if (englishCaptions) {
+        captionTrackId = englishCaptions.id;
+      } else {
+        // If no English captions, take the first available
+        captionTrackId = captionResponse.data.items[0].id;
+      }
+    }
+    
+    if (!captionTrackId) {
+      console.log(`No caption tracks found for video ${videoId}`);
+      // If no captions available, return empty array - we won't use mock data
+      return [];
+    }
+    
+    // Step 3: Download the caption track
+    // Note: This requires OAuth2 with authorization to access captions
+    // If we don't have OAuth2 set up, we need to use a third-party service
+    try {
+      const captionTrackResponse = await axios.get(`https://www.googleapis.com/youtube/v3/captions/${captionTrackId}`, {
+        params: {
+          key: apiKey,
+          tfmt: "srt", // SubRip format
+        }
+      });
+      
+      // Parse SRT format to get transcript segments
+      return parseSrtToTranscriptSegments(captionTrackResponse.data);
+    } catch (error) {
+      console.error("Error downloading caption track:", error);
+      // Return empty array instead of mock data
+      return [];
+    }
+  } catch (error) {
+    console.error("Error getting video transcript:", error);
+    return [];
+  }
+};
+
+// Helper function to parse SRT format to transcript segments
+const parseSrtToTranscriptSegments = (srtData: string): TranscriptSegment[] => {
+  // Basic SRT parsing implementation
+  const segments: TranscriptSegment[] = [];
+  
+  // Split by double newline to get each caption block
+  const blocks = srtData.trim().split("\n\n");
+  
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    if (lines.length < 3) continue;
+    
+    // Parse the timestamp line (format: 00:00:20,000 --> 00:00:23,000)
+    const timestamps = lines[1].split(" --> ");
+    if (timestamps.length !== 2) continue;
+    
+    const startTime = parseTimestamp(timestamps[0]);
+    const endTime = parseTimestamp(timestamps[1]);
+    
+    if (startTime === null || endTime === null) continue;
+    
+    // Get the text (might span multiple lines)
+    const text = lines.slice(2).join(" ");
+    
+    segments.push({
+      text,
+      start: startTime,
+      duration: endTime - startTime
+    });
+  }
+  
+  return segments;
+};
+
+// Helper function to parse SRT timestamp format to seconds
+const parseTimestamp = (timestamp: string): number | null => {
+  // Format: 00:00:20,000
+  const match = timestamp.match(/(\d+):(\d+):(\d+),(\d+)/);
+  
+  if (!match) return null;
+  
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const seconds = parseInt(match[3], 10);
+  const milliseconds = parseInt(match[4], 10);
+  
+  return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
+};
+
+// Helper function to analyze transcript and break into steps
+const analyzeTranscript = async (transcript: TranscriptSegment[], videoTitle: string): Promise<MealStep[]> => {
+  // If transcript is empty, return empty array
+  if (!transcript || transcript.length === 0) {
+    return [];
+  }
+  
+  try {
+    const openai = await initOpenAI();
+    
+    // Prepare transcript for analysis
+    const transcriptText = transcript.map(segment => 
+      `[${formatTimestamp(segment.start)}] ${segment.text}`
+    ).join("\n");
+    
+    // Create prompt for OpenAI
+    const prompt = `I have a cooking video titled "${videoTitle}" with the following transcript:
+
+${transcriptText}
+
+Based on this transcript, extract 5-8 key cooking steps in chronological order.
+For each step, provide:
+1. A clear instruction of what to do
+2. The timestamp from the transcript (in MM:SS format)
+
+Format your response as a valid JSON array of objects with "text" and "videoTimestamp" properties.
+Example:
+[
+  {"text": "Prepare ingredients", "videoTimestamp": "00:45"},
+  {"text": "Heat the pan", "videoTimestamp": "01:20"}
+]`;
+
+    // Generate structured steps using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a cooking expert that specializes in extracting structured recipe steps from video transcripts." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2,
+      response_format: { type: "json_object" }, // Ensure JSON response
+    });
+
+    // Parse the response
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("Empty response from OpenAI");
+    }
+    
+    // Try to parse the JSON
+    try {
+      // The response might include a wrapping object, so we look for an array
+      const parsedResponse = JSON.parse(content);
+      
+      // If the response is wrapped in an object with a property that is an array, use that
+      if (Array.isArray(parsedResponse)) {
+        return parsedResponse;
+      } else {
+        // Look for any property that is an array
+        for (const key in parsedResponse) {
+          if (Array.isArray(parsedResponse[key])) {
+            return parsedResponse[key];
+          }
+        }
+      }
+      
+      throw new Error("Could not find steps array in response");
+    } catch (parseError) {
+      console.error("Error parsing OpenAI response:", parseError);
+      throw new Error("Failed to parse steps from OpenAI response");
+    }
+  } catch (error) {
+    console.error("Error analyzing transcript:", error);
+    return [];
+  }
+};
+
+// Helper function to format seconds to MM:SS format
+const formatTimestamp = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
+};
+
+// Helper function to extract number of servings from transcript
+const extractServingsFromTranscript = async (transcript: TranscriptSegment[], videoTitle: string): Promise<number> => {
+  if (!transcript || transcript.length === 0) {
+    return 4; // Default to 4 servings if no transcript
+  }
+  
+  try {
+    const openai = await initOpenAI();
+    
+    // Prepare transcript for analysis
+    const transcriptText = transcript.map(segment => segment.text).join(" ");
+    
+    // Create prompt for OpenAI
+    const prompt = `I have a cooking video titled "${videoTitle}" with the following transcript:
+
+${transcriptText}
+
+How many servings does this recipe make? Look for explicit mentions like "serves 4" or "makes 6 portions".
+If the number of servings isn't explicitly stated, make your best estimate based on the ingredients and recipe type.
+
+Return ONLY a number (e.g., "4" or "6"), without any additional text or explanation.`;
+
+    // Generate servings estimate using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a culinary expert that analyzes recipes to determine serving sizes." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 5, // Very short response needed
+    });
+
+    const servingsStr = response.choices[0].message.content?.trim();
+    
+    // Try to extract a number
+    if (servingsStr) {
+      // Extract just the number
+      const match = servingsStr.match(/\d+/);
+      if (match) {
+        const servings = parseInt(match[0], 10);
+        if (!isNaN(servings) && servings > 0) {
+          return servings;
+        }
+      }
+    }
+    
+    return 4; // Default to 4 servings if extraction fails
+  } catch (error) {
+    console.error("Error extracting servings:", error);
+    return 4; // Default to 4 servings on error
+  }
+};
+
+// Helper function to estimate cost per serving
+const estimateCostPerServing = async (ingredients: string[], userCountry?: string, servings: number = 4): Promise<string> => {
+  // Return placeholder if no ingredients
+  if (!ingredients || ingredients.length === 0) {
+    return "Varies";
+  }
+  
+  try {
+    const openai = await initOpenAI();
+    
+    // Default to US if no country specified
+    const country = userCountry || "United States";
+    
+    // Create prompt for OpenAI
+    const prompt = `Estimate the cost per serving for a recipe with these ingredients that serves ${servings} people:
+
+Ingredients: ${ingredients.join(", ")}
+
+Based on average grocery prices in ${country}, what would be the approximate cost per serving?
+Consider:
+1. The recipe serves ${servings} people
+2. Average grocery prices from common supermarkets in ${country}
+3. That not all ingredients are used completely (e.g., spices, oils)
+
+Format your response as a dollar amount with 2 decimal places, like "$4.50" or "$12.75".
+Return ONLY the dollar amount, without any explanation or additional text.`;
+
+    // Generate cost estimate using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a culinary expert specializing in recipe cost analysis. You have up-to-date knowledge of ingredient costs in different countries and can provide accurate cost estimates." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 10,
+    });
+
+    const estimatedCost = response.choices[0].message.content?.trim();
+    
+    // Validate that the response is in the right format (e.g., "$4.50")
+    if (estimatedCost && /^\$\d+\.\d{2}$/.test(estimatedCost)) {
+      return estimatedCost;
+    }
+    
+    // If we got a response but not in the expected format, 
+    // try to extract just the number and format it properly
+    if (estimatedCost) {
+      const matches = estimatedCost.match(/\d+\.?\d*/);
+      if (matches && matches[0]) {
+        const cost = parseFloat(matches[0]);
+        if (!isNaN(cost)) {
+          return `$${cost.toFixed(2)}`;
+        }
+      }
+    }
+    
+    // Fallback to our basic calculation if OpenAI doesn't give us a usable response
+    return `$${(ingredients.length * 1.5 / servings).toFixed(2)}`;
+  } catch (error) {
+    console.error("Error estimating cost per serving:", error);
+    
+    // Fallback to basic calculation if OpenAI fails
+    return `$${(ingredients.length * 1.5 / servings).toFixed(2)}`;
+  }
+};
+
+// Helper function to generate nutritional information
+const generateNutritionInfo = async (ingredients: string[], servings: number = 4): Promise<NutritionInfo> => {
+  // Return default values if no ingredients
+  if (!ingredients || ingredients.length === 0) {
+    return {
+      calories: 0,
+      protein: "0g",
+      carbs: "0g",
+      fat: "0g"
+    };
+  }
+  
+  try {
+    const openai = await initOpenAI();
+    
+    // Create prompt for OpenAI
+    const prompt = `Analyze these recipe ingredients and generate detailed nutritional information per serving, where the recipe serves ${servings} people:
+
+Ingredients: ${ingredients.join(", ")}
+
+Provide a detailed nutritional analysis including:
+1. Macronutrients (calories, protein, carbs, fat) with amounts and % daily values
+2. Additional nutritional components (fiber, sugar, cholesterol, sodium, potassium)
+3. Key micronutrients (vitamins and minerals) with amounts and % daily values
+
+Remember this recipe serves ${servings} people, so calculate the values PER SERVING.
+
+Format your response as a valid JSON object with the following structure:
+{
+  "calories": 350,
+  "protein": "15g",
+  "proteinDailyValue": "30%",
+  "carbs": "42g",
+  "carbsDailyValue": "14%",
+  "fat": "12g",
+  "fatDailyValue": "15%",
+  "fiber": "5g",
+  "fiberDailyValue": "18%",
+  "sugar": "8g",
+  "cholesterol": "25mg",
+  "sodium": "400mg",
+  "potassium": "350mg",
+  "micronutrients": [
+    {"name": "Vitamin A", "amount": "300mcg", "dailyValue": "33%"},
+    {"name": "Vitamin C", "amount": "45mg", "dailyValue": "50%"},
+    {"name": "Calcium", "amount": "120mg", "dailyValue": "9%"},
+    {"name": "Iron", "amount": "3.6mg", "dailyValue": "20%"}
+  ]
+}
+
+Be realistic, base your analysis on standard nutritional data, and ensure values are calculated correctly per serving (total divided by ${servings}).`;
+
+    // Generate nutritional information using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a nutrition expert that specializes in analyzing recipes and providing detailed nutritional information." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2,
+      response_format: { type: "json_object" }, // Ensure JSON response
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("Empty response from OpenAI");
+    }
+    
+    // Parse the JSON response
+    try {
+      const nutritionInfo: NutritionInfo = JSON.parse(content);
+      return nutritionInfo;
+    } catch (parseError) {
+      console.error("Error parsing OpenAI nutrition response:", parseError);
+      throw new Error("Failed to parse nutrition information from OpenAI response");
+    }
+  } catch (error) {
+    console.error("Error generating nutrition information:", error);
+    
+    // Fallback to basic estimation if OpenAI fails
+    return {
+      calories: ingredients.length * 50,
+      protein: `${Math.round(ingredients.length * 5)}g`,
+      carbs: `${Math.round(ingredients.length * 8)}g`,
+      fat: `${Math.round(ingredients.length * 3)}g`,
+    };
+  }
+};
+
+// Helper function to generate health benefits
+const generateHealthBenefits = async (ingredients: string[]): Promise<string[]> => {
+  // If no ingredients, return empty array
+  if (!ingredients || ingredients.length === 0) {
+    return [];
+  }
+  
+  try {
+    const openai = await initOpenAI();
+    
+    // Create prompt for OpenAI
+    const prompt = `Analyze these recipe ingredients and identify the key health benefits:
+
+Ingredients: ${ingredients.join(", ")}
+
+List 3-5 evidence-based health benefits of consuming these ingredients. 
+Focus on scientifically-supported benefits like "Rich in antioxidants" or "Supports heart health".
+Format your response as a valid JSON array of strings.
+Example: ["Rich in antioxidants", "Supports heart health", "Promotes digestive health"]
+
+Be specific, accurate, and only list benefits that are genuinely associated with these ingredients.`;
+
+    // Generate health benefits using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a nutrition expert that specializes in identifying evidence-based health benefits of foods." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.3,
+      response_format: { type: "json_object" }, // Ensure JSON response
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("Empty response from OpenAI");
+    }
+    
+    // Parse the JSON response
+    try {
+      const parsedResponse = JSON.parse(content);
+      
+      // Handle both array and object with array property
+      if (Array.isArray(parsedResponse)) {
+        return parsedResponse;
+      } else {
+        // Look for any property that is an array
+        for (const key in parsedResponse) {
+          if (Array.isArray(parsedResponse[key])) {
+            return parsedResponse[key];
+          }
+        }
+      }
+      
+      throw new Error("Could not find health benefits array in response");
+    } catch (parseError) {
+      console.error("Error parsing OpenAI health benefits response:", parseError);
+      return ["Nutritional benefits based on ingredients"];
+    }
+  } catch (error) {
+    console.error("Error generating health benefits:", error);
+    return ["Nutritional benefits based on ingredients"];
+  }
+};
+
+// Helper function to check cache for similar meal plans
+const checkCacheForSimilarPlans = async (description: string): Promise<MealPlan | null> => {
+  try {
+    const pinecone = await initVectorDb();
+    
+    // Get embeddings for the description
+    const embedding = await getEmbeddings(description);
+    
+    // Query Pinecone for similar vectors
+    const index = pinecone.index(PINECONE_INDEX_NAME);
+    const queryResult = await index.namespace(PINECONE_NAMESPACE).query({
+      vector: embedding,
+      topK: 1,
+      includeMetadata: true,
+      includeValues: false,
+    });
+    
+    // Check if there is a match with high similarity
+    if (queryResult.matches && queryResult.matches.length > 0 && queryResult.matches[0].score && queryResult.matches[0].score > 0.85) {
+      // Get the meal plan ID from the metadata
+      const mealPlanId = queryResult.matches[0].metadata?.mealPlanId as string;
+      
+      if (mealPlanId) {
+        // Fetch the meal plan from Firestore
+        const mealPlanDoc = await admin.firestore().collection("mealPlans").doc(mealPlanId).get();
+        
+        if (mealPlanDoc.exists) {
+          return mealPlanDoc.data() as MealPlan;
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error checking cache:", error);
+    return null;
+  }
+};
+
+// Helper function to cache a meal plan
+const cacheMealPlan = async (mealPlan: MealPlan): Promise<void> => {
+  try {
+    const pinecone = await initVectorDb();
+    
+    // Get embeddings for the meal plan preferences
+    const embedding = await getEmbeddings(mealPlan.preferences);
+    
+    // Store the vector in Pinecone
+    const index = pinecone.index(PINECONE_INDEX_NAME);
+    await index.namespace(PINECONE_NAMESPACE).upsert([
+      {
+        id: `pref-${mealPlan.id}`,
+        values: embedding,
+        metadata: {
+          mealPlanId: mealPlan.id,
+          userId: mealPlan.userId,
+          timestamp: Date.now(),
+        },
+      },
+    ]);
+    
+    console.log("Cached meal plan in Pinecone:", mealPlan.id);
+  } catch (error) {
+    console.error("Error caching meal plan:", error);
+  }
+};
+
+// Helper function to extract ingredients from transcript
+const extractIngredientsFromTranscript = async (transcript: TranscriptSegment[], videoTitle: string): Promise<string[]> => {
+  if (!transcript || transcript.length === 0) {
+    return [];
+  }
+  
+  try {
+    const openai = await initOpenAI();
+    
+    // Prepare transcript for analysis
+    const transcriptText = transcript.map(segment => segment.text).join(" ");
+    
+    // Create prompt for OpenAI
+    const prompt = `I have a cooking video titled "${videoTitle}" with the following transcript:
+
+${transcriptText}
+
+Extract all the ingredients mentioned in this recipe. Format your response as a valid JSON array of strings.
+Example: ["2 eggs", "1 cup flour", "1/2 tsp salt"]
+
+Only include actual food ingredients, not cooking equipment or utensils.`;
+
+    // Generate ingredients list using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a culinary expert that extracts ingredient lists from recipe transcripts." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2,
+      response_format: { type: "json_object" }, // Ensure JSON response
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("Empty response from OpenAI");
+    }
+    
+    // Parse the JSON response
+    try {
+      const parsedResponse = JSON.parse(content);
+      
+      // Handle both array and object with array property
+      if (Array.isArray(parsedResponse)) {
+        return parsedResponse;
+      } else {
+        // Look for any property that is an array
+        for (const key in parsedResponse) {
+          if (Array.isArray(parsedResponse[key])) {
+            return parsedResponse[key];
+          }
+        }
+      }
+      
+      throw new Error("Could not find ingredients array in response");
+    } catch (parseError) {
+      console.error("Error parsing OpenAI ingredients response:", parseError);
+      return [];
+    }
+  } catch (error) {
+    console.error("Error extracting ingredients:", error);
+    return [];
+  }
+};
+
+// Helper function to extract utensils from transcript
+const extractUtensilsFromTranscript = async (transcript: TranscriptSegment[], videoTitle: string): Promise<string[]> => {
+  if (!transcript || transcript.length === 0) {
+    return [];
+  }
+  
+  try {
+    const openai = await initOpenAI();
+    
+    // Prepare transcript for analysis
+    const transcriptText = transcript.map(segment => segment.text).join(" ");
+    
+    // Create prompt for OpenAI
+    const prompt = `I have a cooking video titled "${videoTitle}" with the following transcript:
+
+${transcriptText}
+
+Extract all the cooking equipment and utensils mentioned in this recipe. Format your response as a valid JSON array of strings.
+Example: ["mixing bowl", "whisk", "baking sheet"]
+
+Only include cooking equipment and utensils, not food ingredients.`;
+
+    // Generate utensils list using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a culinary expert that extracts kitchen tools and utensils from recipe transcripts." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2,
+      response_format: { type: "json_object" }, // Ensure JSON response
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("Empty response from OpenAI");
+    }
+    
+    // Parse the JSON response
+    try {
+      const parsedResponse = JSON.parse(content);
+      
+      // Handle both array and object with array property
+      if (Array.isArray(parsedResponse)) {
+        return parsedResponse;
+      } else {
+        // Look for any property that is an array
+        for (const key in parsedResponse) {
+          if (Array.isArray(parsedResponse[key])) {
+            return parsedResponse[key];
+          }
+        }
+      }
+      
+      throw new Error("Could not find utensils array in response");
+    } catch (parseError) {
+      console.error("Error parsing OpenAI utensils response:", parseError);
+      return [];
+    }
+  } catch (error) {
+    console.error("Error extracting utensils:", error);
+    return [];
+  }
+};
+
+// Helper function to estimate cooking time
+const estimateCookingTime = async (transcript: TranscriptSegment[], steps: MealStep[]): Promise<string> => {
+  if (!transcript || transcript.length === 0 || !steps || steps.length === 0) {
+    return "Varies";
+  }
+  
+  try {
+    const openai = await initOpenAI();
+    
+    // Combine transcript and steps
+    const transcriptText = transcript.map(segment => segment.text).join(" ");
+    const stepsText = steps.map(step => step.text).join(", ");
+    
+    // Create prompt for OpenAI
+    const prompt = `Based on this recipe transcript and cooking steps, estimate the total cooking time.
+
+Transcript: ${transcriptText}
+
+Steps: ${stepsText}
+
+Provide your answer as a time range in minutes (e.g., "25-30 minutes") or in hours and minutes for longer recipes (e.g., "1 hour 15 minutes").
+Return ONLY the time estimate, without any additional text or explanation.`;
+
+    // Generate cooking time estimate using OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are a culinary expert that can accurately estimate cooking times based on recipe details." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 20,
+    });
+
+    const estimatedTime = response.choices[0].message.content?.trim() || "Varies";
+    return estimatedTime;
+  } catch (error) {
+    console.error("Error estimating cooking time:", error);
+    return "Varies";
+  }
+};
+
+// Cloud function to generate a meal plan
+exports.generateMealPlan = onCall(
+  { 
+    region: 'us-central1',
+    memory: '1GiB',
+    timeoutSeconds: 300,
+    minInstances: 0,
+    maxInstances: 5 
+  }, 
+  async (request) => {
+    // Check if user is authenticated
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "You must be logged in to generate a meal plan"
+      );
+    }
+
+    const data = request.data;
+    try {
+      const { description, userId } = data;
+      
+      // Get user's country from request or try to get it from their user profile
+      let userCountry = (data as Record<string, unknown>).userCountry as string | undefined;
+      
+      if (!userCountry) {
+        try {
+          // Try to get country from user profile in Firestore
+          const userDoc = await admin.firestore().collection("users").doc(userId).get();
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            // Check common country field names
+            userCountry = userData?.country || 
+                        userData?.address?.country || 
+                        userData?.location?.country ||
+                        userData?.personalInfo?.address?.country ||
+                        "United States"; // Default to US if not found
+          }
+        } catch (error) {
+          console.error("Error getting user country:", error);
+          userCountry = "United States"; // Default to US if error
+        }
+      }
+      
+      // Check cache for similar meal plans
+      const cachedPlan = await checkCacheForSimilarPlans(description);
+      if (cachedPlan) {
+        return cachedPlan;
+      }
+      
+      // Generate meal plan
+      const mealPlan: MealPlan = {
+        id: admin.firestore().collection("mealPlans").doc().id,
+        createdAt: admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now(),
+        preferences: description,
+        userId,
+        weekDays: [],
+      };
+      
+      // Days of the week
+      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      
+      // Meal types
+      const mealTypes = ["Breakfast", "Lunch", "Dinner"];
+      
+      // Generate a plan for each day
+      for (const day of days) {
+        const dayPlan: DayPlan = {
+          day,
+          meals: [],
+        };
+        
+        // Generate meals for each type
+        for (const type of mealTypes) {
+          // Optimize search query based on user input
+          const searchQuery = await optimizeSearchQuery(data, type);
+          
+          // Search for videos based on optimized query
+          const videos = await searchYouTubeVideos(searchQuery, 3);
+          
+          if (videos.length === 0) {
+            continue;
+          }
+          
+          // Select the first video
+          const video = videos[0];
+          
+          // Get video details
+          await getVideoDetails(video.id);
+          
+          // Get transcript
+          const transcript = await getVideoTranscript(video.id);
+          
+          // Analyze transcript to get steps
+          const steps = await analyzeTranscript(transcript, video.title);
+          
+          // Extract ingredients from transcript using OpenAI
+          const ingredients = await extractIngredientsFromTranscript(transcript, video.title);
+          
+          // Extract utensils from transcript using OpenAI
+          const utensils = await extractUtensilsFromTranscript(transcript, video.title);
+          
+          // Extract number of servings from transcript
+          const servings = await extractServingsFromTranscript(transcript, video.title);
+          
+          // If we couldn't extract basic information, skip this meal
+          if (steps.length === 0 || ingredients.length === 0) {
+            console.log(`Skipping meal ${video.title} due to insufficient data`);
+            continue;
+          }
+          
+          // Create meal
+          const meal: Meal = {
+            type,
+            name: video.title,
+            videoUrl: video.url,
+            thumbnail: video.thumbnail,
+            cookingTime: await estimateCookingTime(transcript, steps),
+            costPerServing: await estimateCostPerServing(ingredients, userCountry, servings),
+            ingredients,
+            utensils,
+            nutritionInfo: await generateNutritionInfo(ingredients, servings),
+            healthBenefits: await generateHealthBenefits(ingredients),
+            steps,
+            servings, // Add servings to the meal object
+          };
+          
+          dayPlan.meals.push(meal);
+        }
+        
+        mealPlan.weekDays.push(dayPlan);
+      }
+      
+      // Save meal plan to Firestore
+      await admin.firestore().collection("mealPlans").doc(mealPlan.id).set(mealPlan);
+      
+      // Cache meal plan for future similar requests
+      await cacheMealPlan(mealPlan);
+      
+      return mealPlan;
+    } catch (error) {
+      console.error("Error generating meal plan:", error);
+      throw new HttpsError(
+        "internal",
+        "Failed to generate meal plan",
+        JSON.stringify(error)
+      );
+    }
+  }
+);
+
+// Cloud function to get a user's meal plans
+exports.getUserMealPlans = onCall(
+  { 
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 60,
+    minInstances: 0,
+    maxInstances: 5
+  },
+  async (request) => {
+    // Check if user is authenticated
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "You must be logged in to view meal plans"
+      );
+    }
+
+    try {
+      const userId = request.auth.uid;
+      
+      // Get meal plans from Firestore
+      const snapshot = await admin.firestore()
+        .collection("mealPlans")
+        .where("userId", "==", userId)
+        .orderBy("createdAt", "desc")
+        .get();
+      
+      const mealPlans: MealPlan[] = [];
+      
+      snapshot.forEach((doc) => {
+        mealPlans.push(doc.data() as MealPlan);
+      });
+      
+      return { mealPlans };
+    } catch (error) {
+      console.error("Error getting user meal plans:", error);
+      throw new HttpsError(
+        "internal",
+        "Failed to get user meal plans",
+        JSON.stringify(error)
+      );
+    }
+  }
+);
+
+// Cloud function to update a meal in a meal plan
+exports.updateMeal = onCall(
+  { 
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 60,
+    minInstances: 0,
+    maxInstances: 5
+  },
+  async (request) => {
+    // Check if user is authenticated
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "You must be logged in to update a meal"
+      );
+    }
+
+    const data = request.data;
+    try {
+      const { mealPlanId, dayIndex, mealIndex, newMeal } = data;
+      
+      // Get meal plan from Firestore
+      const mealPlanDoc = await admin.firestore().collection("mealPlans").doc(mealPlanId).get();
+      
+      if (!mealPlanDoc.exists) {
+        throw new HttpsError(
+          "not-found",
+          "Meal plan not found"
+        );
+      }
+      
+      const mealPlan = mealPlanDoc.data() as MealPlan;
+      
+      // Check if user owns the meal plan
+      if (mealPlan.userId !== request.auth.uid) {
+        throw new HttpsError(
+          "permission-denied",
+          "You do not have permission to update this meal plan"
+        );
+      }
+      
+      // Update the meal
+      mealPlan.weekDays[dayIndex].meals[mealIndex] = newMeal;
+      
+      // Save updated meal plan to Firestore
+      await admin.firestore().collection("mealPlans").doc(mealPlanId).update({
+        [`weekDays.${dayIndex}.meals.${mealIndex}`]: newMeal,
+      });
+      
+      return { success: true };
+    } catch (error) {
+      console.error("Error updating meal:", error);
+      throw new HttpsError(
+        "internal",
+        "Failed to update meal",
+        JSON.stringify(error)
+      );
+    }
+  }
+);
+
+// Cloud function to share a meal plan with another user
+exports.shareMealPlan = onCall(
+  { 
+    region: 'us-central1', 
+    memory: '512MiB',
+    timeoutSeconds: 60,
+    minInstances: 0,
+    maxInstances: 5
+  },
+  async (request) => {
+    // Check if user is authenticated
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "You must be logged in to share a meal plan"
+      );
+    }
+
+    const data = request.data;
+    try {
+      const { mealPlanId, recipientEmail } = data;
+      
+      // Get meal plan from Firestore
+      const mealPlanDoc = await admin.firestore().collection("mealPlans").doc(mealPlanId).get();
+      
+      if (!mealPlanDoc.exists) {
+        throw new HttpsError(
+          "not-found",
+          "Meal plan not found"
+        );
+      }
+      
+      const mealPlan = mealPlanDoc.data() as MealPlan;
+      
+      // Check if user owns the meal plan
+      if (mealPlan.userId !== request.auth.uid) {
+        throw new HttpsError(
+          "permission-denied",
+          "You do not have permission to share this meal plan"
+        );
+      }
+      
+      // Find recipient user by email
+      const userSnapshot = await admin.firestore()
+        .collection("users")
+        .where("email", "==", recipientEmail)
+        .limit(1)
+        .get();
+      
+      if (userSnapshot.empty) {
+        throw new HttpsError(
+          "not-found",
+          "Recipient user not found"
+        );
+      }
+      
+      const recipientUser = userSnapshot.docs[0];
+      const recipientUserId = recipientUser.id;
+      
+      // Create a shared meal plan
+      const sharedMealPlan = {
+        ...mealPlan,
+        id: admin.firestore().collection("mealPlans").doc().id,
+        createdAt: admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now(),
+        userId: recipientUserId,
+        sharedBy: request.auth.uid,
+        isShared: true,
+      };
+      
+      // Save shared meal plan to Firestore
+      await admin.firestore().collection("mealPlans").doc(sharedMealPlan.id).set(sharedMealPlan);
+      
+      // Create notification for recipient
+      await admin.firestore().collection("notifications").add({
+        userId: recipientUserId,
+        type: "mealPlanShared",
+        message: `${request.auth.token.name || "A user"} shared a meal plan with you`,
+        mealPlanId: sharedMealPlan.id,
+        createdAt: admin.firestore.Timestamp.now(),
+        read: false,
+      });
+      
+      return { success: true };
+    } catch (error) {
+      console.error("Error sharing meal plan:", error);
+      throw new HttpsError(
+        "internal",
+        "Failed to share meal plan",
+        JSON.stringify(error)
+      );
+    }
+  }
+); 

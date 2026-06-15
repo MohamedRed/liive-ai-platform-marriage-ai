@@ -1,0 +1,104 @@
+name: Native static validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/native-static.yml"
+      - "native/**"
+  push:
+    branches:
+      - before-release
+      - "codex/**"
+    paths:
+      - ".github/workflows/native-static.yml"
+      - "native/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-static:
+    name: Validate native project and build Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Run native validator
+        run: python3 native/validate_native_projects.py
+
+      - name: Check Android Gradle wrapper
+        working-directory: native/android
+        run: ./gradlew --version --no-daemon
+
+      - name: Build Android debug APK
+        working-directory: native/android
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Check for whitespace errors
+        run: git diff --check HEAD
+
+  ios-build:
+    name: Generate and build iOS project
+    runs-on: macos-26-intel
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          for xcode in \
+            /Applications/Xcode_26.5.app \
+            /Applications/Xcode_26.4.1.app \
+            /Applications/Xcode_26.3.app \
+            /Applications/Xcode_26.2.app \
+            /Applications/Xcode.app
+          do
+            if [ -d "$xcode" ]; then
+              sudo xcode-select -s "$xcode"
+              break
+            fi
+          done
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: native/ios
+        run: xcodegen generate --spec project.yml
+
+      - name: Build iOS app
+        working-directory: native/ios
+        run: |
+          xcodebuild \
+            -project JustMarriage.xcodeproj \
+            -scheme JustMarriage \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build

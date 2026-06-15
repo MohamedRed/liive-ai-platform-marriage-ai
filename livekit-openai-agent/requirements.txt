@@ -1,0 +1,7 @@
+livekit-agents[google,silero]>=1.0.14
+# livekit-plugins-openai>=0.10.5 # Removed unused plugin
+python-dotenv
+google-cloud-secret-manager>=2.21.0
+firebase_admin
+google-cloud-storage
+pymupdf

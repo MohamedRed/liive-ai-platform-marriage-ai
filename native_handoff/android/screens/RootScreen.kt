@@ -1,0 +1,66 @@
+// RootScreen.kt — bottom-nav scaffold + onboarding gate (Compose).
+package com.justmarriage.app
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.justmarriage.design.*
+
+@Composable
+fun RootScreen() {
+    JustMarriageTheme {
+        var tab by remember { mutableStateOf(AppTab.Talk) }
+        var onboarded by remember { mutableStateOf(false) }
+
+        Scaffold(
+            containerColor = JMColors.surfacePage,
+            bottomBar = {
+                NavigationBar(containerColor = JMColors.surfaceCard) {
+                    navItem(tab, AppTab.Talk, "Talk", Icons.Filled.Mic) { tab = it }
+                    navItem(tab, AppTab.Matches, "Matches", Icons.Filled.Favorite) { tab = it }
+                    navItem(tab, AppTab.Profile, "Profile", Icons.Filled.Person) { tab = it }
+                    navItem(tab, AppTab.Wali, "Wali", Icons.Filled.Shield) { tab = it }
+                    navItem(tab, AppTab.Settings, "Settings", Icons.Filled.Settings) { tab = it }
+                }
+            }
+        ) { pad ->
+            val mod = Modifier.padding(pad)
+            when (tab) {
+                AppTab.Talk -> CounselorHomeScreen(mod) { tab = it }
+                AppTab.Matches -> MatchmakingScreen(mod)
+                AppTab.Profile -> ProfileQuestionnaireScreen(mod)
+                AppTab.Wali -> WaliScreen(mod)
+                AppTab.Settings -> SettingsScreen(mod)
+            }
+        }
+
+        AnimatedVisibility(visible = !onboarded, enter = slideInHorizontally { it }) {
+            OnboardingScreen { onboarded = true }
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.navItem(
+    current: AppTab, tab: AppTab, label: String, icon: ImageVector, onSelect: (AppTab) -> Unit,
+) {
+    NavigationBarItem(
+        selected = current == tab,
+        onClick = { onSelect(tab) },
+        icon = { Icon(icon, contentDescription = label) },
+        label = { Text(label) },
+        colors = NavigationBarItemDefaults.colors(
+            selectedIconColor = JMColors.primary,
+            selectedTextColor = JMColors.primary,
+            indicatorColor = JMColors.primarySoft,
+            unselectedIconColor = JMPalette.Ink400,
+            unselectedTextColor = JMPalette.Ink400,
+        ),
+    )
+}
