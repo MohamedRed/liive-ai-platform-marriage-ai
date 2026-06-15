@@ -16,6 +16,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -27,6 +30,11 @@ import com.justmarriage.design.*
 @Composable
 fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone: () -> Unit = {}) {
     val code = remember { mutableStateListOf("", "", "", "") }
+    val focusRequesters = remember { List(4) { FocusRequester() } }
+
+    LaunchedEffect(Unit) {
+        focusRequesters.first().requestFocus()
+    }
 
     Column(modifier.fillMaxSize().background(JMColors.surfacePage).padding(JMSpace.x5),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
@@ -35,42 +43,75 @@ fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone:
             Box(Modifier.size(38.dp).clip(CircleShape).background(JMPalette.Ink100), contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.ArrowBack, "Back", tint = JMPalette.Ink700, modifier = Modifier.size(18.dp))
             }
-            Text("Verification", style = JMText.headingSm)
         }
 
-        JMBadge("Step 1 of 2 · Phone", tone = JMBadgeTone.Cyan, soft = true, uppercase = true)
-        Text("Verify your number", style = JMText.headingLg)
-        Text("We sent a 4-digit code to +44 7•• ••• 204", color = JMColors.textSecondary, fontSize = 15.sp)
+        Text("VERIFICATION", fontFamily = JMFontFamily.Display, fontSize = 42.sp, color = JMColors.ink)
+        JMBadge("STEP 1 OF 2 · PHONE", tone = JMBadgeTone.Pink, soft = false)
+        Text("Verify your phone", style = JMText.headingLg)
+        Text(
+            "Enter the 4-digit code we sent to +44 7•• ••• 204",
+            color = JMColors.textSecondary,
+            fontFamily = JMFontFamily.Sans,
+            fontSize = 15.sp,
+            lineHeight = 22.sp,
+        )
 
-        Row(Modifier.padding(vertical = JMSpace.x4), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(top = JMSpace.x3, bottom = JMSpace.x2), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             repeat(4) { i ->
-                Box(
-                    Modifier.weight(1f).height(64.dp).clip(JMShapes.md).background(JMColors.surfaceCard)
-                        .border(2.dp, if (code[i].isEmpty()) JMPalette.Ink200 else JMColors.primary, JMShapes.md),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    BasicTextField(
-                        value = code[i],
-                        onValueChange = { if (it.length <= 1) code[i] = it },
-                        textStyle = TextStyle(fontFamily = JMFontFamily.Display, fontSize = 30.sp,
-                            color = JMColors.ink, textAlign = TextAlign.Center),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
+                OtpBox(value = code[i], focusRequester = focusRequesters[i]) { next ->
+                    code[i] = next
+                    if (next.isNotEmpty() && i < 3) {
+                        focusRequesters[i + 1].requestFocus()
+                    }
                 }
             }
         }
 
-        Text("Didn't get it? Resend in 0:24", color = JMColors.textTertiary, fontSize = 14.sp)
+        JMButton("Verify & continue", onClick = onDone, variant = JMButtonVariant.Primary,
+            size = JMButtonSize.Lg, pill = true, fullWidth = true)
+
+        Text("Resend code in 0:29", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans,
+            fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
 
         Spacer(Modifier.weight(1f))
 
-        Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Cyan50).padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Filled.VerifiedUser, null, tint = JMPalette.Cyan700, modifier = Modifier.size(20.dp))
-            Text("Next: a quick identity check keeps the platform safe and serious for everyone.",
-                color = JMPalette.Cyan900, fontFamily = JMFontFamily.Sans, fontSize = 13.sp, lineHeight = 18.sp)
+        Row(Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMPalette.Cyan50).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(34.dp).clip(CircleShape).background(JMColors.secondary), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.VerifiedUser, null, tint = JMColors.ink, modifier = Modifier.size(19.dp))
+            }
+            Text("Your number stays private. Matches only see that you are verified.",
+                color = JMPalette.Cyan900, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold,
+                fontSize = 13.5.sp, lineHeight = 19.sp)
         }
+    }
+}
 
-        JMButton("Verify & continue", onClick = onDone, variant = JMButtonVariant.Primary, size = JMButtonSize.Lg, fullWidth = true)
+@Composable
+private fun RowScope.OtpBox(value: String, focusRequester: FocusRequester, onChange: (String) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val active = focused || value.isNotEmpty()
+    val bg = if (active) JMColors.primary else JMColors.surfaceCard
+    val fg = if (active) JMPalette.White else JMColors.ink
+    Box(
+        Modifier.weight(1f).height(64.dp).clip(JMShapes.md).background(bg)
+            .border(2.dp, if (active) JMColors.primary else JMColors.borderDefault, JMShapes.md),
+        contentAlignment = Alignment.Center,
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = { raw -> onChange(raw.filter { it.isDigit() }.take(1)) },
+            textStyle = TextStyle(
+                fontFamily = JMFontFamily.Display,
+                fontSize = 30.sp,
+                color = fg,
+                textAlign = TextAlign.Center,
+            ),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester)
+                .onFocusChanged { focused = it.isFocused },
+        )
     }
 }

@@ -76,21 +76,22 @@ struct VerifyView: View {
             }
             .padding(JMSpace.x5)
         }
-        .onAppear { focused = 1 }
+        .onAppear { focused = 0 }
     }
 
     private func otpBox(_ i: Int) -> some View {
         let filled = !code[i].isEmpty
+        let active = filled || focused == i
         return TextField("", text: $code[i])
             .keyboardType(.numberPad)
             .multilineTextAlignment(.center)
             .font(JMFont.display(30))
-            .foregroundColor(filled ? JMColor.white : JMColor.ink900)
+            .foregroundColor(active ? JMColor.white : JMColor.ink900)
             .frame(height: 64)
             .frame(maxWidth: .infinity)
-            .background(filled ? JMColor.pink500 : JMColor.surfaceCard)
+            .background(active ? JMColor.pink500 : JMColor.surfaceCard)
             .overlay(RoundedRectangle(cornerRadius: JMRadius.md)
-                .strokeBorder(filled ? JMColor.pink500 : JMColor.ink200, lineWidth: 2))
+                .strokeBorder(active ? JMColor.pink500 : JMColor.ink200, lineWidth: 2))
             .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
             .focused($focused, equals: i)
             .onChange(of: code[i]) { value in

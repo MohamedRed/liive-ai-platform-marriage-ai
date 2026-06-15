@@ -17,6 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -28,9 +31,14 @@ import com.justmarriage.design.*
 @Composable
 fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone: () -> Unit = {}) {
     val code = remember { mutableStateListOf("", "", "", "") }
+    val focusRequesters = remember { List(4) { FocusRequester() } }
     var serviceNotice by remember { mutableStateOf<String?>(null) }
     var attempted by remember { mutableStateOf(false) }
     val complete = code.all { it.length == 1 }
+
+    LaunchedEffect(Unit) {
+        focusRequesters.first().requestFocus()
+    }
 
     Column(
         modifier.fillMaxSize().background(JMColors.surfacePage).padding(JMSpace.x5),
@@ -58,7 +66,15 @@ fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone:
             Modifier.fillMaxWidth().padding(top = JMSpace.x3, bottom = JMSpace.x2),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            repeat(4) { i -> OtpBox(value = code[i], active = code[i].isNotEmpty()) { next -> code[i] = next } }
+            repeat(4) { i ->
+                OtpBox(value = code[i], focusRequester = focusRequesters[i]) { next ->
+                    code[i] = next
+                    serviceNotice = null
+                    if (next.isNotEmpty() && i < 3) {
+                        focusRequesters[i + 1].requestFocus()
+                    }
+                }
+            }
         }
 
         JMButton(
@@ -114,7 +130,9 @@ fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone:
 }
 
 @Composable
-private fun RowScope.OtpBox(value: String, active: Boolean, onChange: (String) -> Unit) {
+private fun RowScope.OtpBox(value: String, focusRequester: FocusRequester, onChange: (String) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val active = focused || value.isNotEmpty()
     val bg = if (active) JMColors.primary else JMColors.surfaceCard
     val fg = if (active) JMPalette.White else JMColors.ink
     Box(
@@ -132,7 +150,10 @@ private fun RowScope.OtpBox(value: String, active: Boolean, onChange: (String) -
                 textAlign = TextAlign.Center,
             ),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester)
+                .onFocusChanged { focused = it.isFocused },
         )
     }
 }
