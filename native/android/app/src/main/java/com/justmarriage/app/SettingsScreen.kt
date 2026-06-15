@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -63,7 +64,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         }
         JMButton("Sign out", onClick = {
             signOutNotice = PreviewJustMarriageServices.current.auth.signOut().message()
-        }, variant = JMButtonVariant.Outline, fullWidth = true)
+        }, variant = JMButtonVariant.Outline, fullWidth = true, icon = Icons.AutoMirrored.Filled.Logout)
     }
 }
 

@@ -61,8 +61,10 @@ fun WaliScreen(modifier: Modifier = Modifier) {
             JMBadge("Verifying", tone = JMBadgeTone.Warning, soft = true)
         }
 
-        JMButton("Continue verification", onClick = {}, variant = JMButtonVariant.Primary, fullWidth = true)
-        JMButton("Invite a different wali", onClick = {}, variant = JMButtonVariant.Ghost, fullWidth = true)
+        JMButton("Continue verification", onClick = {}, variant = JMButtonVariant.Primary,
+            fullWidth = true, icon = Icons.Filled.Badge)
+        JMButton("Invite a different wali", onClick = {}, variant = JMButtonVariant.Ghost,
+            fullWidth = true, icon = Icons.Filled.PersonAdd)
     }
 }
 

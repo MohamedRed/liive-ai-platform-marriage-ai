@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -69,7 +70,8 @@ fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
                         .saveQuestionnaireAnswer("roles_responsibilities", it)
                         .message()
                 }
-            }, variant = JMButtonVariant.Ink, fullWidth = true, enabled = rating != null)
+            }, variant = JMButtonVariant.Ink, fullWidth = true, enabled = rating != null,
+                icon = Icons.AutoMirrored.Filled.ArrowForward)
             savedMessage?.let {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Filled.CloudDone, null, tint = JMColors.success, modifier = Modifier.size(18.dp))

@@ -20,16 +20,17 @@ struct OnboardingView: View {
                 Spacer()
 
                 VStack(alignment: .leading, spacing: JMSpace.x5) {
-                    (Text("No swap.\nNo chat.\n") + Text("No date.")
-                        .foregroundColor(JMColor.ink900))
-                        .font(JMFont.display(46))
-                        .foregroundColor(.white)
-                        .lineSpacing(-6)
-                        .textCase(.uppercase)
-                        .background(alignment: .bottomLeading) {
-                            // highlight block behind "No date." handled visually via accent below
-                            EmptyView()
-                        }
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("No swap.").font(JMFont.display(46)).foregroundColor(.white)
+                        Text("No chat.").font(JMFont.display(46)).foregroundColor(.white)
+                        Text("No date.")
+                            .font(JMFont.display(46))
+                            .foregroundColor(JMColor.ink900)
+                            .padding(.horizontal, 8)
+                            .background(JMColor.yellow400)
+                            .clipShape(RoundedRectangle(cornerRadius: JMRadius.sm))
+                    }
+                    .textCase(.uppercase)
 
                     Text("A calm, guided path to marriage — led by an AI counselor, kept halal by your wali.")
                         .font(JMFont.sans(16))
