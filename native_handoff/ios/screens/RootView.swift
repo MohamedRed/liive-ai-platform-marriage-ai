@@ -1,8 +1,21 @@
 // RootView.swift — tab navigation + onboarding gate for Just Marriage (SwiftUI).
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @StateObject private var app = AppState()
+
+    init() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor(JMColor.white)
+        appearance.stackedLayoutAppearance.selected.iconColor = UIColor(JMColor.primary)
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: UIColor(JMColor.primary)]
+        appearance.stackedLayoutAppearance.normal.iconColor = UIColor(JMColor.ink400)
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor(JMColor.ink500)]
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
 
     var body: some View {
         ZStack {
@@ -30,5 +43,3 @@ struct RootView: View {
         .animation(JMMotion.easeOut, value: app.onboarded)
     }
 }
-
-#Preview { RootView() }

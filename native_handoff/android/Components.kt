@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,19 +57,20 @@ fun JMButton(
         JMButtonVariant.Ink -> JMColors.ink
         else -> Color.Transparent
     }
-    val fg = when (variant) {
+    val activeFg = when (variant) {
         JMButtonVariant.Primary, JMButtonVariant.Ink -> JMColors.onPrimary
         JMButtonVariant.Secondary -> JMColors.onSecondary
         else -> JMColors.ink
     }
+    val fg = if (enabled) activeFg else JMColors.textDisabled
     val shape = if (pill) JMShapes.pill else JMShapes.md
     Box(
         modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .height(height)
             .clip(shape)
-            .background(if (enabled) bg else bg.copy(alpha = 0.45f))
-            .then(if (variant == JMButtonVariant.Outline) Modifier.border(JMBorder.widthBold, JMColors.ink, shape) else Modifier)
+            .background(if (enabled) bg else if (bg == Color.Transparent) Color.Transparent else bg.copy(alpha = 0.35f))
+            .then(if (variant == JMButtonVariant.Outline) Modifier.border(JMBorder.widthBold, if (enabled) JMColors.ink else JMColors.borderDefault, shape) else Modifier)
             .clickableNoRipple(enabled, onClick)
             .padding(horizontal = if (size == JMButtonSize.Lg) 30.dp else 22.dp),
         contentAlignment = Alignment.Center,
@@ -110,7 +112,7 @@ fun JMBadge(
     Box(
         modifier
             .rotate(if (tilt) -4f else 0f)
-            .clip(JMShapes.xs)
+            .clip(JMShapes.pill)
             .background(bg)
             .padding(horizontal = 11.dp, vertical = 4.dp)
     ) {
@@ -260,9 +262,10 @@ fun JMAvatar(
 @Composable
 private fun Modifier.clickableNoRipple(enabled: Boolean, onClick: () -> Unit): Modifier {
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    return this.then(
-        androidx.compose.foundation.clickable(
-            interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick,
-        )
+    return this.clickable(
+        interactionSource = interaction,
+        indication = null,
+        enabled = enabled,
+        onClick = onClick,
     )
 }

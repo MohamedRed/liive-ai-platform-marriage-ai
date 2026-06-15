@@ -11,6 +11,8 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parent
+WORKSPACE_ROOT = ROOT.parent
+HANDOFF_ROOT = WORKSPACE_ROOT / "native_handoff"
 ANDROID_DESIGN_FILES = ["Color.kt", "Components.kt", "Dimens.kt", "Shape.kt", "Theme.kt", "Type.kt"]
 ANDROID_SCREEN_FILES = [
     "ChatScreen.kt",
@@ -85,6 +87,11 @@ REQUIRED = [
     ],
     *[ROOT / "ios/JustMarriage/Design" / name for name in IOS_DESIGN_FILES],
     *[ROOT / "ios/JustMarriage/Screens" / name for name in IOS_SCREEN_FILES],
+    *[HANDOFF_ROOT / "android" / name for name in ANDROID_DESIGN_FILES],
+    *[HANDOFF_ROOT / "android/screens" / name for name in ANDROID_SCREEN_FILES],
+    *[HANDOFF_ROOT / "ios" / name for name in IOS_DESIGN_FILES],
+    HANDOFF_ROOT / "ios/Services.swift",
+    *[HANDOFF_ROOT / "ios/screens" / name for name in IOS_SCREEN_FILES],
 ]
 
 missing = [path.relative_to(ROOT) for path in REQUIRED if not path.exists()]
@@ -225,6 +232,44 @@ for path, needles in service_boundary_checks.items():
         if needle not in text:
             print(f"{path.relative_to(ROOT)} is missing service-boundary marker: {needle}")
             sys.exit(1)
+
+mirror_pairs = [
+    *[
+        (
+            ROOT / "android/app/src/main/java/com/justmarriage/design" / name,
+            HANDOFF_ROOT / "android" / name,
+        )
+        for name in ANDROID_DESIGN_FILES
+    ],
+    *[
+        (
+            ROOT / "android/app/src/main/java/com/justmarriage/app" / name,
+            HANDOFF_ROOT / "android/screens" / name,
+        )
+        for name in ANDROID_SCREEN_FILES
+    ],
+    *[
+        (
+            ROOT / "ios/JustMarriage/Design" / name,
+            HANDOFF_ROOT / "ios" / name,
+        )
+        for name in IOS_DESIGN_FILES
+    ],
+    (ROOT / "ios/JustMarriage/Services.swift", HANDOFF_ROOT / "ios/Services.swift"),
+    *[
+        (
+            ROOT / "ios/JustMarriage/Screens" / name,
+            HANDOFF_ROOT / "ios/screens" / name,
+        )
+        for name in IOS_SCREEN_FILES
+    ],
+]
+for source, mirror in mirror_pairs:
+    if source.read_bytes() != mirror.read_bytes():
+        source_name = source.relative_to(WORKSPACE_ROOT)
+        mirror_name = mirror.relative_to(WORKSPACE_ROOT)
+        print(f"Handoff mirror drift: {mirror_name} must match {source_name}")
+        sys.exit(1)
 
 for path in ROOT.rglob("*"):
     if path.is_file() and path.suffix in {".kt", ".swift"}:

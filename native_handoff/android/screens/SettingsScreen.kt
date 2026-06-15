@@ -26,8 +26,9 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var matchNotif by remember { mutableStateOf(true) }
     var notifyWali by remember { mutableStateOf(true) }
     var hidePhoto by remember { mutableStateOf(false) }
+    var signOutNotice by remember { mutableStateOf<String?>(null) }
 
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
+    Column(modifier.fillMaxSize().background(JMColors.surfacePage).verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
 
         SectionHeader("Settings")
@@ -55,11 +56,11 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         Column(Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMColors.surfaceCard)
             .border(1.dp, JMColors.borderSubtle, JMShapes.lg)) {
             ToggleRow(Icons.Filled.Notifications, "Match notifications", matchNotif) { matchNotif = it }
-            Divider(color = JMPalette.Ink100)
+            HorizontalDivider(color = JMPalette.Ink100)
             ToggleRow(Icons.Filled.Shield, "Notify my wali", notifyWali) { notifyWali = it }
-            Divider(color = JMPalette.Ink100)
+            HorizontalDivider(color = JMPalette.Ink100)
             ToggleRow(Icons.Filled.VisibilityOff, "Hide my photo until match", hidePhoto) { hidePhoto = it }
-            Divider(color = JMPalette.Ink100)
+            HorizontalDivider(color = JMPalette.Ink100)
             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Icon(Icons.Filled.Language, null, tint = JMColors.textTertiary, modifier = Modifier.size(22.dp))
@@ -68,8 +69,12 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        JMButton("Sign out", onClick = {}, variant = JMButtonVariant.Outline,
-            fullWidth = true, icon = Icons.AutoMirrored.Filled.Logout)
+        signOutNotice?.let {
+            Text(it, color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans, fontSize = 13.sp, lineHeight = 18.sp)
+        }
+        JMButton("Sign out", onClick = {
+            signOutNotice = PreviewJustMarriageServices.current.auth.signOut().message()
+        }, variant = JMButtonVariant.Outline, fullWidth = true, icon = Icons.AutoMirrored.Filled.Logout)
     }
 }
 

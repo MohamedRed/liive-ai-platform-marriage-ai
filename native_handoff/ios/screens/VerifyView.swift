@@ -23,7 +23,8 @@ struct VerifyView: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(JMColor.ink700)
                             .frame(width: 38, height: 38)
-                            .background(JMColor.ink100).clipShape(Circle())
+                            .background(JMColor.ink100)
+                            .clipShape(Circle())
                     }
                 }
 
@@ -40,7 +41,8 @@ struct VerifyView: View {
                 }
                 .padding(.vertical, JMSpace.x5)
 
-                JMButton("Verify & continue", variant: .primary, size: .lg, pill: true, fullWidth: true) {
+                JMButton("Verify & continue",
+                         variant: .primary, size: .lg, pill: true, fullWidth: true) {
                     verifyCode()
                 }
 
@@ -105,6 +107,8 @@ struct VerifyView: View {
             validationMessage = "Enter all 4 digits before continuing."
             return
         }
-        validationMessage = "Verification service is not connected yet."
+        validationMessage = PreviewJustMarriageServices.current.verification
+            .verifyPhoneCode(code.joined())
+            .message
     }
 }

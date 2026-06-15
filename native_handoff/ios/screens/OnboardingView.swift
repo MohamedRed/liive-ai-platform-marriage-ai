@@ -10,12 +10,7 @@ struct OnboardingView: View {
             JMColor.ink900.ignoresSafeArea()
             VStack(alignment: .leading, spacing: JMSpace.x6) {
                 // Wordmark
-                HStack(spacing: 6) {
-                    Text("JUST").font(JMFont.display(34)).foregroundColor(.white)
-                    Text("MARRIAGE").font(JMFont.display(28)).foregroundColor(JMColor.pink500)
-                        .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background(JMColor.cyanBright).clipShape(RoundedRectangle(cornerRadius: 7))
-                }
+                JMBrandWordmark()
 
                 Spacer()
 

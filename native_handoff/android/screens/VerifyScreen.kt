@@ -1,14 +1,15 @@
-// VerifyScreen.kt — phone OTP entry (Compose). Present as a full screen or in a sheet.
+// VerifyScreen.kt — phone OTP entry (Compose).
 package com.justmarriage.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -31,18 +32,23 @@ import com.justmarriage.design.*
 fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone: () -> Unit = {}) {
     val code = remember { mutableStateListOf("", "", "", "") }
     val focusRequesters = remember { List(4) { FocusRequester() } }
+    var serviceNotice by remember { mutableStateOf<String?>(null) }
+    var attempted by remember { mutableStateOf(false) }
+    val complete = code.all { it.length == 1 }
 
     LaunchedEffect(Unit) {
         focusRequesters.first().requestFocus()
     }
 
-    Column(modifier.fillMaxSize().background(JMColors.surfacePage).padding(JMSpace.x5),
-        verticalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
-
+    Column(
+        modifier.fillMaxSize().background(JMColors.surfacePage).padding(JMSpace.x5),
+        verticalArrangement = Arrangement.spacedBy(JMSpace.x4),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(38.dp).clip(CircleShape).background(JMPalette.Ink100), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.ArrowBack, "Back", tint = JMPalette.Ink700, modifier = Modifier.size(18.dp))
-            }
+            Box(
+                Modifier.size(38.dp).clip(CircleShape).background(JMPalette.Ink100).clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = JMPalette.Ink700, modifier = Modifier.size(18.dp)) }
         }
 
         Text("VERIFICATION", fontFamily = JMFontFamily.Display, fontSize = 42.sp, color = JMColors.ink)
@@ -56,10 +62,14 @@ fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone:
             lineHeight = 22.sp,
         )
 
-        Row(Modifier.fillMaxWidth().padding(top = JMSpace.x3, bottom = JMSpace.x2), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = JMSpace.x3, bottom = JMSpace.x2),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             repeat(4) { i ->
                 OtpBox(value = code[i], focusRequester = focusRequesters[i]) { next ->
                     code[i] = next
+                    serviceNotice = null
                     if (next.isNotEmpty() && i < 3) {
                         focusRequesters[i + 1].requestFocus()
                     }
@@ -67,22 +77,54 @@ fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone:
             }
         }
 
-        JMButton("Verify & continue", onClick = onDone, variant = JMButtonVariant.Primary,
-            size = JMButtonSize.Lg, pill = true, fullWidth = true)
-
-        Text("Resend code in 0:29", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans,
-            fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        JMButton(
+            "Verify & continue",
+            onClick = {
+                attempted = true
+                serviceNotice = if (complete) {
+                    PreviewJustMarriageServices.current.verification.verifyPhoneCode(code.joinToString("")).message()
+                } else null
+            },
+            variant = JMButtonVariant.Primary,
+            size = JMButtonSize.Lg,
+            pill = true,
+            fullWidth = true,
+        )
+        Text(
+            when {
+                serviceNotice != null -> serviceNotice!!
+                attempted && !complete -> "Enter all 4 digits to continue."
+                else -> "Resend code in 0:29"
+            },
+            color = when {
+                serviceNotice != null -> JMColors.textSecondary
+                attempted && !complete -> JMColors.error
+                else -> JMColors.textTertiary
+            },
+            fontFamily = JMFontFamily.Sans,
+            fontWeight = if (serviceNotice != null || attempted && !complete) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 14.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
 
         Spacer(Modifier.weight(1f))
 
-        Row(Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMPalette.Cyan50).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMPalette.Cyan50).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             Box(Modifier.size(34.dp).clip(CircleShape).background(JMColors.secondary), contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.VerifiedUser, null, tint = JMColors.ink, modifier = Modifier.size(19.dp))
             }
-            Text("Your number stays private. Matches only see that you are verified.",
-                color = JMPalette.Cyan900, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold,
-                fontSize = 13.5.sp, lineHeight = 19.sp)
+            Text(
+                "Your number stays private. Matches only see that you are verified.",
+                color = JMPalette.Cyan900,
+                fontFamily = JMFontFamily.Sans,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.5.sp,
+                lineHeight = 19.sp,
+            )
         }
     }
 }
