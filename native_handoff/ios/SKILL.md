@@ -83,6 +83,7 @@ Complete, faithful recreations of the product — add them after the token/compo
 |---|---|
 | `RootView.swift` | TabView (Talk/Matches/Profile/Wali/Settings) + onboarding gate. **Entry point.** |
 | `JMModels.swift` | `AppState`, `Prospect`, `JMSectionHeader`. |
+| `Services.swift` | Explicit service contracts and preview blockers for production wiring boundaries. |
 | `OnboardingView.swift` | Intent + brother/sister. |
 | `CounselorHomeView.swift` | Voice home **with Talk / Type toggle** + text conversation. |
 | `MatchmakingView.swift` | Best 99% match + search list; `MatchDetailSheet`. |

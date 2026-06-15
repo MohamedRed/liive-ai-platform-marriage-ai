@@ -27,8 +27,8 @@ regenerate or diff values.
 ## Where things live
 
 ```
-ios/      JMColor.swift JMTheme.swift JMFont.swift Components.swift  +  screens/ (RootView + 9 screens)
-android/  Color.kt Dimens.kt Shape.kt Type.kt Theme.kt Components.kt  +  screens/ (RootScreen + 9 screens)
+ios/      JMColor.swift JMTheme.swift JMFont.swift Components.swift Services.swift  +  screens/ (RootView + 9 screens)
+android/  Color.kt Dimens.kt Shape.kt Type.kt Theme.kt Components.kt  +  screens/ (Services + RootScreen + 9 screens)
 ```
 
 The 9 screens (both platforms): Onboarding · Counselor home (voice **+ Talk/Type** text
