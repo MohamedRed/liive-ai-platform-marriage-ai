@@ -6,8 +6,8 @@
     <string>Just Marriage</string>
     <key>UIAppFonts</key>
     <array>
-        <string>Fonts/Anton-Regular.ttf</string>
-        <string>Fonts/PublicSans[wght].ttf</string>
+        <string>Anton-Regular.ttf</string>
+        <string>PublicSans[wght].ttf</string>
     </array>
     <key>UILaunchScreen</key>
     <dict/>
