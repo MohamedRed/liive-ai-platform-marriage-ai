@@ -192,6 +192,7 @@ public struct JMVoiceBars: View {
     var barCount: Int = 7
     var tint: Color = JMColor.pink500
     var height: CGFloat = 80
+    private static let idleBarScales: [CGFloat] = [0.32, 0.44, 0.36, 0.52, 0.36, 0.44, 0.32]
     @State private var phase = false
 
     public init(active: Bool = true, barCount: Int = 7, tint: Color = JMColor.pink500, height: CGFloat = 80) {
@@ -202,7 +203,8 @@ public struct JMVoiceBars: View {
         HStack(spacing: 6) {
             ForEach(0..<barCount, id: \.self) { i in
                 Capsule().fill(tint)
-                    .frame(width: 8, height: active ? height * barScale(i) : height * 0.16)
+                    .frame(width: 8, height: active ? height * barScale(i) : height * idleBarScale(i))
+                    .opacity(active ? 1 : 0.82)
                     .animation(
                         active
                         ? .easeInOut(duration: 0.9).repeatForever().delay(Double(i % 4) * 0.12)
@@ -214,6 +216,9 @@ public struct JMVoiceBars: View {
         .onAppear { phase.toggle() }
     }
     private func barScale(_ i: Int) -> CGFloat { phase ? (i % 2 == 0 ? 1.0 : 0.5) : (i % 2 == 0 ? 0.3 : 0.9) }
+    private func idleBarScale(_ i: Int) -> CGFloat {
+        Self.idleBarScales[i % Self.idleBarScales.count]
+    }
 }
 
 // MARK: - ScaleRating (1–10 importance)

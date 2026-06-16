@@ -194,10 +194,18 @@ fun JMVoiceBars(active: Boolean, tint: Color, height: Dp, barCount: Int = 7) {
                     tween(900, delayMillis = (i % 4) * 120, easing = JMMotion.EaseOut), RepeatMode.Reverse),
                 label = "bar$i",
             )
-            Box(Modifier.width(8.dp).height(if (active) height * scale else height * 0.16f).clip(JMShapes.pill).background(tint))
+            val barHeight = if (active) height * scale else height * idleBarScale(i)
+            val barTint = if (active) tint else tint.copy(alpha = 0.82f)
+            Box(Modifier.width(8.dp).height(barHeight).clip(JMShapes.pill).background(barTint))
         }
     }
 }
+
+private fun idleBarScale(index: Int): Float {
+    return IdleBarScales[index % IdleBarScales.size]
+}
+
+private val IdleBarScales = listOf(0.32f, 0.44f, 0.36f, 0.52f, 0.36f, 0.44f, 0.32f)
 
 // Text conversation with the counselor.
 @Composable
