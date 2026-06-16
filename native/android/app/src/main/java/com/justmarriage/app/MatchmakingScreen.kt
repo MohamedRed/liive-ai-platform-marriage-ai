@@ -30,6 +30,7 @@ import com.justmarriage.design.*
 fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = false) {
     var showDetail by remember { mutableStateOf(initialDetail) }
     var serviceNotice by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Box(modifier.fillMaxSize().background(JMColors.surfacePage)) {
         Column(
@@ -70,6 +71,7 @@ fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = fa
         if (showDetail) {
             ModalBottomSheet(
                 onDismissRequest = { showDetail = false },
+                sheetState = sheetState,
                 containerColor = JMColors.surfaceCard,
                 scrimColor = JMColors.ink.copy(alpha = 0.42f),
             ) {
