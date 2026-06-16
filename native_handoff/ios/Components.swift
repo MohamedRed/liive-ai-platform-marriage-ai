@@ -181,7 +181,9 @@ public struct JMProgressRing: View {
                     .foregroundColor(JMColor.ink900)
                 if let s = sublabel {
                     Text(s.uppercased()).font(JMFont.sans(size * 0.1, .bold))
-                        .tracking(1).foregroundColor(JMColor.textTertiary)
+                        .tracking(1).lineLimit(1).minimumScaleFactor(0.62)
+                        .frame(maxWidth: size * 0.66)
+                        .foregroundColor(JMColor.textTertiary)
                 }
             }
         }
