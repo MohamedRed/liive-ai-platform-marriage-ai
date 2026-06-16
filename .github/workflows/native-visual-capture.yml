@@ -47,8 +47,8 @@ jobs:
 
       - name: Install Playwright
         run: |
-          npm install --no-save playwright
-          npx playwright install --with-deps chromium
+          npm install --prefix native/scripts --no-save --no-package-lock playwright
+          native/scripts/node_modules/.bin/playwright install --with-deps chromium
 
       - name: Capture visual states
         env:
