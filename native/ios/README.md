@@ -6,6 +6,7 @@ Native iOS implementation for Just Marriage using SwiftUI and the `native_handof
 
 - `JustMarriage/JustMarriageApp.swift`
 - `RootView()` renders the onboarding gate and tabbed app shell.
+- Visual QA can launch a specific state in Simulator with `xcrun simctl launch booted com.liive.justmarriage --args -visual-screen chat`.
 
 ## Generate/open the Xcode project
 

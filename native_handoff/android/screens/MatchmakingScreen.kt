@@ -27,8 +27,8 @@ import com.justmarriage.design.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatchmakingScreen(modifier: Modifier = Modifier) {
-    var showDetail by remember { mutableStateOf(false) }
+fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = false) {
+    var showDetail by remember { mutableStateOf(initialDetail) }
     var serviceNotice by remember { mutableStateOf(false) }
 
     Box(modifier.fillMaxSize().background(JMColors.surfacePage)) {

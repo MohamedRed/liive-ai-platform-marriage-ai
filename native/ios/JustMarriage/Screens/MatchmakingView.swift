@@ -3,7 +3,11 @@ import SwiftUI
 
 struct MatchmakingView: View {
     @EnvironmentObject var app: AppState
-    @State private var showDetail = false
+    @State private var showDetail: Bool
+
+    init(initialShowDetail: Bool = false) {
+        _showDetail = State(initialValue: initialShowDetail)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {

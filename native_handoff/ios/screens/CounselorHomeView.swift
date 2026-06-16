@@ -4,9 +4,14 @@ import SwiftUI
 struct CounselorHomeView: View {
     @EnvironmentObject var app: AppState
     enum Mode { case voice, text }
-    @State private var mode: Mode = .voice
-    @State private var listening = true
+    @State private var mode: Mode
+    @State private var listening: Bool
     @State private var notificationNotice: String? = nil
+
+    init(initialMode: Mode = .voice, initialListening: Bool = true) {
+        _mode = State(initialValue: initialMode)
+        _listening = State(initialValue: initialListening)
+    }
 
     var body: some View {
         ZStack {

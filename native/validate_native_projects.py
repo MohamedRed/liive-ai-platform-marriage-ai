@@ -25,6 +25,7 @@ ANDROID_SCREEN_FILES = [
     "Services.kt",
     "SettingsScreen.kt",
     "VerifyScreen.kt",
+    "VisualParityLaunch.kt",
     "WaliScreen.kt",
 ]
 IOS_DESIGN_FILES = ["Components.swift", "JMColor.swift", "JMFont.swift", "JMTheme.swift"]
@@ -38,6 +39,7 @@ IOS_SCREEN_FILES = [
     "RootView.swift",
     "SettingsView.swift",
     "VerifyView.swift",
+    "VisualParityLaunch.swift",
     "WaliView.swift",
 ]
 
@@ -103,8 +105,8 @@ if missing:
 
 # Ensure generated app sources still carry the intended product entry points.
 checks = {
-    ROOT / "android/app/src/main/AndroidManifest.xml": [".app.MainActivity", "@mipmap/ic_launcher", "@mipmap/ic_launcher_round", "@string/app_name"],
-    ROOT / "android/app/src/main/java/com/justmarriage/app/MainActivity.kt": ["ComponentActivity", "RootScreen()"],
+    ROOT / "android/app/src/main/AndroidManifest.xml": [".app.MainActivity", "@mipmap/ic_launcher", "@mipmap/ic_launcher_round", "@string/app_name", "justmarriage"],
+    ROOT / "android/app/src/main/java/com/justmarriage/app/MainActivity.kt": ["ComponentActivity", "visual_screen", "RootScreen(visualScreenKey = visualScreen)"],
     ROOT / "android/app/src/main/java/com/justmarriage/app/RootScreen.kt": [
         "JustMarriageTheme",
         "OnboardingScreen",
@@ -119,6 +121,7 @@ checks = {
     ROOT / "ios/JustMarriage/Info.plist": ["UIAppFonts", "Anton-Regular.ttf", "PublicSans[wght].ttf"],
     ROOT / "ios/JustMarriage/Screens/RootView.swift": [
         "TabView",
+        "VisualParityLaunch.processScreen()",
         "OnboardingView",
         "CounselorHomeView",
         "MatchmakingView",

@@ -44,6 +44,27 @@ Optional environment variables:
 
 The script prints `APPETIZE_PUBLIC_KEY` and `APPETIZE_URL` on success. It refuses to upload when `APPETIZE_API_TOKEN` is missing, so credentials are never faked or embedded in the repo.
 
+## Visual parity launch states
+
+The debug/demo builds support explicit launch states for screenshot QA without changing the normal user entry path. Supported keys are:
+
+`talk-active`, `talk-idle`, `talk-type`, `matches`, `match-detail`, `profile`, `wali`, `verification`, `chat`, `settings`.
+
+Android:
+
+```bash
+adb shell am start -n com.justmarriage/.app.MainActivity --es visual_screen match-detail
+adb shell am start -a android.intent.action.VIEW -d "justmarriage://visual?screen=chat"
+```
+
+iOS simulator:
+
+```bash
+xcrun simctl launch booted com.liive.justmarriage --args -visual-screen talk-type
+```
+
+These states are only navigation fixtures for visual QA; service actions still use the explicit preview blockers until production integrations are wired.
+
 ## CI
 
 Active GitHub Actions workflows are installed under `.github/workflows`:

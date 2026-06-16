@@ -32,12 +32,17 @@ import androidx.compose.ui.unit.sp
 import com.justmarriage.design.*
 import kotlinx.coroutines.delay
 
-private enum class Mode { Voice, Text }
+enum class CounselorMode { Voice, Text }
 
 @Composable
-fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) {
-    var mode by remember { mutableStateOf(Mode.Voice) }
-    var connected by remember { mutableStateOf(true) }
+fun CounselorHomeScreen(
+    modifier: Modifier = Modifier,
+    initialMode: CounselorMode = CounselorMode.Voice,
+    initialConnected: Boolean = true,
+    onTab: (AppTab) -> Unit,
+) {
+    var mode by remember { mutableStateOf(initialMode) }
+    var connected by remember { mutableStateOf(initialConnected) }
     var boundaryNotice by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -79,11 +84,11 @@ fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) 
                 .background(JMPalette.White.copy(alpha = 0.1f)).padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            toggleChip("Talk", Icons.Filled.Mic, mode == Mode.Voice) { mode = Mode.Voice }
-            toggleChip("Type", Icons.Filled.ChatBubble, mode == Mode.Text) { mode = Mode.Text }
+            toggleChip("Talk", Icons.Filled.Mic, mode == CounselorMode.Voice) { mode = CounselorMode.Voice }
+            toggleChip("Type", Icons.Filled.ChatBubble, mode == CounselorMode.Text) { mode = CounselorMode.Text }
         }
 
-        if (mode == Mode.Voice) {
+        if (mode == CounselorMode.Voice) {
             VoiceBody(connected, onToggleConnect = { connected = !connected }, onTab = onTab)
         } else {
             TextCounsel(Modifier.weight(1f))
