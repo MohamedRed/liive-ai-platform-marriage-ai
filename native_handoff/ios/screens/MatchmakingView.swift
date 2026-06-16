@@ -162,8 +162,6 @@ struct MatchDetailSheet: View {
                          variant: .primary, fullWidth: true) {
                     serviceNoticeVisible = true
                 }
-                .disabled(!waliNotificationAvailable)
-                .opacity(waliNotificationAvailable ? 1 : 0.55)
             }
         }
         .padding(JMSpace.x5)

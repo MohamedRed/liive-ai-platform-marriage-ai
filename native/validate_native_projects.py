@@ -192,7 +192,7 @@ for path, pattern in otp_initializers.items():
 service_boundary_checks = {
     ROOT / "ios/JustMarriage/Screens/MatchmakingView.swift": [
         "private var waliNotificationAvailable: Bool { services.matching.canNotifyWali }",
-        ".disabled(!waliNotificationAvailable)",
+        "serviceNoticeVisible = true",
         "services.matching.acceptAndNotifyWali(prospect: prospect).message",
     ],
     ROOT / "ios/JustMarriage/Services.swift": [
@@ -208,7 +208,7 @@ service_boundary_checks = {
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/MatchmakingScreen.kt": [
         "val waliNotificationAvailable = services.matching.canNotifyWali",
-        "enabled = waliNotificationAvailable",
+        "MatchDetail(Mock.bestMatch, serviceNotice, onClose = { showDetail = false }) { serviceNotice = true }",
         "services.matching.acceptAndNotifyWali(p).message()",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/Services.kt": [

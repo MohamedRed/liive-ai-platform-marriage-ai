@@ -154,7 +154,6 @@ private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit
                 onClick = onAccept,
                 variant = JMButtonVariant.Primary,
                 modifier = Modifier.weight(1f),
-                enabled = waliNotificationAvailable,
             )
         }
     }
