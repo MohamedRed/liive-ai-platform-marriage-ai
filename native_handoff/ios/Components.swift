@@ -123,7 +123,9 @@ public struct JMCard<Content: View>: View {
 
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: JMRadius.lg, style: .continuous)
-        return content()
+        return VStack(alignment: .leading, spacing: JMSpace.x3) {
+            content()
+        }
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(variant == .tinted ? tint : JMColor.surfaceCard)
