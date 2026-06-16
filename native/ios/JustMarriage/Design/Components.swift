@@ -40,6 +40,8 @@ public struct JMButton: View {
             HStack(spacing: 8) {
                 if let icon = systemIcon { Image(systemName: icon) }
                 Text(title).font(JMFont.sans(fontSize, .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
             }
             .frame(maxWidth: fullWidth ? .infinity : nil)
             .frame(height: height)

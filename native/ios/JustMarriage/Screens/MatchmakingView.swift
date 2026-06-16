@@ -142,13 +142,7 @@ struct MatchDetailSheet: View {
                 serviceNotice("Acceptance is ready, but wali notification service is not connected yet.")
             }
 
-            HStack(spacing: JMSpace.x3) {
-                JMButton("Not now", variant: .outline, fullWidth: true) { onClose() }
-                JMButton("Accept & notify wali",
-                         variant: .primary, fullWidth: true) {
-                    serviceNoticeVisible = true
-                }
-            }
+            footerActions
         }
         .padding(JMSpace.x5)
         .padding(.bottom, JMSpace.x2)
@@ -169,5 +163,20 @@ struct MatchDetailSheet: View {
             .frame(maxWidth: .infinity)
             .background(JMColor.ink100)
             .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
+    }
+
+    private var footerActions: some View {
+        GeometryReader { proxy in
+            let secondaryWidth = min(max(proxy.size.width * 0.38, 112), 142)
+            HStack(spacing: JMSpace.x3) {
+                JMButton("Not now", variant: .outline, fullWidth: true) { onClose() }
+                    .frame(width: secondaryWidth)
+                JMButton("Accept & notify wali",
+                         variant: .primary, fullWidth: true) {
+                    serviceNoticeVisible = true
+                }
+            }
+        }
+        .frame(height: 46)
     }
 }
