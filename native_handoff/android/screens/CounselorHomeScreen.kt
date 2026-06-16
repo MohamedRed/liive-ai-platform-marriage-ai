@@ -116,19 +116,7 @@ private fun ColumnScope.VoiceBody(connected: Boolean, onToggleConnect: () -> Uni
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(JMSpace.x6)) {
         JMBadge("AI MARRIAGE COUNSELOR", tone = JMBadgeTone.Cyan)
-        Box(
-            Modifier.size(164.dp).clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        listOf(
-                            JMColors.primary.copy(alpha = if (connected) 0.42f else 0.18f),
-                            JMColors.secondary.copy(alpha = if (connected) 0.18f else 0.08f),
-                            Color.Transparent,
-                        ),
-                    ),
-                ),
-            contentAlignment = Alignment.Center,
-        ) { JMVoiceBars(active = connected, tint = JMColors.primary, height = 66.dp) }
+        VoiceOrb(connected)
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 if (connected) "Listening..." else "Tap to start your session",
@@ -165,6 +153,33 @@ private fun ColumnScope.VoiceBody(connected: Boolean, onToggleConnect: () -> Uni
     Row(horizontalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
         shortcut(Modifier.weight(1f), Icons.Filled.Favorite, "Matches", "1 new") { onTab(AppTab.Matches) }
         shortcut(Modifier.weight(1f), Icons.Filled.Person, "Profile", "62%") { onTab(AppTab.Profile) }
+    }
+}
+
+@Composable
+private fun VoiceOrb(connected: Boolean) {
+    Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(174.dp).clip(CircleShape).background(
+                Brush.radialGradient(
+                    listOf(JMColors.secondary.copy(alpha = if (connected) 0.18f else 0.08f), Color.Transparent),
+                ),
+            ),
+        )
+        Box(
+            Modifier.size(132.dp).clip(CircleShape).background(
+                Brush.radialGradient(
+                    listOf(JMColors.primary.copy(alpha = if (connected) 0.32f else 0.14f), Color.Transparent),
+                ),
+            ),
+        )
+        Box(
+            Modifier.size(116.dp).clip(CircleShape).background(JMPalette.White.copy(alpha = 0.08f))
+                .border(1.dp, JMPalette.White.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            JMVoiceBars(active = connected, tint = JMColors.primary, height = if (connected) 66.dp else 48.dp)
+        }
     }
 }
 
