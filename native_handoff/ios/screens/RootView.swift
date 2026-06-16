@@ -26,7 +26,7 @@ struct RootView: View {
     var body: some View {
         ZStack {
             if visualScreen == .verification {
-                VerifyView()
+                VerifyView(autoFocus: false)
             } else if visualScreen == .chat {
                 ChatView()
             } else {

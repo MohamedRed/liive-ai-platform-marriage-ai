@@ -6,8 +6,13 @@ struct VerifyView: View {
     @State private var code: [String] = ["", "", "", ""]
     @State private var validationMessage: String? = nil
     @FocusState private var focused: Int?
+    private let autoFocus: Bool
 
     private var hasAllDigits: Bool { code.allSatisfy { $0.count == 1 } }
+
+    init(autoFocus: Bool = true) {
+        self.autoFocus = autoFocus
+    }
 
     var body: some View {
         ZStack {
@@ -76,12 +81,14 @@ struct VerifyView: View {
             }
             .padding(JMSpace.x5)
         }
-        .onAppear { focused = 0 }
+        .onAppear {
+            if autoFocus { focused = 0 }
+        }
     }
 
     private func otpBox(_ i: Int) -> some View {
         let filled = !code[i].isEmpty
-        let active = filled || focused == i
+        let active = filled || focused == i || (!autoFocus && i == 0)
         return TextField("", text: $code[i])
             .keyboardType(.numberPad)
             .multilineTextAlignment(.center)
