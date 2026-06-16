@@ -1,6 +1,13 @@
 name: Native visual capture
 
 on:
+  push:
+    branches:
+      - before-release
+      - "codex/**"
+    paths:
+      - ".github/workflows/native-visual-capture.yml"
+      - "native/scripts/capture-appetize-visual-state.mjs"
   workflow_dispatch:
     inputs:
       android_url:
@@ -14,7 +21,7 @@ on:
       screens:
         description: "Comma-separated visual screen keys"
         required: true
-        default: "match-detail"
+        default: "talk-active,talk-idle,talk-type,matches,match-detail,profile,verification,chat,wali,settings"
         type: string
 
 env:
@@ -47,6 +54,8 @@ jobs:
         env:
           APPETIZE_ANDROID_URL: ${{ inputs.android_url }}
           APPETIZE_IOS_URL: ${{ inputs.ios_url }}
+          APPETIZE_ANDROID_PUBLIC_KEY: ${{ secrets.APPETIZE_PUBLIC_KEY }}
+          APPETIZE_IOS_PUBLIC_KEY: ${{ secrets.APPETIZE_IOS_PUBLIC_KEY }}
           VISUAL_SCREENS: ${{ inputs.screens }}
           VISUAL_CAPTURE_DIR: native/build/visual-captures
         run: node native/scripts/capture-appetize-visual-state.mjs

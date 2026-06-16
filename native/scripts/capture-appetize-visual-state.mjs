@@ -2,13 +2,31 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
 
-const screens = (process.env.VISUAL_SCREENS || "match-detail")
+const defaultScreens = [
+  "talk-active",
+  "talk-idle",
+  "talk-type",
+  "matches",
+  "match-detail",
+  "profile",
+  "verification",
+  "chat",
+  "wali",
+  "settings",
+].join(",");
+const screens = (process.env.VISUAL_SCREENS || defaultScreens)
   .split(",")
   .map((screen) => screen.trim())
   .filter(Boolean);
 const outDir = process.env.VISUAL_CAPTURE_DIR || "native/build/visual-captures";
-const androidUrl = trimTrailingSlash(process.env.APPETIZE_ANDROID_URL || "");
-const iosUrl = trimTrailingSlash(process.env.APPETIZE_IOS_URL || "");
+const androidUrl = normalizeAppetizeUrl(
+  process.env.APPETIZE_ANDROID_URL || "",
+  process.env.APPETIZE_ANDROID_PUBLIC_KEY || "",
+);
+const iosUrl = normalizeAppetizeUrl(
+  process.env.APPETIZE_IOS_URL || "",
+  process.env.APPETIZE_IOS_PUBLIC_KEY || "",
+);
 const executablePath = process.env.CHROMIUM_EXECUTABLE || undefined;
 
 if (!androidUrl && !iosUrl) {
@@ -147,6 +165,14 @@ function waitMs(platform, screen) {
 
 function trimTrailingSlash(value) {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeAppetizeUrl(rawUrl, publicKey) {
+  const url = trimTrailingSlash(rawUrl.trim());
+  if (url) return url;
+
+  const key = publicKey.trim();
+  return key ? `https://appetize.io/app/${key}` : "";
 }
 
 function printSummary(results, summaryPath) {
