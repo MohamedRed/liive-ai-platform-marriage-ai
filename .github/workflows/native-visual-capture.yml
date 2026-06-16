@@ -1,0 +1,59 @@
+name: Native visual capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      android_url:
+        description: "Android Appetize app URL"
+        required: false
+        type: string
+      ios_url:
+        description: "iOS Appetize app URL"
+        required: false
+        type: string
+      screens:
+        description: "Comma-separated visual screen keys"
+        required: true
+        default: "match-detail"
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Capture Appetize visual states
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Capture visual states
+        env:
+          APPETIZE_ANDROID_URL: ${{ inputs.android_url }}
+          APPETIZE_IOS_URL: ${{ inputs.ios_url }}
+          VISUAL_SCREENS: ${{ inputs.screens }}
+          VISUAL_CAPTURE_DIR: native/build/visual-captures
+        run: node native/scripts/capture-appetize-visual-state.mjs
+
+      - name: Upload visual captures
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-visual-captures
+          path: native/build/visual-captures
+          if-no-files-found: error
