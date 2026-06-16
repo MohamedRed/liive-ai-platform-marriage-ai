@@ -148,12 +148,12 @@ private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
-            JMButton("Not now", onClick = onClose, variant = JMButtonVariant.Outline, modifier = Modifier.weight(1f))
+            JMButton("Not now", onClick = onClose, variant = JMButtonVariant.Outline, modifier = Modifier.weight(0.85f))
             JMButton(
                 "Accept & notify wali",
                 onClick = onAccept,
                 variant = JMButtonVariant.Primary,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1.25f),
             )
         }
     }
