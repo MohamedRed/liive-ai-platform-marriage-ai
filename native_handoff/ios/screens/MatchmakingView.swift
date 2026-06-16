@@ -137,23 +137,9 @@ struct MatchDetailSheet: View {
             .padding(.vertical, JMSpace.x2)
 
             if !waliNotificationAvailable {
-                Text(services.matching.acceptAndNotifyWali(prospect: prospect).message)
-                    .font(JMFont.sans(13, .semibold))
-                    .foregroundColor(JMColor.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(12)
-                    .frame(maxWidth: .infinity)
-                    .background(JMColor.ink100)
-                    .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
+                serviceNotice(services.matching.acceptAndNotifyWali(prospect: prospect).message)
             } else if serviceNoticeVisible {
-                Text("Acceptance is ready, but wali notification service is not connected yet.")
-                    .font(JMFont.sans(13, .semibold))
-                    .foregroundColor(JMColor.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(12)
-                    .frame(maxWidth: .infinity)
-                    .background(JMColor.ink100)
-                    .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
+                serviceNotice("Acceptance is ready, but wali notification service is not connected yet.")
             }
 
             HStack(spacing: JMSpace.x3) {
@@ -170,5 +156,18 @@ struct MatchDetailSheet: View {
         .background(JMColor.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .ignoresSafeArea(edges: .bottom)
+    }
+
+    private func serviceNotice(_ message: String) -> some View {
+        Text(message)
+            .font(JMFont.sans(13, .semibold))
+            .foregroundColor(JMColor.textSecondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(JMColor.ink100)
+            .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
     }
 }
