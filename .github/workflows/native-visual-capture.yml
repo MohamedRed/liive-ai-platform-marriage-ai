@@ -52,8 +52,8 @@ jobs:
 
       - name: Capture visual states
         env:
-          APPETIZE_ANDROID_URL: ${{ inputs.android_url }}
-          APPETIZE_IOS_URL: ${{ inputs.ios_url }}
+          APPETIZE_ANDROID_URL: ${{ inputs.android_url || vars.APPETIZE_ANDROID_URL }}
+          APPETIZE_IOS_URL: ${{ inputs.ios_url || vars.APPETIZE_IOS_URL }}
           APPETIZE_ANDROID_PUBLIC_KEY: ${{ secrets.APPETIZE_PUBLIC_KEY }}
           APPETIZE_IOS_PUBLIC_KEY: ${{ secrets.APPETIZE_IOS_PUBLIC_KEY }}
           VISUAL_SCREENS: ${{ inputs.screens }}

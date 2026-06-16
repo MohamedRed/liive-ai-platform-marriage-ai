@@ -72,13 +72,18 @@ Active GitHub Actions workflows are installed under `.github/workflows`:
 - `native-static.yml` runs the native validator, Android Gradle wrapper check, Android `assembleDebug`, macOS XcodeGen generation, iOS `xcodebuild`, and `git diff --check` on PRs/pushes touching `native/**`.
 - `android-appetize.yml` builds a debug APK, uploads it as an artifact, and uploads it to Appetize when `APPETIZE_API_TOKEN` is configured.
 - `ios-appetize.yml` builds and packages an iOS simulator `.app`, uploads it as an artifact, and uploads it to Appetize when `APPETIZE_API_TOKEN` is configured.
-- `native-visual-capture.yml` manually captures one or more Appetize visual launch states from supplied Android/iOS Appetize URLs and uploads the screenshots as an artifact.
+- `native-visual-capture.yml` captures one or more Appetize visual launch states from supplied Android/iOS Appetize URLs, or from repository variables on branch pushes, and uploads the screenshots as an artifact.
 
 Repository secrets:
 
 - `APPETIZE_API_TOKEN` enables Appetize upload for both platforms.
 - `APPETIZE_PUBLIC_KEY` updates an existing Android Appetize app.
 - `APPETIZE_IOS_PUBLIC_KEY` updates an existing iOS Appetize app.
+
+Repository variables:
+
+- `APPETIZE_ANDROID_URL` lets `native-visual-capture.yml` capture the latest Android Appetize build on branch pushes.
+- `APPETIZE_IOS_URL` lets `native-visual-capture.yml` capture the latest iOS Appetize build on branch pushes.
 
 ## Platform build requirements
 
