@@ -112,8 +112,8 @@ private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit
     )
     val services = PreviewJustMarriageServices.current
     val waliNotificationAvailable = services.matching.canNotifyWali
-    Column(Modifier.fillMaxWidth().padding(JMSpace.x5).padding(bottom = JMSpace.x6),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
+    Column(Modifier.fillMaxWidth().padding(JMSpace.x4).padding(bottom = JMSpace.x4),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
         Box(Modifier.fillMaxWidth()) {
             Box(
                 Modifier.align(Alignment.Center).size(width = 44.dp, height = 5.dp)
@@ -128,26 +128,26 @@ private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit
             }
         }
         Text("Best match · ${p.score}%", style = JMText.headingMd)
-        JMProgressRing(value = p.score.toFloat(), size = 130.dp, sublabel = "compatibility")
-        JMAvatar(locked = true, size = 56.dp)
+        JMProgressRing(value = p.score.toFloat(), size = 118.dp, sublabel = "compatibility")
+        JMAvatar(locked = true, size = 50.dp)
         Text("Photos stay private until you both accept. Your wali reviews this match with you.",
-            color = JMColors.textSecondary, fontSize = 14.sp, style = JMText.bodySm, textAlign = TextAlign.Center)
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            highlights.forEach { Text("•  $it", fontFamily = JMFontFamily.Sans, fontSize = 14.sp) }
+            color = JMColors.textSecondary, fontSize = 13.5.sp, style = JMText.bodySm, textAlign = TextAlign.Center)
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            highlights.forEach { Text("•  $it", fontFamily = JMFontFamily.Sans, fontSize = 13.5.sp) }
         }
         if (!waliNotificationAvailable) {
-            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(12.dp),
+            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
                 Text(services.matching.acceptAndNotifyWali(p).message(),
-                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
             }
         } else if (serviceNotice) {
-            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(12.dp),
+            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
                 Text("Acceptance is ready, but wali notification service is not connected yet.",
-                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
