@@ -13,6 +13,18 @@ The user-provided screenshots are the source of truth for the native UI. The iOS
 
 ## Screen requirements
 
+### Onboarding / role selection
+
+- Dark ink full-screen background.
+- Compact wordmark at top: `JUST` in white Anton, `MARRIAGE` hot pink inside cyan tag.
+- Large stacked Anton promise copy: `NO SWAP.`, `NO CHAT.`, and yellow-highlighted `NO DATE.`.
+- Body copy: `A calm, guided path to marriage — led by an AI counselor, kept halal by your wali.`
+- Body copy uses bundled Public Sans at medium/semibold visual weight with enough contrast to avoid the washed-out thin look seen in Android Appetize captures.
+- `I AM A…` label uses compact uppercase Public Sans with a bold/extrabold treatment.
+- Brother/Sister role cards are dark rounded rectangles with centered white person icon and label.
+- Primary `Create my profile` CTA is a full-width hot-pink pill and remains visibly disabled until a role is selected.
+- Bottom sign-in line remains compact Public Sans and secondary to the role-selection flow.
+
 ### Verification / OTP
 
 - Title: `VERIFICATION`.

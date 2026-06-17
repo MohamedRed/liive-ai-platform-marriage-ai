@@ -17,6 +17,10 @@ fun RootScreen(visualScreenKey: String? = null) {
     val visualScreen = remember(visualScreenKey) { VisualParityScreen.from(visualScreenKey) }
 
     JustMarriageTheme {
+        if (visualScreen == VisualParityScreen.Onboarding) {
+            OnboardingScreen {}
+            return@JustMarriageTheme
+        }
         if (visualScreen == VisualParityScreen.Verification) {
             VerifyScreen()
             return@JustMarriageTheme

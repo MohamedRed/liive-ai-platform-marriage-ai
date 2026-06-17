@@ -4,6 +4,7 @@ import { chromium } from "playwright";
 import { PNG } from "pngjs";
 
 const defaultScreens = [
+  "onboarding",
   "talk-active",
   "talk-idle",
   "talk-type",
@@ -214,7 +215,7 @@ function readFrameStats(buffer) {
 
 function frameLooksReady(platform, screen, stats) {
   if (!stats) return false;
-  if (screen.startsWith("talk-")) {
+  if (screen === "onboarding" || screen.startsWith("talk-")) {
     return stats.darkRatio > 0.45 && stats.saturatedRatio > 0.008;
   }
 

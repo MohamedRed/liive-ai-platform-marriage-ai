@@ -48,7 +48,7 @@ The script prints `APPETIZE_PUBLIC_KEY` and `APPETIZE_URL` on success. It refuse
 
 The debug/demo builds support explicit launch states for screenshot QA without changing the normal user entry path. Supported keys are:
 
-`talk-active`, `talk-idle`, `talk-type`, `matches`, `match-detail`, `profile`, `wali`, `verification`, `chat`, `settings`.
+`onboarding`, `talk-active`, `talk-idle`, `talk-type`, `matches`, `match-detail`, `profile`, `wali`, `verification`, `chat`, `settings`.
 
 Android:
 

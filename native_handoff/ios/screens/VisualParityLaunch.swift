@@ -1,6 +1,7 @@
 import Foundation
 
 enum VisualParityScreen: String {
+    case onboarding
     case talkActive = "talk-active"
     case talkIdle = "talk-idle"
     case talkType = "talk-type"
@@ -24,7 +25,7 @@ enum VisualParityScreen: String {
             return .wali
         case .settings:
             return .settings
-        case .verification, .chat:
+        case .onboarding, .verification, .chat:
             return nil
         }
     }

@@ -47,11 +47,12 @@ fun OnboardingScreen(onDone: () -> Unit) {
                     .padding(horizontal = 8.dp))
         }
         Text("A calm, guided path to marriage — led by an AI counselor, kept halal by your wali.",
-            color = JMPalette.White.copy(alpha = 0.85f), fontFamily = JMFontFamily.Sans, fontSize = 16.sp, lineHeight = 24.sp)
+            color = JMPalette.White.copy(alpha = 0.88f), fontFamily = JMFontFamily.Sans,
+            fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 24.sp)
 
         Column(verticalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
-            Text("I AM A…", color = JMPalette.White.copy(alpha = 0.7f), fontFamily = JMFontFamily.Sans,
-                fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text("I AM A…", color = JMPalette.White.copy(alpha = 0.78f), fontFamily = JMFontFamily.Sans,
+                fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
                 roleCard(Modifier.weight(1f), "brother", "Brother", role) { role = it }
                 roleCard(Modifier.weight(1f), "sister", "Sister", role) { role = it }
@@ -64,7 +65,8 @@ fun OnboardingScreen(onDone: () -> Unit) {
             size = JMButtonSize.Lg, pill = true, fullWidth = true, enabled = role != null,
             icon = Icons.AutoMirrored.Filled.ArrowForward)
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text("Already a member? Sign in", color = JMPalette.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            Text("Already a member? Sign in", color = JMPalette.White.copy(alpha = 0.7f),
+                fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Medium, fontSize = 13.sp)
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.justmarriage.app
 
 enum class VisualParityScreen(val key: String) {
+    Onboarding("onboarding"),
     TalkActive("talk-active"),
     TalkIdle("talk-idle"),
     TalkType("talk-type"),
@@ -19,7 +20,7 @@ enum class VisualParityScreen(val key: String) {
             Profile -> AppTab.Profile
             Wali -> AppTab.Wali
             Settings -> AppTab.Settings
-            Verification, Chat -> null
+            Onboarding, Verification, Chat -> null
         }
 
     companion object {

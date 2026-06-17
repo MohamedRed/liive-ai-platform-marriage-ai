@@ -25,7 +25,9 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            if visualScreen == .verification {
+            if visualScreen == .onboarding {
+                OnboardingView().environmentObject(app)
+            } else if visualScreen == .verification {
                 VerifyView(autoFocus: false)
             } else if visualScreen == .chat {
                 ChatView()
