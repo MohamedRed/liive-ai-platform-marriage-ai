@@ -7,6 +7,8 @@ on:
       - "codex/**"
     paths:
       - ".github/workflows/native-visual-capture.yml"
+      - "native/android/**"
+      - "native/ios/**"
       - "native/scripts/capture-appetize-visual-state.mjs"
   workflow_dispatch:
     inputs:

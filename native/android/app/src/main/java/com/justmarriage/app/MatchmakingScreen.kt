@@ -25,12 +25,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.justmarriage.design.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = false) {
     var showDetail by remember { mutableStateOf(initialDetail) }
     var serviceNotice by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Box(modifier.fillMaxSize().background(JMColors.surfacePage)) {
         Column(
@@ -69,11 +67,16 @@ fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = fa
         }
 
         if (showDetail) {
-            ModalBottomSheet(
-                onDismissRequest = { showDetail = false },
-                sheetState = sheetState,
-                containerColor = JMColors.surfaceCard,
-                scrimColor = JMColors.ink.copy(alpha = 0.42f),
+            Box(
+                Modifier.matchParentSize()
+                    .background(JMColors.ink.copy(alpha = 0.26f))
+                    .clickable { showDetail = false },
+            )
+            Box(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(JMColors.surfaceCard),
             ) {
                 MatchDetail(Mock.bestMatch, serviceNotice, onClose = { showDetail = false }) { serviceNotice = true }
             }
