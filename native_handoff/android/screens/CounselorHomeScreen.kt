@@ -3,6 +3,7 @@ package com.justmarriage.app
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -24,17 +26,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.justmarriage.design.*
 import kotlinx.coroutines.delay
 
-private enum class Mode { Voice, Text }
+enum class CounselorMode { Voice, Text }
 
 @Composable
-fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) {
-    var mode by remember { mutableStateOf(Mode.Voice) }
-    var connected by remember { mutableStateOf(true) }
+fun CounselorHomeScreen(
+    modifier: Modifier = Modifier,
+    initialMode: CounselorMode = CounselorMode.Voice,
+    initialConnected: Boolean = true,
+    onTab: (AppTab) -> Unit,
+) {
+    var mode by remember { mutableStateOf(initialMode) }
+    var connected by remember { mutableStateOf(initialConnected) }
+    var boundaryNotice by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier.fillMaxSize().background(JMColors.ink).padding(JMSpace.x5),
@@ -49,7 +58,24 @@ fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) 
                     modifier = Modifier.clip(JMShapes.xs).background(JMColors.secondary).padding(horizontal = 6.dp, vertical = 1.dp))
             }
             Spacer(Modifier.weight(1f))
-            Icon(Icons.Filled.Notifications, contentDescription = null, tint = JMPalette.White.copy(alpha = 0.8f))
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = "Notifications",
+                tint = JMPalette.White.copy(alpha = 0.8f),
+                modifier = Modifier.clickable {
+                    boundaryNotice = PreviewJustMarriageServices.current.notifications.openNotifications().message()
+                },
+            )
+        }
+
+        boundaryNotice?.let {
+            Text(
+                it,
+                color = JMPalette.White.copy(alpha = 0.72f),
+                fontFamily = JMFontFamily.Sans,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.End),
+            )
         }
 
         // Toggle
@@ -58,11 +84,11 @@ fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) 
                 .background(JMPalette.White.copy(alpha = 0.1f)).padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            toggleChip("Talk", Icons.Filled.Mic, mode == Mode.Voice) { mode = Mode.Voice }
-            toggleChip("Type", Icons.Filled.ChatBubble, mode == Mode.Text) { mode = Mode.Text }
+            toggleChip("Talk", Icons.Filled.Mic, mode == CounselorMode.Voice) { mode = CounselorMode.Voice }
+            toggleChip("Type", Icons.Filled.ChatBubble, mode == CounselorMode.Text) { mode = CounselorMode.Text }
         }
 
-        if (mode == Mode.Voice) {
+        if (mode == CounselorMode.Voice) {
             VoiceBody(connected, onToggleConnect = { connected = !connected }, onTab = onTab)
         } else {
             TextCounsel(Modifier.weight(1f))
@@ -89,22 +115,34 @@ private fun ColumnScope.VoiceBody(connected: Boolean, onToggleConnect: () -> Uni
     Spacer(Modifier.weight(1f))
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(JMSpace.x6)) {
-        JMBadge("AI marriage counselor", tone = JMBadgeTone.Cyan, uppercase = true)
-        Box(
-            Modifier.size(150.dp).clip(CircleShape)
-                .background(Brush.radialGradient(listOf(JMColors.primary.copy(alpha = 0.35f), JMColors.secondary.copy(alpha = 0.12f), Color.Transparent))),
-            contentAlignment = Alignment.Center,
-        ) { JMVoiceBars(active = connected, tint = JMColors.primary, height = 64.dp) }
-        Text(
-            if (connected) "“What matters most to you in a spouse?”" else "Tap to start your session",
-            color = JMPalette.White, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold,
-            fontSize = 19.sp, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 300.dp),
-        )
+        JMBadge("AI MARRIAGE COUNSELOR", tone = JMBadgeTone.Cyan)
+        VoiceOrb(connected)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                if (connected) "Listening..." else "Tap to start your session",
+                color = JMPalette.White,
+                fontFamily = JMFontFamily.Sans,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 22.sp,
+                textAlign = TextAlign.Center,
+            )
+            if (connected) Text(
+                "“What matters most to you in a spouse?”",
+                color = JMPalette.White.copy(alpha = 0.72f),
+                fontFamily = JMFontFamily.Sans,
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 300.dp),
+            )
+        }
         if (connected) {
-            Row(Modifier.clip(CircleShape).clickable(onClick = onToggleConnect)
-                .padding(horizontal = 22.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.Mic, null, tint = JMPalette.White, modifier = Modifier.size(18.dp))
+            Row(
+                Modifier.clip(CircleShape).border(1.5.dp, JMPalette.White.copy(alpha = 0.45f), CircleShape)
+                    .clickable(onClick = onToggleConnect).padding(horizontal = 22.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Icons.Filled.MicOff, null, tint = JMPalette.White, modifier = Modifier.size(18.dp))
                 Text("End session", color = JMPalette.White, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         } else {
@@ -115,6 +153,33 @@ private fun ColumnScope.VoiceBody(connected: Boolean, onToggleConnect: () -> Uni
     Row(horizontalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
         shortcut(Modifier.weight(1f), Icons.Filled.Favorite, "Matches", "1 new") { onTab(AppTab.Matches) }
         shortcut(Modifier.weight(1f), Icons.Filled.Person, "Profile", "62%") { onTab(AppTab.Profile) }
+    }
+}
+
+@Composable
+private fun VoiceOrb(connected: Boolean) {
+    Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(174.dp).clip(CircleShape).background(
+                Brush.radialGradient(
+                    listOf(JMColors.secondary.copy(alpha = if (connected) 0.18f else 0.08f), Color.Transparent),
+                ),
+            ),
+        )
+        Box(
+            Modifier.size(132.dp).clip(CircleShape).background(
+                Brush.radialGradient(
+                    listOf(JMColors.primary.copy(alpha = if (connected) 0.32f else 0.14f), Color.Transparent),
+                ),
+            ),
+        )
+        Box(
+            Modifier.size(116.dp).clip(CircleShape).background(JMPalette.White.copy(alpha = 0.08f))
+                .border(1.dp, JMPalette.White.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            JMVoiceBars(active = connected, tint = JMColors.primary, height = if (connected) 66.dp else 48.dp)
+        }
     }
 }
 
@@ -144,10 +209,18 @@ fun JMVoiceBars(active: Boolean, tint: Color, height: Dp, barCount: Int = 7) {
                     tween(900, delayMillis = (i % 4) * 120, easing = JMMotion.EaseOut), RepeatMode.Reverse),
                 label = "bar$i",
             )
-            Box(Modifier.width(8.dp).height(if (active) height * scale else height * 0.16f).clip(JMShapes.pill).background(tint))
+            val barHeight = if (active) height * scale else height * idleBarScale(i)
+            val barTint = if (active) tint else tint.copy(alpha = 0.82f)
+            Box(Modifier.width(8.dp).height(barHeight).clip(JMShapes.pill).background(barTint))
         }
     }
 }
+
+private fun idleBarScale(index: Int): Float {
+    return IdleBarScales[index % IdleBarScales.size]
+}
+
+private val IdleBarScales = listOf(0.32f, 0.44f, 0.36f, 0.52f, 0.36f, 0.44f, 0.32f)
 
 // Text conversation with the counselor.
 @Composable
@@ -204,7 +277,7 @@ private fun TextCounsel(modifier: Modifier = Modifier) {
             Box(Modifier.size(40.dp).clip(CircleShape).background(JMColors.primary).clickable {
                 val t = draft.trim(); if (t.isNotEmpty()) { thread = thread + Msg(true, t); draft = ""; typing = true }
             }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Send, null, tint = JMPalette.White, modifier = Modifier.size(19.dp))
+                Icon(Icons.AutoMirrored.Filled.Send, null, tint = JMPalette.White, modifier = Modifier.size(19.dp))
             }
         }
     }

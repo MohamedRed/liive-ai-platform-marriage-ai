@@ -3,6 +3,7 @@ import SwiftUI
 
 struct WaliView: View {
     @State private var showVerify = false
+    @State private var inviteNotice: String? = nil
 
     var body: some View {
         ZStack {
@@ -14,7 +15,7 @@ struct WaliView: View {
                     JMCard(variant: .tinted, tint: JMColor.cyan50) {
                         Image(systemName: "shield.lefthalf.filled").font(.system(size: 28)).foregroundColor(JMColor.cyan700)
                         Text("Your wali guides the process").font(JMFont.sans(17, .bold)).padding(.top, 4)
-                        Text("A trusted guardian who reviews matches with you and is notified at every step — keeping everything halal.")
+                        Text("A trusted guardian who reviews matches with you. Notification delivery is handled by the wali service once connected, keeping every step halal.")
                             .font(JMFont.sans(14)).foregroundColor(JMColor.cyan900).lineSpacing(3)
                     }
 
@@ -48,7 +49,20 @@ struct WaliView: View {
                     JMButton("Continue verification", variant: .primary, fullWidth: true, systemIcon: "person.text.rectangle.fill") {
                         showVerify = true
                     }
-                    JMButton("Invite a different wali", variant: .ghost, fullWidth: true, systemIcon: "person.badge.plus") {}
+                    JMButton("Invite a different wali", variant: .outline, fullWidth: true, systemIcon: "person.badge.plus") {
+                        inviteNotice = PreviewJustMarriageServices.current.wali.inviteDifferentWali().message
+                    }
+                    if let inviteNotice {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "info.circle.fill").foregroundColor(JMColor.amber500)
+                            Text(inviteNotice)
+                                .font(JMFont.sans(12.5, .semibold))
+                                .foregroundColor(JMColor.ink700)
+                        }
+                        .padding(12)
+                        .background(JMColor.amber50)
+                        .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
+                    }
                 }
                 .padding(JMSpace.gutter)
             }

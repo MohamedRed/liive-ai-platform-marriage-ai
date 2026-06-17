@@ -4,14 +4,26 @@ import SwiftUI
 struct CounselorHomeView: View {
     @EnvironmentObject var app: AppState
     enum Mode { case voice, text }
-    @State private var mode: Mode = .voice
-    @State private var connected = true
+    @State private var mode: Mode
+    @State private var listening: Bool
+    @State private var notificationNotice: String? = nil
+
+    init(initialMode: Mode = .voice, initialListening: Bool = true) {
+        _mode = State(initialValue: initialMode)
+        _listening = State(initialValue: initialListening)
+    }
 
     var body: some View {
         ZStack {
             JMColor.ink900.ignoresSafeArea()
             VStack(spacing: JMSpace.x4) {
                 header
+                if let notificationNotice {
+                    Text(notificationNotice)
+                        .font(JMFont.sans(12, .semibold))
+                        .foregroundColor(.white.opacity(0.72))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
                 toggle
                 if mode == .voice { voiceBody } else { TextCounselView() }
             }
@@ -21,14 +33,18 @@ struct CounselorHomeView: View {
 
     private var header: some View {
         HStack {
-            HStack(spacing: 5) {
-                Text("JUST").font(JMFont.display(22)).foregroundColor(.white)
-                Text("MARRIAGE").font(JMFont.display(18)).foregroundColor(JMColor.pink500)
-                    .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(JMColor.cyanBright).clipShape(RoundedRectangle(cornerRadius: 5))
-            }
+            JMBrandWordmark(compact: true)
             Spacer()
-            Image(systemName: "bell.fill").foregroundColor(.white.opacity(0.8))
+            Button {
+                notificationNotice = PreviewJustMarriageServices.current.notifications.openNotifications().message
+            } label: {
+                Image(systemName: "bell.fill")
+                    .foregroundColor(.white.opacity(0.88))
+                    .frame(width: 38, height: 38)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -46,37 +62,48 @@ struct CounselorHomeView: View {
         Button { withAnimation(JMMotion.easeOut) { mode = m } } label: {
             HStack(spacing: 6) { Image(systemName: icon); Text(label) }
                 .font(JMFont.sans(13, .bold))
-                .padding(.vertical, 7).padding(.horizontal, 16)
+                .padding(.vertical, 7).padding(.horizontal, 18)
                 .background(mode == m ? Color.white : .clear)
                 .foregroundColor(mode == m ? JMColor.ink900 : .white.opacity(0.75))
                 .clipShape(Capsule())
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
     }
 
     private var voiceBody: some View {
-        VStack(spacing: JMSpace.x6) {
-            Spacer()
-            JMBadge("AI marriage counselor", tone: .cyan, uppercased: true)
-            ZStack {
-                Circle()
-                    .fill(RadialGradient(colors: [JMColor.pink500.opacity(0.35), JMColor.cyanBright.opacity(0.12), .clear],
-                                         center: .center, startRadius: 6, endRadius: 90))
-                    .frame(width: 150, height: 150)
-                JMVoiceBars(active: connected, tint: JMColor.pink500, height: 64).frame(width: 110)
+        VStack(spacing: JMSpace.x5) {
+            Spacer(minLength: 28)
+            JMBadge("AI MARRIAGE COUNSELOR", tone: .cyan, uppercased: true)
+            voiceOrb
+            VStack(spacing: JMSpace.x2) {
+                Text(listening ? "Listening..." : "Tap to start your session")
+                    .font(JMFont.sans(22, .bold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                if listening {
+                    Text("“What matters most to you in a spouse?”")
+                        .font(JMFont.sans(16, .semibold))
+                        .foregroundColor(.white.opacity(0.68))
+                        .multilineTextAlignment(.center)
+                }
             }
-            Text(connected ? "“What matters most to you in a spouse?”" : "Tap to start your session")
-                .font(JMFont.sans(19, .semibold)).foregroundColor(.white)
-                .multilineTextAlignment(.center).frame(maxWidth: 300, minHeight: 56)
-            if connected {
-                Button { connected = false } label: {
-                    HStack(spacing: 8) { Image(systemName: "mic.fill"); Text("End session") }
-                        .font(JMFont.sans(14, .bold)).foregroundColor(.white)
-                        .padding(.vertical, 10).padding(.horizontal, 22)
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 1.5))
-                }.buttonStyle(.plain)
+            .frame(maxWidth: 310, minHeight: 72)
+
+            if listening {
+                Button { listening = false } label: {
+                    HStack(spacing: 8) { Image(systemName: "phone.down.fill"); Text("End session") }
+                        .font(JMFont.sans(14, .bold))
+                        .foregroundColor(.white)
+                        .padding(.vertical, 11).padding(.horizontal, 22)
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.34), lineWidth: 1.5))
+                }
+                .buttonStyle(.plain)
             } else {
-                JMButton("Start talking", variant: .primary, size: .lg, pill: true, systemIcon: "mic.fill") { connected = true }
+                JMButton("Start talking", variant: .primary, size: .lg, pill: true, systemIcon: "mic.fill") {
+                    listening = true
+                }
             }
+
             Spacer()
             HStack(spacing: JMSpace.x3) {
                 shortcut("heart.fill", "Matches", "1 new") { app.tab = .matches }
@@ -85,20 +112,41 @@ struct CounselorHomeView: View {
         }
     }
 
+    private var voiceOrb: some View {
+        ZStack {
+            Circle()
+                .fill(JMColor.cyanBright.opacity(listening ? 0.18 : 0.08))
+                .frame(width: 174, height: 174)
+                .blur(radius: 18)
+            Circle()
+                .fill(JMColor.pink500.opacity(listening ? 0.32 : 0.14))
+                .frame(width: 132, height: 132)
+                .blur(radius: 12)
+            Circle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 116, height: 116)
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+            JMVoiceBars(active: listening, tint: JMColor.pink500, height: listening ? 66 : 48)
+                .frame(width: 104)
+        }
+        .frame(width: 190, height: 190)
+    }
+
     private func shortcut(_ icon: String, _ label: String, _ sub: String, _ tap: @escaping () -> Void) -> some View {
         Button(action: tap) {
             HStack(spacing: 12) {
                 Image(systemName: icon).font(.system(size: 22)).foregroundColor(JMColor.cyanBright)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label).font(JMFont.sans(15, .bold)).foregroundColor(.white)
-                    Text(sub).font(JMFont.sans(12)).foregroundColor(.white.opacity(0.7))
+                    Text(sub).font(JMFont.sans(12, .semibold)).foregroundColor(.white.opacity(0.7))
                 }
                 Spacer()
             }
             .padding(14).frame(maxWidth: .infinity)
             .background(Color.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: JMRadius.lg))
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -110,12 +158,12 @@ struct TextCounselView: View {
     ]
     @State private var draft = ""
     @State private var typing = false
+    @State private var ri = 0
     private let replies = [
         "Thank you for sharing that. How important is it that they share your level of religious practice?",
         "Understood. And how do you both imagine sharing responsibilities at home, in light of Islamic guidance?",
         "That's helpful. When you picture family life, where do children fit into your plans?",
     ]
-    @State private var ri = 0
 
     var body: some View {
         VStack(spacing: JMSpace.x3) {
@@ -124,7 +172,8 @@ struct TextCounselView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(thread) { m in bubble(m).id(m.id) }
                         if typing { typingDots }
-                    }.padding(.vertical, 8)
+                    }
+                    .padding(.vertical, 8)
                 }
                 .onChange(of: thread.count) { _ in
                     if let last = thread.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
@@ -165,14 +214,16 @@ struct TextCounselView: View {
                 Image(systemName: "paperplane.fill").foregroundColor(.white)
                     .frame(width: 40, height: 40).background(JMColor.pink500).clipShape(Circle())
             }
+            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || typing)
+            .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
         }
         .padding(5).background(Color.white.opacity(0.12)).clipShape(Capsule())
     }
 
     private func send() {
-        let t = draft.trimmingCharacters(in: .whitespaces); guard !t.isEmpty else { return }
+        let t = draft.trimmingCharacters(in: .whitespacesAndNewlines); guard !t.isEmpty else { return }
         thread.append(.init(me: true, text: t)); draft = ""; typing = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             thread.append(.init(me: false, text: replies[ri % replies.count])); ri += 1; typing = false
         }
     }

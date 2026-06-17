@@ -40,6 +40,8 @@ public struct JMButton: View {
             HStack(spacing: 8) {
                 if let icon = systemIcon { Image(systemName: icon) }
                 Text(title).font(JMFont.sans(fontSize, .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
             }
             .frame(maxWidth: fullWidth ? .infinity : nil)
             .frame(height: height)
@@ -101,7 +103,7 @@ public struct JMBadge: View {
             .padding(.vertical, 4).padding(.horizontal, 11)
             .background(pair.bg)
             .foregroundColor(pair.fg)
-            .clipShape(RoundedRectangle(cornerRadius: JMRadius.xs, style: .continuous))
+            .clipShape(Capsule())
             .rotationEffect(.degrees(tilt ? -4 : 0))
     }
 }
@@ -123,7 +125,9 @@ public struct JMCard<Content: View>: View {
 
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: JMRadius.lg, style: .continuous)
-        return content()
+        return VStack(alignment: .leading, spacing: JMSpace.x3) {
+            content()
+        }
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(variant == .tinted ? tint : JMColor.surfaceCard)
@@ -177,7 +181,9 @@ public struct JMProgressRing: View {
                     .foregroundColor(JMColor.ink900)
                 if let s = sublabel {
                     Text(s.uppercased()).font(JMFont.sans(size * 0.1, .bold))
-                        .tracking(1).foregroundColor(JMColor.textTertiary)
+                        .tracking(1).lineLimit(1).minimumScaleFactor(0.62)
+                        .frame(maxWidth: size * 0.66)
+                        .foregroundColor(JMColor.textTertiary)
                 }
             }
         }
@@ -192,6 +198,7 @@ public struct JMVoiceBars: View {
     var barCount: Int = 7
     var tint: Color = JMColor.pink500
     var height: CGFloat = 80
+    private static let idleBarScales: [CGFloat] = [0.32, 0.44, 0.36, 0.52, 0.36, 0.44, 0.32]
     @State private var phase = false
 
     public init(active: Bool = true, barCount: Int = 7, tint: Color = JMColor.pink500, height: CGFloat = 80) {
@@ -202,7 +209,8 @@ public struct JMVoiceBars: View {
         HStack(spacing: 6) {
             ForEach(0..<barCount, id: \.self) { i in
                 Capsule().fill(tint)
-                    .frame(width: 8, height: active ? height * barScale(i) : height * 0.16)
+                    .frame(width: 8, height: active ? height * barScale(i) : height * idleBarScale(i))
+                    .opacity(active ? 1 : 0.82)
                     .animation(
                         active
                         ? .easeInOut(duration: 0.9).repeatForever().delay(Double(i % 4) * 0.12)
@@ -214,6 +222,9 @@ public struct JMVoiceBars: View {
         .onAppear { phase.toggle() }
     }
     private func barScale(_ i: Int) -> CGFloat { phase ? (i % 2 == 0 ? 1.0 : 0.5) : (i % 2 == 0 ? 0.3 : 0.9) }
+    private func idleBarScale(_ i: Int) -> CGFloat {
+        Self.idleBarScales[i % Self.idleBarScales.count]
+    }
 }
 
 // MARK: - ScaleRating (1–10 importance)

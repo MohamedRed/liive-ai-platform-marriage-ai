@@ -44,6 +44,27 @@ Optional environment variables:
 
 The script prints `APPETIZE_PUBLIC_KEY` and `APPETIZE_URL` on success. It refuses to upload when `APPETIZE_API_TOKEN` is missing, so credentials are never faked or embedded in the repo.
 
+## Visual parity launch states
+
+The debug/demo builds support explicit launch states for screenshot QA without changing the normal user entry path. Supported keys are:
+
+`onboarding`, `talk-active`, `talk-idle`, `talk-type`, `matches`, `match-detail`, `profile`, `wali`, `verification`, `chat`, `settings`.
+
+Android:
+
+```bash
+adb shell am start -n com.justmarriage/.app.MainActivity --es visual_screen match-detail
+adb shell am start -a android.intent.action.VIEW -d "justmarriage://visual?screen=chat"
+```
+
+iOS simulator:
+
+```bash
+xcrun simctl launch booted com.liive.justmarriage --args -visual-screen talk-type
+```
+
+These states are only navigation fixtures for visual QA; service actions still use the explicit preview blockers until production integrations are wired.
+
 ## CI
 
 Active GitHub Actions workflows are installed under `.github/workflows`:
@@ -51,12 +72,18 @@ Active GitHub Actions workflows are installed under `.github/workflows`:
 - `native-static.yml` runs the native validator, Android Gradle wrapper check, Android `assembleDebug`, macOS XcodeGen generation, iOS `xcodebuild`, and `git diff --check` on PRs/pushes touching `native/**`.
 - `android-appetize.yml` builds a debug APK, uploads it as an artifact, and uploads it to Appetize when `APPETIZE_API_TOKEN` is configured.
 - `ios-appetize.yml` builds and packages an iOS simulator `.app`, uploads it as an artifact, and uploads it to Appetize when `APPETIZE_API_TOKEN` is configured.
+- `native-visual-capture.yml` captures one or more Appetize visual launch states from supplied Android/iOS Appetize URLs, or from repository variables on branch pushes, and uploads the screenshots as an artifact.
 
 Repository secrets:
 
 - `APPETIZE_API_TOKEN` enables Appetize upload for both platforms.
 - `APPETIZE_PUBLIC_KEY` updates an existing Android Appetize app.
 - `APPETIZE_IOS_PUBLIC_KEY` updates an existing iOS Appetize app.
+
+Repository variables:
+
+- `APPETIZE_ANDROID_URL` lets `native-visual-capture.yml` capture the latest Android Appetize build on branch pushes.
+- `APPETIZE_IOS_URL` lets `native-visual-capture.yml` capture the latest iOS Appetize build on branch pushes.
 
 ## Platform build requirements
 

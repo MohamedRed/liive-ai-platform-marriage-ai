@@ -42,7 +42,7 @@ fun ChatScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
     var callNotice by remember { mutableStateOf<String?>(null) }
     val canSend = draft.trim().isNotEmpty()
 
-    Column(modifier.fillMaxSize().background(JMColors.surfacePage)) {
+    Column(modifier.fillMaxSize().background(JMPalette.White)) {
         Row(
             Modifier.fillMaxWidth().background(JMColors.surfaceCard).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -103,10 +103,12 @@ fun ChatScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
             }
             Box(
                 Modifier.size(40.dp).clip(CircleShape)
-                    .background(if (canSend) JMColors.primary else JMPalette.Ink200)
-                    .clickable(enabled = canSend) {
-                        msgs = msgs + Msg(true, draft.trim())
-                        draft = ""
+                    .background(JMColors.primary)
+                    .clickable {
+                        if (canSend) {
+                            msgs = msgs + Msg(true, draft.trim())
+                            draft = ""
+                        }
                     },
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.AutoMirrored.Filled.Send, null, tint = JMPalette.White, modifier = Modifier.size(19.dp)) }

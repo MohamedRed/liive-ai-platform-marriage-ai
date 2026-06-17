@@ -32,12 +32,17 @@ import androidx.compose.ui.unit.sp
 import com.justmarriage.design.*
 import kotlinx.coroutines.delay
 
-private enum class Mode { Voice, Text }
+enum class CounselorMode { Voice, Text }
 
 @Composable
-fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) {
-    var mode by remember { mutableStateOf(Mode.Voice) }
-    var connected by remember { mutableStateOf(true) }
+fun CounselorHomeScreen(
+    modifier: Modifier = Modifier,
+    initialMode: CounselorMode = CounselorMode.Voice,
+    initialConnected: Boolean = true,
+    onTab: (AppTab) -> Unit,
+) {
+    var mode by remember { mutableStateOf(initialMode) }
+    var connected by remember { mutableStateOf(initialConnected) }
     var boundaryNotice by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -79,11 +84,11 @@ fun CounselorHomeScreen(modifier: Modifier = Modifier, onTab: (AppTab) -> Unit) 
                 .background(JMPalette.White.copy(alpha = 0.1f)).padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            toggleChip("Talk", Icons.Filled.Mic, mode == Mode.Voice) { mode = Mode.Voice }
-            toggleChip("Type", Icons.Filled.ChatBubble, mode == Mode.Text) { mode = Mode.Text }
+            toggleChip("Talk", Icons.Filled.Mic, mode == CounselorMode.Voice) { mode = CounselorMode.Voice }
+            toggleChip("Type", Icons.Filled.ChatBubble, mode == CounselorMode.Text) { mode = CounselorMode.Text }
         }
 
-        if (mode == Mode.Voice) {
+        if (mode == CounselorMode.Voice) {
             VoiceBody(connected, onToggleConnect = { connected = !connected }, onTab = onTab)
         } else {
             TextCounsel(Modifier.weight(1f))
@@ -111,19 +116,7 @@ private fun ColumnScope.VoiceBody(connected: Boolean, onToggleConnect: () -> Uni
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(JMSpace.x6)) {
         JMBadge("AI MARRIAGE COUNSELOR", tone = JMBadgeTone.Cyan)
-        Box(
-            Modifier.size(164.dp).clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        listOf(
-                            JMColors.primary.copy(alpha = if (connected) 0.42f else 0.18f),
-                            JMColors.secondary.copy(alpha = if (connected) 0.18f else 0.08f),
-                            Color.Transparent,
-                        ),
-                    ),
-                ),
-            contentAlignment = Alignment.Center,
-        ) { JMVoiceBars(active = connected, tint = JMColors.primary, height = 66.dp) }
+        VoiceOrb(connected)
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 if (connected) "Listening..." else "Tap to start your session",
@@ -164,6 +157,33 @@ private fun ColumnScope.VoiceBody(connected: Boolean, onToggleConnect: () -> Uni
 }
 
 @Composable
+private fun VoiceOrb(connected: Boolean) {
+    Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(174.dp).clip(CircleShape).background(
+                Brush.radialGradient(
+                    listOf(JMColors.secondary.copy(alpha = if (connected) 0.18f else 0.08f), Color.Transparent),
+                ),
+            ),
+        )
+        Box(
+            Modifier.size(132.dp).clip(CircleShape).background(
+                Brush.radialGradient(
+                    listOf(JMColors.primary.copy(alpha = if (connected) 0.32f else 0.14f), Color.Transparent),
+                ),
+            ),
+        )
+        Box(
+            Modifier.size(116.dp).clip(CircleShape).background(JMPalette.White.copy(alpha = 0.08f))
+                .border(1.dp, JMPalette.White.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            JMVoiceBars(active = connected, tint = JMColors.primary, height = if (connected) 66.dp else 48.dp)
+        }
+    }
+}
+
+@Composable
 private fun shortcut(modifier: Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, sub: String, onClick: () -> Unit) {
     Row(
         modifier.clip(JMShapes.lg).background(JMPalette.White.copy(alpha = 0.08f)).clickable(onClick = onClick).padding(14.dp),
@@ -189,10 +209,18 @@ fun JMVoiceBars(active: Boolean, tint: Color, height: Dp, barCount: Int = 7) {
                     tween(900, delayMillis = (i % 4) * 120, easing = JMMotion.EaseOut), RepeatMode.Reverse),
                 label = "bar$i",
             )
-            Box(Modifier.width(8.dp).height(if (active) height * scale else height * 0.16f).clip(JMShapes.pill).background(tint))
+            val barHeight = if (active) height * scale else height * idleBarScale(i)
+            val barTint = if (active) tint else tint.copy(alpha = 0.82f)
+            Box(Modifier.width(8.dp).height(barHeight).clip(JMShapes.pill).background(barTint))
         }
     }
 }
+
+private fun idleBarScale(index: Int): Float {
+    return IdleBarScales[index % IdleBarScales.size]
+}
+
+private val IdleBarScales = listOf(0.32f, 0.44f, 0.36f, 0.52f, 0.36f, 0.44f, 0.32f)
 
 // Text conversation with the counselor.
 @Composable

@@ -11,6 +11,8 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parent
+WORKSPACE_ROOT = ROOT.parent
+HANDOFF_ROOT = WORKSPACE_ROOT / "native_handoff"
 ANDROID_DESIGN_FILES = ["Color.kt", "Components.kt", "Dimens.kt", "Shape.kt", "Theme.kt", "Type.kt"]
 ANDROID_SCREEN_FILES = [
     "ChatScreen.kt",
@@ -23,6 +25,7 @@ ANDROID_SCREEN_FILES = [
     "Services.kt",
     "SettingsScreen.kt",
     "VerifyScreen.kt",
+    "VisualParityLaunch.kt",
     "WaliScreen.kt",
 ]
 IOS_DESIGN_FILES = ["Components.swift", "JMColor.swift", "JMFont.swift", "JMTheme.swift"]
@@ -36,6 +39,7 @@ IOS_SCREEN_FILES = [
     "RootView.swift",
     "SettingsView.swift",
     "VerifyView.swift",
+    "VisualParityLaunch.swift",
     "WaliView.swift",
 ]
 
@@ -85,6 +89,11 @@ REQUIRED = [
     ],
     *[ROOT / "ios/JustMarriage/Design" / name for name in IOS_DESIGN_FILES],
     *[ROOT / "ios/JustMarriage/Screens" / name for name in IOS_SCREEN_FILES],
+    *[HANDOFF_ROOT / "android" / name for name in ANDROID_DESIGN_FILES],
+    *[HANDOFF_ROOT / "android/screens" / name for name in ANDROID_SCREEN_FILES],
+    *[HANDOFF_ROOT / "ios" / name for name in IOS_DESIGN_FILES],
+    HANDOFF_ROOT / "ios/Services.swift",
+    *[HANDOFF_ROOT / "ios/screens" / name for name in IOS_SCREEN_FILES],
 ]
 
 missing = [path.relative_to(ROOT) for path in REQUIRED if not path.exists()]
@@ -96,8 +105,8 @@ if missing:
 
 # Ensure generated app sources still carry the intended product entry points.
 checks = {
-    ROOT / "android/app/src/main/AndroidManifest.xml": [".app.MainActivity", "@mipmap/ic_launcher", "@mipmap/ic_launcher_round", "@string/app_name"],
-    ROOT / "android/app/src/main/java/com/justmarriage/app/MainActivity.kt": ["ComponentActivity", "RootScreen()"],
+    ROOT / "android/app/src/main/AndroidManifest.xml": [".app.MainActivity", "@mipmap/ic_launcher", "@mipmap/ic_launcher_round", "@string/app_name", "justmarriage"],
+    ROOT / "android/app/src/main/java/com/justmarriage/app/MainActivity.kt": ["ComponentActivity", "visual_screen", "RootScreen(visualScreenKey = visualScreen)"],
     ROOT / "android/app/src/main/java/com/justmarriage/app/RootScreen.kt": [
         "JustMarriageTheme",
         "OnboardingScreen",
@@ -112,6 +121,7 @@ checks = {
     ROOT / "ios/JustMarriage/Info.plist": ["UIAppFonts", "Anton-Regular.ttf", "PublicSans[wght].ttf"],
     ROOT / "ios/JustMarriage/Screens/RootView.swift": [
         "TabView",
+        "VisualParityLaunch.processScreen()",
         "OnboardingView",
         "CounselorHomeView",
         "MatchmakingView",
@@ -161,7 +171,10 @@ FORBIDDEN_STRINGS = [
     "Acceptance saved locally",
     "is notified at every step",
 ]
+GENERATED_DIRS = {".gradle", ".kotlin", "build", "DerivedData"}
 for path in ROOT.rglob("*"):
+    if any(part in GENERATED_DIRS for part in path.relative_to(ROOT).parts):
+        continue
     if not path.is_file() or path.suffix not in {".kt", ".swift", ".md"}:
         continue
     text = path.read_text(encoding="utf-8")
@@ -181,8 +194,8 @@ for path, pattern in otp_initializers.items():
 
 service_boundary_checks = {
     ROOT / "ios/JustMarriage/Screens/MatchmakingView.swift": [
-        "private var waliNotificationAvailable: Bool { services.matching.canNotifyWali }",
-        ".disabled(!waliNotificationAvailable)",
+        "@Binding var acceptanceNotice: String?",
+        "acceptanceNotice = services.matching.acceptAndNotifyWali(prospect: prospect).message",
         "services.matching.acceptAndNotifyWali(prospect: prospect).message",
     ],
     ROOT / "ios/JustMarriage/Services.swift": [
@@ -197,8 +210,8 @@ service_boundary_checks = {
         "Wali notification service is required before this acceptance can be sent.",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/MatchmakingScreen.kt": [
-        "val waliNotificationAvailable = services.matching.canNotifyWali",
-        "enabled = waliNotificationAvailable",
+        "var acceptanceNotice by remember { mutableStateOf<String?>(null) }",
+        "private fun MatchDetail(p: Prospect, acceptanceNotice: String?, onClose: () -> Unit, onAccept: (String) -> Unit)",
         "services.matching.acceptAndNotifyWali(p).message()",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/Services.kt": [
@@ -225,6 +238,44 @@ for path, needles in service_boundary_checks.items():
         if needle not in text:
             print(f"{path.relative_to(ROOT)} is missing service-boundary marker: {needle}")
             sys.exit(1)
+
+mirror_pairs = [
+    *[
+        (
+            ROOT / "android/app/src/main/java/com/justmarriage/design" / name,
+            HANDOFF_ROOT / "android" / name,
+        )
+        for name in ANDROID_DESIGN_FILES
+    ],
+    *[
+        (
+            ROOT / "android/app/src/main/java/com/justmarriage/app" / name,
+            HANDOFF_ROOT / "android/screens" / name,
+        )
+        for name in ANDROID_SCREEN_FILES
+    ],
+    *[
+        (
+            ROOT / "ios/JustMarriage/Design" / name,
+            HANDOFF_ROOT / "ios" / name,
+        )
+        for name in IOS_DESIGN_FILES
+    ],
+    (ROOT / "ios/JustMarriage/Services.swift", HANDOFF_ROOT / "ios/Services.swift"),
+    *[
+        (
+            ROOT / "ios/JustMarriage/Screens" / name,
+            HANDOFF_ROOT / "ios/screens" / name,
+        )
+        for name in IOS_SCREEN_FILES
+    ],
+]
+for source, mirror in mirror_pairs:
+    if source.read_bytes() != mirror.read_bytes():
+        source_name = source.relative_to(WORKSPACE_ROOT)
+        mirror_name = mirror.relative_to(WORKSPACE_ROOT)
+        print(f"Handoff mirror drift: {mirror_name} must match {source_name}")
+        sys.exit(1)
 
 for path in ROOT.rglob("*"):
     if path.is_file() and path.suffix in {".kt", ".swift"}:

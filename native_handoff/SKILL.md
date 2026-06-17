@@ -18,9 +18,9 @@ private until both members — and their walis — accept.
    copywriting, color usage and the visual rules. Get this right before writing UI.
 2. **Pick your platform folder and follow its `SKILL.md`:**
    - `ios/SKILL.md` — SwiftUI. Drop-in files: `JMColor.swift`, `JMTheme.swift`,
-     `JMFont.swift`, `Components.swift`.
+     `JMFont.swift`, `Components.swift`, `Services.swift`.
    - `android/SKILL.md` — Jetpack Compose / Material 3. Drop-in files: `Color.kt`,
-     `Theme.kt`, `Type.kt`, `Dimens.kt`, `Shape.kt`, `Components.kt`.
+     `Theme.kt`, `Type.kt`, `Dimens.kt`, `Shape.kt`, `Components.kt`, `Services.kt`.
 3. **Use the tokens, never raw values.** Reference `JMColor.primary` / `JMTheme.colors.primary`,
    not `#F5269B`. The hex literals live in exactly one file per platform.
 4. **Match the component contracts** in `components.md` — the same props/states exist on
@@ -51,12 +51,12 @@ native_handoff/
 ├── design-tokens.json    ← platform-agnostic token reference (W3C format)
 ├── ios/                  ← SwiftUI implementation
 │   ├── SKILL.md
-│   ├── JMColor.swift  JMTheme.swift  JMFont.swift  Components.swift
+│   ├── JMColor.swift  JMTheme.swift  JMFont.swift  Components.swift  Services.swift
 │   └── screens/         ← all 9 product screens + RootView (entry)
 └── android/             ← Jetpack Compose implementation
     ├── SKILL.md
     ├── Color.kt  Theme.kt  Type.kt  Dimens.kt  Shape.kt  Components.kt
-    └── screens/         ← all 9 product screens + RootScreen (entry)
+    └── screens/         ← service contracts + all 9 product screens + RootScreen (entry)
 ```
 
 > Fonts are currently the Google-Fonts substitutes **Anton** (display) and **Public Sans**

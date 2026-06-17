@@ -113,9 +113,8 @@ Purpose: load prospects and accept matches with wali checks.
 
 Required production operations:
 
-- `canNotifyWali`
-  - Derived from server-side state: verified user, active wali, match availability, disclosure rules.
 - `acceptAndNotifyWali(prospect)`
+  - Derives server-side eligibility from verified user, active wali, match availability, and disclosure rules.
   - Accepts a match only if server rules allow it.
   - Notifies wali and records an audit event.
 

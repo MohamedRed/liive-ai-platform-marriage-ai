@@ -17,50 +17,83 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.justmarriage.design.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatchmakingScreen(modifier: Modifier = Modifier) {
-    var showDetail by remember { mutableStateOf(false) }
-    var serviceNotice by remember { mutableStateOf(false) }
-
-    Column(modifier.fillMaxSize().background(JMColors.surfacePage).verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
-
-        SectionHeader("Matches") { JMBadge("1 new", tone = JMBadgeTone.Pink, soft = true, uppercase = true) }
-
-        JMCard(variant = JMCardVariant.Hard) {
-            JMBadge("BEST MATCH YET", tone = JMBadgeTone.Ink, tilt = true)
-            Spacer(Modifier.height(JMSpace.x2))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
-                JMProgressRing(value = Mock.bestMatch.score.toFloat(), size = 104.dp, sublabel = "match")
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    JMAvatar(locked = true, size = 44.dp)
-                    Text(Mock.bestMatch.label, style = JMText.headingSm)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Filled.LocationOn, null, tint = JMColors.textSecondary, modifier = Modifier.size(14.dp))
-                        Text(Mock.bestMatch.city, color = JMColors.textSecondary, fontSize = 13.sp)
-                    }
-                }
-            }
-            Spacer(Modifier.height(JMSpace.x4))
-            JMButton("Review match", onClick = { showDetail = true }, variant = JMButtonVariant.Primary, fullWidth = true)
-        }
-
-        Text("SEARCHING FOR A 99% MATCH", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans,
-            fontWeight = FontWeight.Bold, fontSize = 13.sp)
-
-        Mock.prospects.take(2).forEach { p -> ProspectRow(p) }
+fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = false) {
+    var showDetail by remember { mutableStateOf(initialDetail) }
+    var acceptanceNotice by remember { mutableStateOf<String?>(null) }
+    val closeDetail = {
+        acceptanceNotice = null
+        showDetail = false
     }
 
-    if (showDetail) {
-        ModalBottomSheet(onDismissRequest = { showDetail = false }, containerColor = JMColors.surfaceCard) {
-            MatchDetail(Mock.bestMatch, serviceNotice, onClose = { showDetail = false }) { serviceNotice = true }
+    Box(modifier.fillMaxSize().background(JMColors.surfacePage)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .blur(if (showDetail) 4.dp else 0.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(JMSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(JMSpace.x5),
+        ) {
+
+            SectionHeader("Matches") { JMBadge("1 new", tone = JMBadgeTone.Pink, soft = true, uppercase = true) }
+
+            JMCard(variant = JMCardVariant.Hard) {
+                JMBadge("BEST MATCH YET", tone = JMBadgeTone.Ink, tilt = true)
+                Spacer(Modifier.height(JMSpace.x2))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
+                    JMProgressRing(value = Mock.bestMatch.score.toFloat(), size = 104.dp, sublabel = "match")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        JMAvatar(locked = true, size = 48.dp)
+                        Text(Mock.bestMatch.label, style = JMText.headingSm)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Filled.LocationOn, null, tint = JMColors.textSecondary, modifier = Modifier.size(14.dp))
+                            Text(Mock.bestMatch.city, color = JMColors.textSecondary, fontSize = 13.sp)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(JMSpace.x4))
+                JMButton(
+                    "Review match",
+                    onClick = {
+                        acceptanceNotice = null
+                        showDetail = true
+                    },
+                    variant = JMButtonVariant.Primary,
+                    fullWidth = true,
+                )
+            }
+
+            Text("SEARCHING FOR A 99% MATCH", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans,
+                fontWeight = FontWeight.Bold, fontSize = 13.sp)
+
+            Mock.prospects.take(2).forEach { p -> ProspectRow(p) }
+        }
+
+        if (showDetail) {
+            Box(
+                Modifier.matchParentSize()
+                    .background(JMColors.ink.copy(alpha = 0.26f))
+                    .clickable { closeDetail() },
+            )
+            Box(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(JMColors.surfaceCard),
+            ) {
+                MatchDetail(Mock.bestMatch, acceptanceNotice, onClose = closeDetail) {
+                    acceptanceNotice = it
+                }
+            }
         }
     }
 }
@@ -85,52 +118,51 @@ private fun ProspectRow(p: Prospect) {
 }
 
 @Composable
-private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit, onAccept: () -> Unit) {
+private fun MatchDetail(p: Prospect, acceptanceNotice: String?, onClose: () -> Unit, onAccept: (String) -> Unit) {
     val highlights = listOf(
         "Both practising, family-oriented",
         "Wants children in 1–2 years",
         "Open to relocating within UK",
     )
     val services = PreviewJustMarriageServices.current
-    val waliNotificationAvailable = services.matching.canNotifyWali
-    Column(Modifier.fillMaxWidth().padding(JMSpace.x5).padding(bottom = JMSpace.x6),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
-        Box(Modifier.size(width = 44.dp, height = 5.dp).clip(JMShapes.pill).background(JMPalette.Ink200))
-        Box(Modifier.align(Alignment.End).size(34.dp).clip(CircleShape).background(JMPalette.Ink100).clickable(onClick = onClose),
-            contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Close, "Close", tint = JMColors.textSecondary, modifier = Modifier.size(18.dp))
+    Column(Modifier.fillMaxWidth().padding(JMSpace.x4).padding(bottom = JMSpace.x4),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
+        Box(Modifier.fillMaxWidth()) {
+            Box(
+                Modifier.align(Alignment.Center).size(width = 44.dp, height = 5.dp)
+                    .clip(JMShapes.pill).background(JMPalette.Ink200),
+            )
+            Box(
+                Modifier.align(Alignment.CenterEnd).size(34.dp).clip(CircleShape)
+                    .background(JMPalette.Ink100).clickable(onClick = onClose),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Close, "Close", tint = JMColors.textSecondary, modifier = Modifier.size(18.dp))
+            }
         }
         Text("Best match · ${p.score}%", style = JMText.headingMd)
-        JMProgressRing(value = p.score.toFloat(), size = 130.dp, sublabel = "compatibility")
-        JMAvatar(locked = true, size = 56.dp)
+        JMProgressRing(value = p.score.toFloat(), size = 118.dp, sublabel = "compatibility")
+        JMAvatar(locked = true, size = 50.dp)
         Text("Photos stay private until you both accept. Your wali reviews this match with you.",
-            color = JMColors.textSecondary, fontSize = 14.sp, style = JMText.bodySm)
-        if (!waliNotificationAvailable) {
-            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
-                Text(services.matching.acceptAndNotifyWali(p).message(),
-                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            }
-        } else if (serviceNotice) {
-            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
-                Text("Acceptance is ready, but wali notification service is not connected yet.",
-                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            }
+            color = JMColors.textSecondary, fontSize = 13.5.sp, style = JMText.bodySm, textAlign = TextAlign.Center)
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            highlights.forEach { Text("•  $it", fontFamily = JMFontFamily.Sans, fontSize = 13.5.sp) }
         }
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            highlights.forEach { Text("•  $it", fontFamily = JMFontFamily.Sans, fontSize = 14.sp) }
+        acceptanceNotice?.let {
+            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
+                Text(it,
+                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
-            JMButton("Not now", onClick = onClose, variant = JMButtonVariant.Outline, modifier = Modifier.weight(1f))
+            JMButton("Not now", onClick = onClose, variant = JMButtonVariant.Outline, modifier = Modifier.weight(0.85f))
             JMButton(
                 "Accept & notify wali",
-                onClick = onAccept,
+                onClick = { onAccept(services.matching.acceptAndNotifyWali(p).message()) },
                 variant = JMButtonVariant.Primary,
-                modifier = Modifier.weight(1f),
-                enabled = waliNotificationAvailable,
+                modifier = Modifier.weight(1.25f),
             )
         }
     }

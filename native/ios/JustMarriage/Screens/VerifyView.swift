@@ -6,8 +6,13 @@ struct VerifyView: View {
     @State private var code: [String] = ["", "", "", ""]
     @State private var validationMessage: String? = nil
     @FocusState private var focused: Int?
+    private let autoFocus: Bool
 
     private var hasAllDigits: Bool { code.allSatisfy { $0.count == 1 } }
+
+    init(autoFocus: Bool = true) {
+        self.autoFocus = autoFocus
+    }
 
     var body: some View {
         ZStack {
@@ -28,7 +33,7 @@ struct VerifyView: View {
                     }
                 }
 
-                JMBadge("STEP 1 OF 2 · PHONE", tone: .pink, soft: true, uppercased: true)
+                JMBadge("STEP 1 OF 2 · PHONE", tone: .pink, uppercased: true)
                     .padding(.top, JMSpace.x2)
                 Text("Verify your phone").font(JMFont.headingLG)
                 Text("Enter the 4-digit code we sent to +44 7•• ••• 204")
@@ -76,21 +81,24 @@ struct VerifyView: View {
             }
             .padding(JMSpace.x5)
         }
-        .onAppear { focused = 1 }
+        .onAppear {
+            if autoFocus { focused = 0 }
+        }
     }
 
     private func otpBox(_ i: Int) -> some View {
         let filled = !code[i].isEmpty
+        let active = filled || focused == i || (!autoFocus && i == 0)
         return TextField("", text: $code[i])
             .keyboardType(.numberPad)
             .multilineTextAlignment(.center)
             .font(JMFont.display(30))
-            .foregroundColor(filled ? JMColor.white : JMColor.ink900)
+            .foregroundColor(active ? JMColor.white : JMColor.ink900)
             .frame(height: 64)
             .frame(maxWidth: .infinity)
-            .background(filled ? JMColor.pink500 : JMColor.surfaceCard)
+            .background(active ? JMColor.pink500 : JMColor.surfaceCard)
             .overlay(RoundedRectangle(cornerRadius: JMRadius.md)
-                .strokeBorder(filled ? JMColor.pink500 : JMColor.ink200, lineWidth: 2))
+                .strokeBorder(active ? JMColor.pink500 : JMColor.ink200, lineWidth: 2))
             .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
             .focused($focused, equals: i)
             .onChange(of: code[i]) { value in

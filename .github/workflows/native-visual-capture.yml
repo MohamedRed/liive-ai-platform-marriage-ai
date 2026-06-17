@@ -1,0 +1,70 @@
+name: Native visual capture
+
+on:
+  push:
+    branches:
+      - before-release
+      - "codex/**"
+    paths:
+      - ".github/workflows/native-visual-capture.yml"
+      - "native/android/**"
+      - "native/ios/**"
+      - "native/scripts/capture-appetize-visual-state.mjs"
+  workflow_dispatch:
+    inputs:
+      android_url:
+        description: "Android Appetize app URL"
+        required: false
+        type: string
+      ios_url:
+        description: "iOS Appetize app URL"
+        required: false
+        type: string
+      screens:
+        description: "Comma-separated visual screen keys"
+        required: true
+        default: "onboarding,talk-active,talk-idle,talk-type,matches,match-detail,profile,verification,chat,wali,settings"
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Capture Appetize visual states
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install Playwright
+        run: |
+          npm install --prefix native/scripts --no-save --no-package-lock playwright pngjs
+          native/scripts/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Capture visual states
+        env:
+          APPETIZE_ANDROID_URL: ${{ inputs.android_url || vars.APPETIZE_ANDROID_URL }}
+          APPETIZE_IOS_URL: ${{ inputs.ios_url || vars.APPETIZE_IOS_URL }}
+          APPETIZE_ANDROID_PUBLIC_KEY: ${{ secrets.APPETIZE_PUBLIC_KEY }}
+          APPETIZE_IOS_PUBLIC_KEY: ${{ secrets.APPETIZE_IOS_PUBLIC_KEY }}
+          VISUAL_SCREENS: ${{ inputs.screens }}
+          VISUAL_CAPTURE_DIR: native/build/visual-captures
+        run: node native/scripts/capture-appetize-visual-state.mjs
+
+      - name: Upload visual captures
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-visual-captures
+          path: native/build/visual-captures
+          if-no-files-found: error

@@ -6,7 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -36,14 +36,23 @@ fun OnboardingScreen(onDone: () -> Unit) {
 
         Spacer(Modifier.weight(1f))
 
-        Text("NO SWAP.\nNO CHAT.\nNO DATE.", fontFamily = JMFontFamily.Display, fontSize = 46.sp,
-            color = JMPalette.White, lineHeight = 44.sp)
+        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            Text("NO SWAP.", fontFamily = JMFontFamily.Display, fontSize = 46.sp,
+                color = JMPalette.White, lineHeight = 44.sp)
+            Text("NO CHAT.", fontFamily = JMFontFamily.Display, fontSize = 46.sp,
+                color = JMPalette.White, lineHeight = 44.sp)
+            Text("NO DATE.", fontFamily = JMFontFamily.Display, fontSize = 46.sp,
+                color = JMColors.ink, lineHeight = 44.sp,
+                modifier = Modifier.clip(JMShapes.sm).background(JMPalette.Yellow400)
+                    .padding(horizontal = 8.dp))
+        }
         Text("A calm, guided path to marriage — led by an AI counselor, kept halal by your wali.",
-            color = JMPalette.White.copy(alpha = 0.85f), fontFamily = JMFontFamily.Sans, fontSize = 16.sp, lineHeight = 24.sp)
+            color = JMPalette.White.copy(alpha = 0.88f), fontFamily = JMFontFamily.Sans,
+            fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 24.sp)
 
         Column(verticalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
-            Text("I AM A…", color = JMPalette.White.copy(alpha = 0.7f), fontFamily = JMFontFamily.Sans,
-                fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text("I AM A…", color = JMPalette.White.copy(alpha = 0.78f), fontFamily = JMFontFamily.Sans,
+                fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
                 roleCard(Modifier.weight(1f), "brother", "Brother", role) { role = it }
                 roleCard(Modifier.weight(1f), "sister", "Sister", role) { role = it }
@@ -53,9 +62,11 @@ fun OnboardingScreen(onDone: () -> Unit) {
         Spacer(Modifier.weight(1f))
 
         JMButton("Create my profile", onClick = onDone, variant = JMButtonVariant.Primary,
-            size = JMButtonSize.Lg, pill = true, fullWidth = true, enabled = role != null)
+            size = JMButtonSize.Lg, pill = true, fullWidth = true, enabled = role != null,
+            icon = Icons.AutoMirrored.Filled.ArrowForward)
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text("Already a member? Sign in", color = JMPalette.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            Text("Already a member? Sign in", color = JMPalette.White.copy(alpha = 0.7f),
+                fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Medium, fontSize = 13.sp)
         }
     }
 }

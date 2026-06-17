@@ -6,6 +6,7 @@ Native Android implementation for Just Marriage using Jetpack Compose and the `n
 
 - `app/src/main/java/com/justmarriage/app/MainActivity.kt`
 - `RootScreen()` renders the onboarding gate and bottom navigation tabs.
+- Visual QA can launch a specific state with `adb shell am start -n com.justmarriage/.app.MainActivity --es visual_screen chat` or `justmarriage://visual?screen=match-detail`.
 
 ## Build
 

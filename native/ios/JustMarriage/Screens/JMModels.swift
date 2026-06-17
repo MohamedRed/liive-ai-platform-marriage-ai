@@ -12,9 +12,8 @@ enum AppTab: Hashable { case talk, matches, profile, wali, settings }
 
 /// Lightweight app-wide state for the demo (navigation + sample data).
 final class AppState: ObservableObject {
-    @Published var tab: AppTab = .talk
-    @Published var onboarded = false
-    @Published var matchAcceptanceNeedsWaliService = false
+    @Published var tab: AppTab
+    @Published var onboarded: Bool
 
     let bestMatch = Prospect(label: "Sister · 27", city: "London, UK", score: 99)
     let prospects = [
@@ -22,6 +21,11 @@ final class AppState: ObservableObject {
         Prospect(label: "Sister · 29", city: "Birmingham", score: 88),
         Prospect(label: "Sister · 26", city: "Leeds", score: 84),
     ]
+
+    init(initialTab: AppTab = .talk, onboarded: Bool = false) {
+        self.tab = initialTab
+        self.onboarded = onboarded
+    }
 }
 
 // Small reusable section header (Anton, uppercase).

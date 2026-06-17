@@ -3,7 +3,12 @@ import SwiftUI
 
 struct MatchmakingView: View {
     @EnvironmentObject var app: AppState
-    @State private var showDetail = false
+    @State private var showDetail: Bool
+    @State private var acceptanceNotice: String? = nil
+
+    init(initialShowDetail: Bool = false) {
+        _showDetail = State(initialValue: initialShowDetail)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -36,7 +41,10 @@ struct MatchmakingView: View {
                         }
                         Spacer()
                     }.padding(.top, 6)
-                    JMButton("Review match", variant: .primary, fullWidth: true) { showDetail = true }
+                    JMButton("Review match", variant: .primary, fullWidth: true) {
+                        acceptanceNotice = nil
+                        showDetail = true
+                    }
                         .padding(.top, JMSpace.x4)
                 }
 
@@ -55,8 +63,12 @@ struct MatchmakingView: View {
         ZStack(alignment: .bottom) {
             Color.black.opacity(0.26)
                 .ignoresSafeArea()
-                .onTapGesture { showDetail = false }
-            MatchDetailSheet(prospect: app.bestMatch, serviceNoticeVisible: $app.matchAcceptanceNeedsWaliService) {
+                .onTapGesture {
+                    acceptanceNotice = nil
+                    showDetail = false
+                }
+            MatchDetailSheet(prospect: app.bestMatch, acceptanceNotice: $acceptanceNotice) {
+                acceptanceNotice = nil
                 showDetail = false
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -85,7 +97,7 @@ struct MatchmakingView: View {
 
 struct MatchDetailSheet: View {
     let prospect: Prospect
-    @Binding var serviceNoticeVisible: Bool
+    @Binding var acceptanceNotice: String?
     let onClose: () -> Void
 
     private let highlights: [(String, String)] = [
@@ -94,7 +106,6 @@ struct MatchDetailSheet: View {
         ("map.fill", "Open to relocating within UK"),
     ]
     private var services: JustMarriageServices { PreviewJustMarriageServices.current }
-    private var waliNotificationAvailable: Bool { services.matching.canNotifyWali }
 
     var body: some View {
         VStack(spacing: JMSpace.x4) {
@@ -132,35 +143,11 @@ struct MatchDetailSheet: View {
             }
             .padding(.vertical, JMSpace.x2)
 
-            if !waliNotificationAvailable {
-                Text(services.matching.acceptAndNotifyWali(prospect: prospect).message)
-                    .font(JMFont.sans(13, .semibold))
-                    .foregroundColor(JMColor.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(12)
-                    .frame(maxWidth: .infinity)
-                    .background(JMColor.ink100)
-                    .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
-            } else if serviceNoticeVisible {
-                Text("Acceptance is ready, but wali notification service is not connected yet.")
-                    .font(JMFont.sans(13, .semibold))
-                    .foregroundColor(JMColor.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(12)
-                    .frame(maxWidth: .infinity)
-                    .background(JMColor.ink100)
-                    .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
+            if let acceptanceNotice {
+                serviceNotice(acceptanceNotice)
             }
 
-            HStack(spacing: JMSpace.x3) {
-                JMButton("Not now", variant: .outline, fullWidth: true) { onClose() }
-                JMButton("Accept & notify wali",
-                         variant: .primary, fullWidth: true) {
-                    serviceNoticeVisible = true
-                }
-                .disabled(!waliNotificationAvailable)
-                .opacity(waliNotificationAvailable ? 1 : 0.55)
-            }
+            footerActions
         }
         .padding(JMSpace.x5)
         .padding(.bottom, JMSpace.x2)
@@ -168,5 +155,33 @@ struct MatchDetailSheet: View {
         .background(JMColor.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .ignoresSafeArea(edges: .bottom)
+    }
+
+    private func serviceNotice(_ message: String) -> some View {
+        Text(message)
+            .font(JMFont.sans(13, .semibold))
+            .foregroundColor(JMColor.textSecondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(JMColor.ink100)
+            .clipShape(RoundedRectangle(cornerRadius: JMRadius.md))
+    }
+
+    private var footerActions: some View {
+        GeometryReader { proxy in
+            let secondaryWidth = min(max(proxy.size.width * 0.38, 112), 142)
+            HStack(spacing: JMSpace.x3) {
+                JMButton("Not now", variant: .outline, fullWidth: true) { onClose() }
+                    .frame(width: secondaryWidth)
+                JMButton("Accept & notify wali",
+                         variant: .primary, fullWidth: true) {
+                    acceptanceNotice = services.matching.acceptAndNotifyWali(prospect: prospect).message
+                }
+            }
+        }
+        .frame(height: 46)
     }
 }

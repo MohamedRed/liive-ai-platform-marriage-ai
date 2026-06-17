@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/native-static.yml"
       - "native/**"
+      - "native_handoff/**"
   push:
     branches:
       - before-release
@@ -12,6 +13,7 @@ on:
     paths:
       - ".github/workflows/native-static.yml"
       - "native/**"
+      - "native_handoff/**"
   workflow_dispatch:
 
 permissions:

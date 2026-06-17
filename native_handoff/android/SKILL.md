@@ -88,6 +88,7 @@ your module). Add after the token/component files:
 |---|---|
 | `RootScreen.kt` | `Scaffold` + bottom `NavigationBar` + onboarding gate. **Entry point — call `RootScreen()`.** |
 | `Models.kt` | `Prospect`, `AppTab`, `Mock` data. |
+| `Services.kt` | Explicit service contracts and preview blockers for production wiring boundaries. |
 | `OnboardingScreen.kt` | Intent + brother/sister. |
 | `CounselorHomeScreen.kt` | Voice home **with Talk / Type toggle** + text conversation + `JMVoiceBars`. |
 | `MatchmakingScreen.kt` | Best 99% match + list; `ModalBottomSheet` detail; shared `SectionHeader`. |

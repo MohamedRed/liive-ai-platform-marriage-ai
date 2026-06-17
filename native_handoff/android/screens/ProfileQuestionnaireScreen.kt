@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -24,6 +26,7 @@ import com.justmarriage.design.*
 @Composable
 fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
     var rating by remember { mutableStateOf<Int?>(8) }
+    var savedMessage by remember { mutableStateOf<String?>(null) }
     val sections = listOf(
         "Personal & family background" to "done",
         "Religious understanding" to "done",
@@ -32,14 +35,17 @@ fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
         "Finances & lifestyle" to "todo",
     )
 
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
+    Column(
+        modifier.fillMaxSize().background(JMColors.surfacePage).verticalScroll(rememberScrollState())
+            .padding(horizontal = JMSpace.gutter, vertical = JMSpace.x4),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
 
         SectionHeader("Profile")
 
         // Progress card
         Column(Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMColors.surfaceCard)
-            .border(1.dp, JMColors.borderSubtle, JMShapes.lg).padding(JMSpace.x4),
+            .border(1.dp, JMColors.borderSubtle, JMShapes.lg).padding(JMSpace.x3),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth()) {
                 Text("62% complete", fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -52,21 +58,33 @@ fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        // Current question
-        JMCard(variant = JMCardVariant.Tinted, tint = JMPalette.Pink50) {
+        JMCard(variant = JMCardVariant.Tinted, tint = JMPalette.Pink50, padding = 14.dp) {
             Text("ROLES & RESPONSIBILITIES", color = JMPalette.Pink700, fontFamily = JMFontFamily.Sans,
-                fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            Spacer(Modifier.height(6.dp))
+                fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+            Spacer(Modifier.height(4.dp))
             Text("How important is it that household responsibilities follow Islamic guidance?",
-                fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 17.sp, lineHeight = 23.sp)
-            Spacer(Modifier.height(JMSpace.x4))
-            JMScaleRating(value = rating, onChange = { rating = it }, lowLabel = "Flexible", highLabel = "Essential")
-            Spacer(Modifier.height(JMSpace.x3))
-            JMButton("Save & continue", onClick = {}, variant = JMButtonVariant.Ink, fullWidth = true)
+                fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, lineHeight = 21.sp)
+            Spacer(Modifier.height(JMSpace.x2))
+            JMScaleRating(value = rating, onChange = { rating = it; savedMessage = null }, lowLabel = "Flexible", highLabel = "Essential")
+            Spacer(Modifier.height(JMSpace.x2))
+            JMButton("Save & continue", onClick = {
+                savedMessage = rating?.let {
+                    PreviewJustMarriageServices.current.profile
+                        .saveQuestionnaireAnswer("roles_responsibilities", it)
+                        .message()
+                }
+            }, variant = JMButtonVariant.Ink, fullWidth = true, enabled = rating != null,
+                icon = Icons.AutoMirrored.Filled.ArrowForward)
+            savedMessage?.let {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.CloudDone, null, tint = JMColors.success, modifier = Modifier.size(18.dp))
+                    Text(it, color = JMColors.textSecondary, fontFamily = JMFontFamily.Sans, fontSize = 12.5.sp)
+                }
+            }
         }
 
         Text("SECTIONS", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        Column(verticalArrangement = Arrangement.spacedBy(JMSpace.x2)) {
+        Column(verticalArrangement = Arrangement.spacedBy(JMSpace.x1)) {
             sections.forEach { (title, state) -> SectionRow(title, state) }
         }
     }
@@ -78,7 +96,7 @@ private fun SectionRow(title: String, state: String) {
     Row(
         Modifier.fillMaxWidth().clip(JMShapes.md).background(JMColors.surfaceCard)
             .border(1.5.dp, if (active) JMColors.primary else JMColors.borderSubtle, JMShapes.md)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(

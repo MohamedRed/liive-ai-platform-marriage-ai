@@ -82,10 +82,10 @@ fun WaliScreen(modifier: Modifier = Modifier) {
 
         JMButton("Continue verification", onClick = {
             showVerify = true
-        }, variant = JMButtonVariant.Primary, fullWidth = true)
+        }, variant = JMButtonVariant.Primary, fullWidth = true, icon = Icons.Filled.Badge)
         JMButton("Invite a different wali", onClick = {
             boundaryNotice = PreviewJustMarriageServices.current.wali.inviteDifferentWali().message()
-        }, variant = JMButtonVariant.Ghost, fullWidth = true)
+        }, variant = JMButtonVariant.Outline, fullWidth = true, icon = Icons.Filled.PersonAdd)
     }
 }
 

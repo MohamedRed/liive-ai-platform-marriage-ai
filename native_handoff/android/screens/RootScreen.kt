@@ -13,10 +13,25 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.justmarriage.design.*
 
 @Composable
-fun RootScreen() {
+fun RootScreen(visualScreenKey: String? = null) {
+    val visualScreen = remember(visualScreenKey) { VisualParityScreen.from(visualScreenKey) }
+
     JustMarriageTheme {
-        var tab by remember { mutableStateOf(AppTab.Talk) }
-        var onboarded by remember { mutableStateOf(false) }
+        if (visualScreen == VisualParityScreen.Onboarding) {
+            OnboardingScreen {}
+            return@JustMarriageTheme
+        }
+        if (visualScreen == VisualParityScreen.Verification) {
+            VerifyScreen()
+            return@JustMarriageTheme
+        }
+        if (visualScreen == VisualParityScreen.Chat) {
+            ChatScreen()
+            return@JustMarriageTheme
+        }
+
+        var tab by remember { mutableStateOf(visualScreen?.tab ?: AppTab.Talk) }
+        var onboarded by remember { mutableStateOf(visualScreen != null) }
 
         Scaffold(
             containerColor = JMColors.surfacePage,
@@ -32,8 +47,12 @@ fun RootScreen() {
         ) { pad ->
             val mod = Modifier.padding(pad)
             when (tab) {
-                AppTab.Talk -> CounselorHomeScreen(mod) { tab = it }
-                AppTab.Matches -> MatchmakingScreen(mod)
+                AppTab.Talk -> CounselorHomeScreen(
+                    mod,
+                    initialMode = if (visualScreen == VisualParityScreen.TalkType) CounselorMode.Text else CounselorMode.Voice,
+                    initialConnected = visualScreen != VisualParityScreen.TalkIdle,
+                ) { tab = it }
+                AppTab.Matches -> MatchmakingScreen(mod, initialDetail = visualScreen == VisualParityScreen.MatchDetail)
                 AppTab.Profile -> ProfileQuestionnaireScreen(mod)
                 AppTab.Wali -> WaliScreen(mod)
                 AppTab.Settings -> SettingsScreen(mod)
