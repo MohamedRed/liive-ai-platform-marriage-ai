@@ -4,6 +4,7 @@ import SwiftUI
 struct MatchmakingView: View {
     @EnvironmentObject var app: AppState
     @State private var showDetail: Bool
+    @State private var acceptanceNotice: String? = nil
 
     init(initialShowDetail: Bool = false) {
         _showDetail = State(initialValue: initialShowDetail)
@@ -40,7 +41,10 @@ struct MatchmakingView: View {
                         }
                         Spacer()
                     }.padding(.top, 6)
-                    JMButton("Review match", variant: .primary, fullWidth: true) { showDetail = true }
+                    JMButton("Review match", variant: .primary, fullWidth: true) {
+                        acceptanceNotice = nil
+                        showDetail = true
+                    }
                         .padding(.top, JMSpace.x4)
                 }
 
@@ -59,8 +63,12 @@ struct MatchmakingView: View {
         ZStack(alignment: .bottom) {
             Color.black.opacity(0.26)
                 .ignoresSafeArea()
-                .onTapGesture { showDetail = false }
-            MatchDetailSheet(prospect: app.bestMatch, serviceNoticeVisible: $app.matchAcceptanceNeedsWaliService) {
+                .onTapGesture {
+                    acceptanceNotice = nil
+                    showDetail = false
+                }
+            MatchDetailSheet(prospect: app.bestMatch, acceptanceNotice: $acceptanceNotice) {
+                acceptanceNotice = nil
                 showDetail = false
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -89,7 +97,7 @@ struct MatchmakingView: View {
 
 struct MatchDetailSheet: View {
     let prospect: Prospect
-    @Binding var serviceNoticeVisible: Bool
+    @Binding var acceptanceNotice: String?
     let onClose: () -> Void
 
     private let highlights: [(String, String)] = [
@@ -98,7 +106,6 @@ struct MatchDetailSheet: View {
         ("map.fill", "Open to relocating within UK"),
     ]
     private var services: JustMarriageServices { PreviewJustMarriageServices.current }
-    private var waliNotificationAvailable: Bool { services.matching.canNotifyWali }
 
     var body: some View {
         VStack(spacing: JMSpace.x4) {
@@ -136,10 +143,8 @@ struct MatchDetailSheet: View {
             }
             .padding(.vertical, JMSpace.x2)
 
-            if !waliNotificationAvailable {
-                serviceNotice(services.matching.acceptAndNotifyWali(prospect: prospect).message)
-            } else if serviceNoticeVisible {
-                serviceNotice("Acceptance is ready, but wali notification service is not connected yet.")
+            if let acceptanceNotice {
+                serviceNotice(acceptanceNotice)
             }
 
             footerActions
@@ -173,7 +178,7 @@ struct MatchDetailSheet: View {
                     .frame(width: secondaryWidth)
                 JMButton("Accept & notify wali",
                          variant: .primary, fullWidth: true) {
-                    serviceNoticeVisible = true
+                    acceptanceNotice = services.matching.acceptAndNotifyWali(prospect: prospect).message
                 }
             }
         }

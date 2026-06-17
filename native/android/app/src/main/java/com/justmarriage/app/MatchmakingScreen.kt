@@ -28,7 +28,11 @@ import com.justmarriage.design.*
 @Composable
 fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = false) {
     var showDetail by remember { mutableStateOf(initialDetail) }
-    var serviceNotice by remember { mutableStateOf(false) }
+    var acceptanceNotice by remember { mutableStateOf<String?>(null) }
+    val closeDetail = {
+        acceptanceNotice = null
+        showDetail = false
+    }
 
     Box(modifier.fillMaxSize().background(JMColors.surfacePage)) {
         Column(
@@ -57,7 +61,15 @@ fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = fa
                     }
                 }
                 Spacer(Modifier.height(JMSpace.x4))
-                JMButton("Review match", onClick = { showDetail = true }, variant = JMButtonVariant.Primary, fullWidth = true)
+                JMButton(
+                    "Review match",
+                    onClick = {
+                        acceptanceNotice = null
+                        showDetail = true
+                    },
+                    variant = JMButtonVariant.Primary,
+                    fullWidth = true,
+                )
             }
 
             Text("SEARCHING FOR A 99% MATCH", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans,
@@ -70,7 +82,7 @@ fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = fa
             Box(
                 Modifier.matchParentSize()
                     .background(JMColors.ink.copy(alpha = 0.26f))
-                    .clickable { showDetail = false },
+                    .clickable { closeDetail() },
             )
             Box(
                 Modifier.align(Alignment.BottomCenter)
@@ -78,7 +90,9 @@ fun MatchmakingScreen(modifier: Modifier = Modifier, initialDetail: Boolean = fa
                     .clip(RoundedCornerShape(30.dp))
                     .background(JMColors.surfaceCard),
             ) {
-                MatchDetail(Mock.bestMatch, serviceNotice, onClose = { showDetail = false }) { serviceNotice = true }
+                MatchDetail(Mock.bestMatch, acceptanceNotice, onClose = closeDetail) {
+                    acceptanceNotice = it
+                }
             }
         }
     }
@@ -104,14 +118,13 @@ private fun ProspectRow(p: Prospect) {
 }
 
 @Composable
-private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit, onAccept: () -> Unit) {
+private fun MatchDetail(p: Prospect, acceptanceNotice: String?, onClose: () -> Unit, onAccept: (String) -> Unit) {
     val highlights = listOf(
         "Both practising, family-oriented",
         "Wants children in 1–2 years",
         "Open to relocating within UK",
     )
     val services = PreviewJustMarriageServices.current
-    val waliNotificationAvailable = services.matching.canNotifyWali
     Column(Modifier.fillMaxWidth().padding(JMSpace.x4).padding(bottom = JMSpace.x4),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(JMSpace.x3)) {
         Box(Modifier.fillMaxWidth()) {
@@ -135,18 +148,11 @@ private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             highlights.forEach { Text("•  $it", fontFamily = JMFontFamily.Sans, fontSize = 13.5.sp) }
         }
-        if (!waliNotificationAvailable) {
+        acceptanceNotice?.let {
             Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
-                Text(services.matching.acceptAndNotifyWali(p).message(),
-                    color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
-            }
-        } else if (serviceNotice) {
-            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Ink100).padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Filled.CheckCircle, null, tint = JMColors.textSecondary, modifier = Modifier.size(20.dp))
-                Text("Acceptance is ready, but wali notification service is not connected yet.",
+                Text(it,
                     color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
             }
         }
@@ -154,7 +160,7 @@ private fun MatchDetail(p: Prospect, serviceNotice: Boolean, onClose: () -> Unit
             JMButton("Not now", onClick = onClose, variant = JMButtonVariant.Outline, modifier = Modifier.weight(0.85f))
             JMButton(
                 "Accept & notify wali",
-                onClick = onAccept,
+                onClick = { onAccept(services.matching.acceptAndNotifyWali(p).message()) },
                 variant = JMButtonVariant.Primary,
                 modifier = Modifier.weight(1.25f),
             )

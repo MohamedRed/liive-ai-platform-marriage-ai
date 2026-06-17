@@ -171,7 +171,10 @@ FORBIDDEN_STRINGS = [
     "Acceptance saved locally",
     "is notified at every step",
 ]
+GENERATED_DIRS = {".gradle", ".kotlin", "build", "DerivedData"}
 for path in ROOT.rglob("*"):
+    if any(part in GENERATED_DIRS for part in path.relative_to(ROOT).parts):
+        continue
     if not path.is_file() or path.suffix not in {".kt", ".swift", ".md"}:
         continue
     text = path.read_text(encoding="utf-8")
@@ -191,8 +194,8 @@ for path, pattern in otp_initializers.items():
 
 service_boundary_checks = {
     ROOT / "ios/JustMarriage/Screens/MatchmakingView.swift": [
-        "private var waliNotificationAvailable: Bool { services.matching.canNotifyWali }",
-        "serviceNoticeVisible = true",
+        "@Binding var acceptanceNotice: String?",
+        "acceptanceNotice = services.matching.acceptAndNotifyWali(prospect: prospect).message",
         "services.matching.acceptAndNotifyWali(prospect: prospect).message",
     ],
     ROOT / "ios/JustMarriage/Services.swift": [
@@ -207,8 +210,8 @@ service_boundary_checks = {
         "Wali notification service is required before this acceptance can be sent.",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/MatchmakingScreen.kt": [
-        "val waliNotificationAvailable = services.matching.canNotifyWali",
-        "MatchDetail(Mock.bestMatch, serviceNotice, onClose = { showDetail = false }) { serviceNotice = true }",
+        "var acceptanceNotice by remember { mutableStateOf<String?>(null) }",
+        "private fun MatchDetail(p: Prospect, acceptanceNotice: String?, onClose: () -> Unit, onAccept: (String) -> Unit)",
         "services.matching.acceptAndNotifyWali(p).message()",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/Services.kt": [

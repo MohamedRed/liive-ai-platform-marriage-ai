@@ -28,7 +28,6 @@ protocol ProfileService {
 }
 
 protocol MatchingService {
-    var canNotifyWali: Bool { get }
     func acceptAndNotifyWali(prospect: Prospect) -> JMServiceResult
 }
 
@@ -85,8 +84,6 @@ private struct PreviewProfileService: ProfileService {
 }
 
 private struct PreviewMatchingService: MatchingService {
-    let canNotifyWali = false
-
     func acceptAndNotifyWali(prospect: Prospect) -> JMServiceResult {
         .blocked("Wali notification service is required before this acceptance can be sent.")
     }

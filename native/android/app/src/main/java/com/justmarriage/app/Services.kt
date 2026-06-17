@@ -19,7 +19,6 @@ interface ProfileService {
 }
 
 interface MatchingService {
-    val canNotifyWali: Boolean
     fun acceptAndNotifyWali(prospect: Prospect): JMServiceResult
 }
 
@@ -63,7 +62,6 @@ object PreviewJustMarriageServices {
             )
         },
         matching = object : MatchingService {
-            override val canNotifyWali = false
             override fun acceptAndNotifyWali(prospect: Prospect) = JMServiceResult.Blocked(
                 "Wali notification service is required before this acceptance can be sent.",
             )

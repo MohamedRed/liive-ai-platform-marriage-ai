@@ -14,7 +14,6 @@ enum AppTab: Hashable { case talk, matches, profile, wali, settings }
 final class AppState: ObservableObject {
     @Published var tab: AppTab
     @Published var onboarded: Bool
-    @Published var matchAcceptanceNeedsWaliService = false
 
     let bestMatch = Prospect(label: "Sister · 27", city: "London, UK", score: 99)
     let prospects = [
