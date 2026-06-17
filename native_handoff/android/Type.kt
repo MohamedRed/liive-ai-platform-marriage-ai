@@ -3,9 +3,11 @@
 package com.justmarriage.design
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -14,14 +16,21 @@ import com.justmarriage.R
 object JMFontFamily {
     val Display = FontFamily(Font(R.font.anton_regular, FontWeight.Normal))
     val Sans = FontFamily(
-        Font(R.font.public_sans, FontWeight.Normal),
-        Font(R.font.public_sans, FontWeight.Medium),
-        Font(R.font.public_sans, FontWeight.SemiBold),
-        Font(R.font.public_sans, FontWeight.Bold),
-        Font(R.font.public_sans, FontWeight.ExtraBold),
-        Font(R.font.public_sans, FontWeight.Black),
+        publicSans(FontWeight.Normal, 400),
+        publicSans(FontWeight.Medium, 500),
+        publicSans(FontWeight.SemiBold, 600),
+        publicSans(FontWeight.Bold, 700),
+        publicSans(FontWeight.ExtraBold, 800),
+        publicSans(FontWeight.Black, 900),
     )
 }
+
+@OptIn(ExperimentalTextApi::class)
+private fun publicSans(weight: FontWeight, axisWeight: Int) = Font(
+    resId = R.font.public_sans,
+    weight = weight,
+    variationSettings = FontVariation.Settings(FontVariation.weight(axisWeight)),
+)
 
 // Display = Anton, ALL CAPS at call site (use .uppercase()). Tight leading.
 object JMText {
