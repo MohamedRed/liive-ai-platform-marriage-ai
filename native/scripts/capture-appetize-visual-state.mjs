@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 
 const defaultScreens = [
   "talk-active",
@@ -99,10 +100,11 @@ async function capture(platform, screen) {
     await page.waitForLoadState("networkidle", { timeout: 150_000 }).catch(() => {});
     const target = await findDeviceSurface(page);
     await page.waitForTimeout(waitMs(platform.key, screen));
+    const readiness = await waitForReadyFrame(page, target, platform.key, screen);
     const box = await target.boundingBox();
     await target.screenshot({ path: screenPath });
     await page.screenshot({ path: pagePath, fullPage: true });
-    console.log(`[ok] ${platform.key} ${screen} ${screenPath}`);
+    console.log(`[ok] ${platform.key} ${screen} ${screenPath} ${formatStats(readiness)}`);
     return {
       ok: true,
       platform: platform.key,
@@ -111,6 +113,7 @@ async function capture(platform, screen) {
       screenPath,
       pagePath,
       box,
+      readiness,
       capturedAt: new Date().toISOString(),
     };
   } catch (error) {
@@ -156,6 +159,75 @@ async function findDeviceSurface(page) {
   const target = handle.asElement();
   if (!target) throw new Error("No Appetize device surface was found.");
   return target;
+}
+
+async function waitForReadyFrame(page, target, platform, screen) {
+  const started = Date.now();
+  let lastStats = null;
+
+  while (Date.now() - started < 120_000) {
+    const buffer = await target.screenshot();
+    lastStats = readFrameStats(buffer);
+    if (frameLooksReady(platform, screen, lastStats)) return lastStats;
+    await page.waitForTimeout(5_000);
+  }
+
+  throw new Error(
+    `Appetize frame never reached the expected app state for ${platform} ${screen}; last ${formatStats(lastStats)}`,
+  );
+}
+
+function readFrameStats(buffer) {
+  const png = PNG.sync.read(buffer);
+  const step = Math.max(1, Math.floor(Math.min(png.width, png.height) / 120));
+  let samples = 0;
+  let luminanceTotal = 0;
+  let dark = 0;
+  let light = 0;
+  let saturated = 0;
+
+  for (let y = 0; y < png.height; y += step) {
+    for (let x = 0; x < png.width; x += step) {
+      const offset = (png.width * y + x) << 2;
+      const r = png.data[offset];
+      const g = png.data[offset + 1];
+      const b = png.data[offset + 2];
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+      samples += 1;
+      luminanceTotal += luminance;
+      if (luminance < 45) dark += 1;
+      if (luminance > 215) light += 1;
+      if (max - min > 55 && max > 120) saturated += 1;
+    }
+  }
+
+  return {
+    meanLuminance: round(luminanceTotal / samples),
+    darkRatio: round(dark / samples),
+    lightRatio: round(light / samples),
+    saturatedRatio: round(saturated / samples),
+  };
+}
+
+function frameLooksReady(platform, screen, stats) {
+  if (!stats) return false;
+  if (screen.startsWith("talk-")) {
+    return stats.darkRatio > 0.45 && stats.saturatedRatio > 0.008;
+  }
+
+  return stats.meanLuminance > 110 && stats.lightRatio > 0.2 && stats.saturatedRatio > 0.005;
+}
+
+function formatStats(stats) {
+  if (!stats) return "stats=unavailable";
+  return `stats=mean:${stats.meanLuminance},dark:${stats.darkRatio},light:${stats.lightRatio},sat:${stats.saturatedRatio}`;
+}
+
+function round(value) {
+  return Math.round(value * 1_000) / 1_000;
 }
 
 function waitMs(platform, screen) {
