@@ -77,6 +77,33 @@ class BackendProductionReadinessTests(unittest.TestCase):
         )
         self.assertIn("if not isinstance(parsed_statements, list)", source)
 
+    def test_scoreboard_uses_idempotent_match_evidence_not_additive_increment(self):
+        source = read("dataflow/pipelines/streaming/transforms/scoreboard.py")
+
+        self.assertNotIn("Increment(", source)
+        self.assertIn("stable_match_evidence_id", source)
+        self.assertIn("collection('evidence')", source)
+        self.assertIn("weighted_score", source)
+
+    def test_scoreboard_scoring_helpers_are_deterministic_and_weighted(self):
+        scoring = importlib.import_module("dataflow.pipelines.streaming.transforms.scoring")
+        hit = {
+            "triggering_user_id": "u1",
+            "matched_user_id": "u2",
+            "triggering_statement_id": "stmt-a",
+            "matched_statement_id": "stmt-b",
+            "match_type": "AP",
+        }
+
+        self.assertEqual(scoring.calculate_weighted_match_score(0.8, "AP"), 0.8)
+        self.assertEqual(scoring.calculate_weighted_match_score(0.8, "PA"), 0.8)
+        self.assertEqual(scoring.calculate_weighted_match_score(0.8, "AA"), 0.32000000000000006)
+        self.assertIsNone(scoring.calculate_weighted_match_score(0.8, "UNKNOWN"))
+        self.assertEqual(
+            scoring.stable_match_evidence_id(hit),
+            scoring.stable_match_evidence_id(dict(reversed(list(hit.items())))),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
