@@ -2,14 +2,54 @@ import { onCall } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import * as admin from 'firebase-admin';
 import { firestore } from "firebase-admin";
+import { PubSub } from "@google-cloud/pubsub";
 
-import { 
+import {
   QuestionsAnswers,
   WaliInfo,
   RelationshipType,
   QuestionLayer,
   LEGACY_COLLECTIONS
 } from '@livve-1/database-types';
+
+const pubSub = new PubSub();
+const MATCHING_TOPIC_ENV = "USER_PROFILE_UPDATED_PUBSUB_TOPIC";
+
+async function publishMatchingEvent(params: {
+  userID: string;
+  questionId: string;
+  questionText: string;
+  answer: string;
+  layer: QuestionLayer;
+  section?: string;
+}): Promise<void> {
+  const topicName = process.env[MATCHING_TOPIC_ENV];
+  if (!topicName) {
+    throw new Error(`${MATCHING_TOPIC_ENV} is not configured; refusing to save answer without triggering matching.`);
+  }
+
+  const payload = {
+    event_type: "qa_answer_updated",
+    user_id: params.userID,
+    triggering_qa: {
+      qa_id: params.questionId,
+      question: params.questionText,
+      answer: params.answer,
+      layer: params.layer,
+      section: params.section,
+    },
+    published_at: new Date().toISOString(),
+  };
+
+  await pubSub.topic(topicName).publishMessage({
+    data: Buffer.from(JSON.stringify(payload)),
+    attributes: {
+      event_type: "qa_answer_updated",
+      user_id: params.userID,
+      question_id: params.questionId,
+    },
+  });
+}
 
 /**
  * Get user's questions and answers
@@ -24,7 +64,7 @@ export const getUserQA = onCall(async (request) => {
   try {
     // Using legacy collections until migration to separate databases is complete
     const db = admin.firestore();
-    
+
     const qaDoc = await db
       .collection(LEGACY_COLLECTIONS.QUESTIONS_ANSWERS)
       .doc(userID)
@@ -56,12 +96,15 @@ export const updateUserAnswers = onCall(async (request) => {
   try {
     // Using legacy collections until migration to separate databases is complete
     const db = admin.firestore();
-    
+
     // Validate input
     const validLayers = Object.values(QuestionLayer).filter((value) => typeof value === 'number');
-    if (!questionId || typeof answer !== 'string' || !validLayers.includes(layer)) {
+    if (typeof questionId !== 'string' || !questionId.trim() || typeof answer !== 'string' || !validLayers.includes(layer)) {
       throw new Error("Invalid input. Question ID, answer, and a valid question layer are required.");
     }
+
+    let questionTextForEvent = typeof question === 'string' && question.trim() ? question.trim() : questionId;
+    const sectionForStorage = typeof section === 'string' && section.trim() ? section.trim() : undefined;
 
     await db.runTransaction(async (transaction) => {
       const qaRef = db.collection(LEGACY_COLLECTIONS.QUESTIONS_ANSWERS).doc(userID);
@@ -73,10 +116,10 @@ export const updateUserAnswers = onCall(async (request) => {
           userId: userID,
           questions: {
             [questionId]: {
-              question: typeof question === 'string' && question.trim() ? question : questionId,
+              question: questionTextForEvent,
               answer,
               layer,
-              section,
+              section: sectionForStorage,
               createdAt: timestamp,
               updatedAt: timestamp
             }
@@ -86,25 +129,26 @@ export const updateUserAnswers = onCall(async (request) => {
         // Update existing question or add new one
         const qaData = qaDoc.data() as QuestionsAnswers;
         const questions = qaData.questions || {};
-        
+
         // Get existing question data if it exists
         const existingQuestion = questions[questionId];
-        
+        questionTextForEvent = typeof question === 'string' && question.trim()
+          ? question.trim()
+          : existingQuestion?.question || questionId;
+
         // Create or update question
         questions[questionId] = {
-          question: typeof question === 'string' && question.trim()
-            ? question
-            : existingQuestion?.question || questionId,
+          question: questionTextForEvent,
           answer,
           layer,
-          section: existingQuestion?.section,
+          section: sectionForStorage ?? existingQuestion?.section,
           createdAt: existingQuestion?.createdAt || timestamp,
           updatedAt: timestamp
         };
-        
+
         transaction.update(qaRef, { questions });
       }
-      
+
       // Add to edit logs
       const editLogRef = db.collection(LEGACY_COLLECTIONS.QA_EDIT_LOGS).doc();
       transaction.set(editLogRef, {
@@ -122,6 +166,15 @@ export const updateUserAnswers = onCall(async (request) => {
       });
     });
 
+    await publishMatchingEvent({
+      userID,
+      questionId,
+      questionText: questionTextForEvent,
+      answer,
+      layer,
+      section: sectionForStorage,
+    });
+
     return { success: true };
   } catch (error) {
     logger.error(`Error updating answer for ${userID}, question ${request.data.questionId}:`, error);
@@ -136,7 +189,7 @@ export async function getWaliInfo(waliID: string): Promise<WaliInfo | null> {
   try {
     // Using legacy collections until migration to separate databases is complete
     const db = admin.firestore();
-    
+
     const waliDoc = await db
       .collection(LEGACY_COLLECTIONS.WALI_INFO)
       .doc(waliID)
@@ -157,15 +210,15 @@ export async function getWaliInfo(waliID: string): Promise<WaliInfo | null> {
  * Update Wali verification status
  */
 export async function updateWaliVerificationStatus(
-  userID: string, 
-  waliID: string, 
+  userID: string,
+  waliID: string,
   status: RelationshipType
 ): Promise<void> {
   try {
     // Using legacy collections until migration to separate databases is complete
     const db = admin.firestore();
     const timestamp = firestore.Timestamp.now();
-    
+
     await db
       .collection(LEGACY_COLLECTIONS.USER_WALI_RELATION_VERIFICATIONS)
       .doc(`${userID}_${waliID}`)
@@ -180,10 +233,10 @@ export async function updateWaliVerificationStatus(
         createdAt: timestamp,
         updatedAt: timestamp
       }, { merge: true });
-    
+
     logger.info(`Wali verification updated for user ${userID} and wali ${waliID}`);
   } catch (error) {
     logger.error(`Error updating Wali verification for user ${userID} and wali ${waliID}:`, error);
     throw new Error("Failed to update Wali verification");
   }
-} 
+}

@@ -13,6 +13,107 @@ from ..utils import access_secret
 
 logger = logging.getLogger(__name__)
 
+
+class DeleteStaleQuestionVectorsDoFn(beam.DoFn):
+    """Deletes old Pinecone vectors for a user's question before re-embedding it.
+
+    Answer edits can change the number and content of parsed statements. The
+    embedding step uses deterministic statement ids for the current parse, so
+    upsert overwrites matching ids, but it cannot remove extra vectors left over
+    from an older answer with more statements. This DoFn runs once per parsed
+    answer, deletes every vector for that user/question filter, and then passes
+    the element downstream for fresh embedding generation.
+    """
+
+    OUTPUT_ERROR_TAG = 'error'
+
+    def __init__(self, project_id, pinecone_region, pinecone_index):
+        self.project_id = project_id
+        self.pinecone_region = pinecone_region
+        self.pinecone_index_name = pinecone_index
+        self.logger = logging.getLogger(__name__)
+        self.error_counter = Metrics.counter('DeleteStaleQuestionVectorsDoFn', MetricNames.ERRORS)
+        self.delete_counter = Metrics.counter('DeleteStaleQuestionVectorsDoFn', 'pinecone_question_vector_deletes')
+        self.index = None
+        self.pc = None
+
+    def setup(self):
+        from pinecone.grpc import PineconeGRPC
+
+        self.logger.info(f"Setting up Pinecone client for stale-vector cleanup in region {self.pinecone_region}")
+        try:
+            self.pc = PineconeGRPC(
+                api_key=access_secret(self.project_id, "PINECONE_API_KEY"),
+                environment=self.pinecone_region,
+            )
+            index_name_formatted = self.pinecone_index_name.lower().replace('_', '-')
+            if index_name_formatted not in self.pc.list_indexes().names:
+                self.logger.error(f"Pinecone index '{index_name_formatted}' does not exist. Cannot delete stale vectors.")
+                raise ValueError(f"Pinecone index '{index_name_formatted}' not found.")
+            self.index = self.pc.Index(index_name_formatted)
+            self.logger.info(f"Successfully connected to Pinecone index '{index_name_formatted}' for stale-vector cleanup.")
+        except Exception as e:
+            self.logger.error(f"Failed to setup Pinecone cleanup client or connect to index: {e}", exc_info=True)
+            raise
+
+    def process(self, element: Dict[str, Any]):
+        if not self.index:
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Pinecone index not initialized in stale-vector cleanup",
+                "element": element,
+            })
+            return
+
+        user_id = element.get('user_id')
+        question_id = element.get('question_id')
+        if not user_id or not question_id:
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Missing user_id or question_id for stale-vector cleanup",
+                "element": element,
+            })
+            return
+
+        try:
+            delete_filter = {
+                'user_id': str(user_id),
+                'original_question_id': str(question_id),
+            }
+            self.index.delete(filter=delete_filter)
+            self.delete_counter.inc()
+            yield element
+        except Exception as e:
+            self.error_counter.inc()
+            self.logger.error(
+                f"Failed to delete stale Pinecone vectors for user={user_id}, question={question_id}: {e}\n"
+                f"Traceback: {traceback.format_exc()}",
+                exc_info=True,
+            )
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Pinecone stale-vector delete failed: {str(e)}",
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
+
+
+@beam.ptransform_fn
+def DeleteStaleQuestionVectors(pcoll: beam.PCollection[Dict[str, Any]],
+                               project_id: str,
+                               pinecone_region: str,
+                               pinecone_index: str) -> beam.PCollectionTuple:
+    """Delete previous vectors for each edited question before re-embedding."""
+    return (
+        pcoll
+        | 'DeleteStaleQuestionVectorsInPinecone' >> beam.ParDo(
+            DeleteStaleQuestionVectorsDoFn(
+                project_id=project_id,
+                pinecone_region=pinecone_region,
+                pinecone_index=pinecone_index,
+            )
+        ).with_outputs(DeleteStaleQuestionVectorsDoFn.OUTPUT_ERROR_TAG, main='main')
+    )
+
 class StoreIndividualEmbeddingsDoFn(beam.DoFn): # Renamed class
     """Stores individual Q&A embeddings in Pinecone with batching."""
     def __init__(self, project_id, pinecone_region, pinecone_index, batch_size=100): # Added batch_size

@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Default deny. Firebase Admin SDK/Cloud Functions bypass rules; clients do not.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Main user profile documents. Clients may read their own profile only;
+    // profile writes must go through vetted Cloud Functions.
+    match /USER_INFO/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // Marriage Q&A answers are sensitive. Clients may read their own answers;
+    // all writes go through updateUserAnswers so validation/audit logging runs.
+    match /QAS/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // Edit logs include IP/device metadata and are server-only.
+    match /QA_EDIT_LOGS/{logId} {
+      allow read, write: if false;
+    }
+
+    // Match output can be read by the owning user. It is written only by the
+    // backend matching pipeline / Admin SDK.
+    match /MATCHES/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // Next-question suggestions are personalized profile-building state.
+    match /NEXT_QUESTION_SUGGESTIONS/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // Wali relationship records: readable by the user or wali named on the doc.
+    match /WALI_INFO/{waliInfoId} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || resource.data.waliId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /USER_WALI_RELATION_VERIFICATIONS/{verificationId} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || resource.data.waliId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /IDENTITY_VERIFICATIONS/{subjectId} {
+      allow read: if isOwner(subjectId);
+      allow write: if false;
+    }
+
+    // Internal pipeline artifacts. Never expose raw scoreboard evidence or LLM
+    // summaries directly to clients; surface curated matches/suggestions instead.
+    match /MATCH_CANDIDATE_SCOREBOARD/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /MARRIAGE_PROFILE_SUMMARIES/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

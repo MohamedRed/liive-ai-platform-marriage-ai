@@ -104,6 +104,42 @@ class BackendProductionReadinessTests(unittest.TestCase):
             scoring.stable_match_evidence_id(dict(reversed(list(hit.items())))),
         )
 
+    def test_matching_pipeline_deletes_stale_question_vectors_before_embedding(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        pinecone_source = read("dataflow/pipelines/streaming/transforms/pinecone_ops.py")
+
+        self.assertIn("DeleteStaleQuestionVectors", streaming_source)
+        self.assertLess(
+            streaming_source.index("DeleteStaleQuestionVectors"),
+            streaming_source.index("GenerateStatementEmbeddings"),
+        )
+        self.assertIn("class DeleteStaleQuestionVectorsDoFn", pinecone_source)
+        self.assertIn("self.index.delete", pinecone_source)
+        self.assertIn("'original_question_id': str(question_id)", pinecone_source)
+
+    def test_firebase_config_points_to_restrictive_firestore_rules(self):
+        firebase_config = read("firebase.json")
+        rules = read("firestore.rules")
+
+        self.assertIn('"firestore"', firebase_config)
+        self.assertIn('"rules": "firestore.rules"', firebase_config)
+        self.assertIn("service cloud.firestore", rules)
+        self.assertIn("allow read, write: if false", rules)
+        self.assertIn("match /QAS/{userId}", rules)
+        self.assertIn("match /MATCHES/{userId}", rules)
+        self.assertIn("match /MATCH_CANDIDATE_SCOREBOARD/{document=**}", rules)
+        self.assertIn("allow write: if false", rules)
+
+    def test_update_user_answers_publishes_matching_event(self):
+        source = read("functions-nodejs/src/domains/marriage/index.ts")
+
+        self.assertIn("@google-cloud/pubsub", source)
+        self.assertIn("publishMatchingEvent", source)
+        self.assertIn("USER_PROFILE_UPDATED_PUBSUB_TOPIC", source)
+        self.assertIn("triggering_qa", source)
+        self.assertIn("qa_id: params.questionId", source)
+        self.assertIn("await publishMatchingEvent", source)
+
 
 if __name__ == "__main__":
     unittest.main()

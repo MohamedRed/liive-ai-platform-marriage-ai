@@ -45,7 +45,7 @@ from .transforms.common import (
 )
 from .transforms.profile_processing import ProcessAndValidateProfile, ExtractChangedQA
 from .transforms.embedding import GenerateEmbeddingsForStatements
-from .transforms.pinecone_ops import QueryMatchesFromPinecone, StoreIndividualEmbeddingsInPinecone
+from .transforms.pinecone_ops import DeleteStaleQuestionVectors, QueryMatchesFromPinecone, StoreIndividualEmbeddingsInPinecone
 from .transforms.reranking import (
     RerankAndScoreMatches, # The composite transform (expects modified input)
     CalculateLyingScoreDoFn, # Used in the score calculation branch
@@ -311,9 +311,22 @@ def run_streaming_pipeline(argv=None):
         # parsed_statements_results.main is PCollection of elements like input, augmented with 'parsed_statements' list
         parsed_statements_results.main | "DebugLogParsedStatementsElement" >> DebugLogDoFn(label="ParsedStatementsElement")
 
-        # 2. Generate Embeddings for Statements
-        statement_embeddings = (
+        # 2. Delete stale vectors for this edited answer before generating the
+        # replacement statement embeddings. This prevents old extra statements
+        # from previous answer versions from remaining matchable in Pinecone.
+        stale_vector_cleanup_results = (
             parsed_statements_results.main
+            | "DeleteStaleQuestionVectors" >> DeleteStaleQuestionVectors(
+                project_id=known_args.project,
+                pinecone_region=known_args.pinecone_region,
+                pinecone_index=known_args.pinecone_index
+            )
+        )
+        stale_vector_cleanup_results.error | "DLQ_StaleVectorCleanupErrors" >> dlq_sink("StaleVectorCleanupErrors")
+
+        # 3. Generate Embeddings for Statements
+        statement_embeddings = (
+            stale_vector_cleanup_results.main
             | "GenerateStatementEmbeddings" >> GenerateEmbeddingsForStatements(
                 project_id=known_args.project
               )
@@ -321,7 +334,7 @@ def run_streaming_pipeline(argv=None):
         )
         statement_embeddings | "DebugLogStatementEmbeddings" >> DebugLogDoFn(label="StatementEmbeddingsGenerated")
 
-        # 3. Store Statement Embeddings (Sink)
+        # 4. Store Statement Embeddings (Sink)
         _ = ( 
             statement_embeddings
             | "StoreStatementEmbeddings" >> StoreIndividualEmbeddingsInPinecone(
@@ -331,7 +344,7 @@ def run_streaming_pipeline(argv=None):
             )
         )
 
-        # 4. Query Pinecone for Matches per Statement
+        # 5. Query Pinecone for Matches per Statement
         statement_match_hits_results = (
             statement_embeddings
             | "QueryStatementMatches" >> QueryMatchesFromPinecone( # This is the NEW PTransform from pinecone_ops.py
@@ -344,7 +357,7 @@ def run_streaming_pipeline(argv=None):
         statement_match_hits_results.error | "DLQ_StatementQueryErrors" >> dlq_sink("StatementQueryErrors")
         statement_match_hits_results.main | "DebugLogStatementMatchHits" >> DebugLogDoFn(label="StatementMatchHits")
 
-        # 5. Update Scoreboard
+        # 6. Update Scoreboard
         scoreboard_update_results = (
             statement_match_hits_results.main
             | "UpdateMatchScoreboard" >> WriteToScoreboard(
@@ -357,7 +370,7 @@ def run_streaming_pipeline(argv=None):
         scoreboard_update_results.error | "DLQ_ScoreboardUpdateErrors" >> dlq_sink("ScoreboardUpdateErrors")
         scoreboard_update_results.main | "DebugLogScoreboardUpdates" >> DebugLogDoFn(label="ScoreboardUpdatePColl") # Debug the pass-through elements
         
-        # 6. Prepare for Fetching Top Candidates: Get Distinct Triggering User IDs
+        # 7. Prepare for Fetching Top Candidates: Get Distinct Triggering User IDs
         distinct_triggering_users = (
             parsed_event_data 
             | "ExtractTriggeringUserIdForScoreboardFetch" >> beam.Map(lambda x: x['user_id'])
@@ -365,7 +378,7 @@ def run_streaming_pipeline(argv=None):
         )
         distinct_triggering_users | "DebugLogDistinctUsersForRerank" >> DebugLogDoFn(label="DistinctTriggeringUsersForRerank")
 
-        # 7. Fetch Top Candidates from Scoreboard
+        # 8. Fetch Top Candidates from Scoreboard
         top_candidates_for_reranking_results = (
             distinct_triggering_users
             | "FetchTopCandidatesFromScoreboard" >> FetchTopCandidatesFromScoreboard(
