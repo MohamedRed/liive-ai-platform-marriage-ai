@@ -50,9 +50,14 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
     def _parse_llm_response_for_statements(self, llm_response_content: str, question_text: str, original_answer: str) -> List[Dict[str, str]]:
         """Parses the LLM's JSON response to extract statement objects."""
         try:
-            # The LLM is prompted to return a JSON list of objects.
-            # Example: "[{\"statement\": \"I like hiking.\", \"facet\": \"attribute\"}, ...]"
-            parsed_statements = json.loads(llm_response_content)
+            # The LLM is prompted to return a JSON object because the OpenAI
+            # JSON-object response mode does not guarantee a top-level array.
+            # Expected: {"statements": [{"statement": "...", "facet": "attribute"}]}
+            parsed_payload = json.loads(llm_response_content)
+            if isinstance(parsed_payload, dict):
+                parsed_statements = parsed_payload.get("statements", [])
+            else:
+                parsed_statements = parsed_payload
             if not isinstance(parsed_statements, list):
                 self.logger.warning(f"LLM response was not a list for Q: '{question_text}', A: '{original_answer}'. Response: {llm_response_content}")
                 self.llm_parse_failure_counter.inc()
@@ -95,15 +100,15 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
             f"Your task is to segment this answer into distinct, self-contained statements. "
             f"For each statement, determine if it primarily describes the user's own characteristics, facts about them, or their current state (an 'attribute'), "
             f"or if it describes what they are looking for in a partner, their desires, or their preferences for a relationship or partner (a 'preference').\n\n"
-            f"Please return your analysis as a JSON list of objects. Each object in the list should represent a single statement "
-            f"and must have two keys: 'statement' (the text of the segmented statement) and 'facet' (either 'attribute' or 'preference').\n"
+            f"Please return your analysis as a JSON object with a top-level \"statements\" array. Each object in the array should represent a single statement "
+            f"and must have two keys: \"statement\" (the text of the segmented statement) and \"facet\" (either \"attribute\" or \"preference\").\n"
             f"Example Response Format: "
-            f"[\n"
+            f"{{\"statements\": [\n"
             f"  {{\"statement\": \"I am a software engineer living in London.\", \"facet\": \"attribute\"}},\n"
             f"  {{\"statement\": \"I enjoy hiking on weekends and trying new vegan restaurants.\", \"facet\": \"attribute\"}},\n"
             f"  {{\"statement\": \"I am looking for a partner who is kind, funny, and shares my love for the outdoors.\", \"facet\": \"preference\"}}\n"
-            f"]\n\n"
-            f"If the answer is too short, vague, or doesn't provide clear statements that can be classified, return an empty list []."
+            f"]}}\n\n"
+            f"If the answer is too short, vague, or doesn't provide clear statements that can be classified, return {{\"statements\": []}}."
         )
 
         try:

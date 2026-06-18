@@ -45,10 +45,11 @@ from .transforms.common import (
 )
 from .transforms.profile_processing import ProcessAndValidateProfile, ExtractChangedQA
 from .transforms.embedding import GenerateEmbeddingsForStatements
-from .transforms.pinecone_ops import StoreEmbeddingInPinecone, QueryMatchesFromPinecone, StoreIndividualEmbeddingsInPinecone
+from .transforms.pinecone_ops import QueryMatchesFromPinecone, StoreIndividualEmbeddingsInPinecone
 from .transforms.reranking import (
     RerankAndScoreMatches, # The composite transform (expects modified input)
     CalculateLyingScoreDoFn, # Used in the score calculation branch
+    UpdateLyingScoreDoFn,
     CrossEncodeCandidates, # Added CrossEncodeCandidates
     CrossEncodeDoFn
 )
@@ -74,7 +75,8 @@ from .transforms.next_question import (
 from .transforms.firestore_io import WriteMatchesToFirestore
 from .transforms.scheduling import ScheduleDelayedMatching, HandleMatchActions
 from .transforms.profile_summarization import GenerateAndStoreProfileSummary
-from .transforms.answer_parsing import ParseAnswerStatementsDoFn
+from .transforms.answer_parsing import ParseAnswerIntoStatements
+from .transforms.scoring import normalize_ai_score_to_unit
 from .transforms.scoreboard import WriteToScoreboard
 # Import utility functions if needed
 # from .utils import access_secret
@@ -301,10 +303,9 @@ def run_streaming_pipeline(argv=None):
         # 1. Parse Answer into Statements
         parsed_statements_results = (
             parsed_event_data  # Use parsed_event_data directly. Input: {'user_id', 'question_id', 'question_text', 'answer_text', ...}
-            | "ParseAnswerToStatements" >> ParseAnswerStatementsDoFn( # This is the PTransform wrapper
+            | "ParseAnswerToStatements" >> ParseAnswerIntoStatements(
                   project_id=known_args.project
               )
-            # ParseAnswerIntoStatements PTransform uses with_outputs internally.
         )
         parsed_statements_results.error | "DLQ_ParseStatementsErrors" >> dlq_sink("ParseStatementsErrors")
         # parsed_statements_results.main is PCollection of elements like input, augmented with 'parsed_statements' list
@@ -596,8 +597,9 @@ def run_streaming_pipeline(argv=None):
                     top_match = matches_list[0]
                     raw_top_match_ai_score_raw = top_match.get('ai_score')
 
-                    if raw_top_match_ai_score_raw is not None:
-                        raw_top_match_ai_score = max(0.0, min(1.0, raw_top_match_ai_score_raw))
+                    raw_top_match_ai_score = normalize_ai_score_to_unit(raw_top_match_ai_score_raw)
+
+                    if raw_top_match_ai_score is not None:
 
                         for qa_id, qa_data in user_qas.items():
                             layer = qa_data.get('layer')

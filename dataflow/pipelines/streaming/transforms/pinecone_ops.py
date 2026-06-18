@@ -356,28 +356,6 @@ class QueryPinecone(beam.DoFn):
 # --- Composite PTransforms ---
 
 @beam.ptransform_fn
-def StoreEmbeddingInPinecone(pcoll: beam.PCollection[tuple[str, list[float]]], project_id: str, pinecone_region: str, pinecone_index: str) -> beam.PCollection[tuple[str, list[float]]]:
-    """Composite PTransform to store embeddings in Pinecone.
-
-    Args:
-        pcoll: PCollection of (user_id, embedding) tuples.
-        project_id: GCP Project ID.
-        pinecone_region: Pinecone region (environment).
-        pinecone_index: Pinecone index name.
-
-    Returns:
-        The original PCollection, passed through after storing.
-    """
-    return (
-        pcoll
-        | "StoreInPinecone" >> beam.ParDo(StorePineconeEmbeddingDoFn(
-            project_id=project_id,
-            pinecone_region=pinecone_region,
-            pinecone_index=pinecone_index
-        ))
-    )
-
-@beam.ptransform_fn
 def QueryMatchesFromPinecone(pcoll: beam.PCollection[Tuple[str, List[float], Dict[str, Any]]], 
                              project_id: str, 
                              pinecone_region: str, 

@@ -100,10 +100,10 @@ class CalculateLyingScoreDoFn(beam.DoFn):
             # self.logger.info(f"Calculating lying score for {profile_id}, QA: {qa_id}")
             # Get edit history from Firestore (using QA_EDIT_LOGS collection)
             # Adjust collection/field names based on actual Firestore structure
-            edit_log_ref = self.db.collection(COLLECTIONS["QA_EDIT_LOGS"])
-            query = edit_log_ref.where('profileId', '==', profile_id)\
-                                .where('qaId', '==', qa_id)\
-                                .order_by('timestamp', direction=firestore.Query.DESCENDING)\
+            edit_log_ref = self.db.collection(COLLECTIONS["MARRIAGE"]["QA_EDIT_LOGS"])
+            query = edit_log_ref.where('userId', '==', profile_id)\
+                                .where('questionId', '==', qa_id)\
+                                .order_by('createdAt', direction=firestore.Query.DESCENDING)\
                                 .limit(10) # Limit history for performance/cost
 
             history_events = list(query.stream())
@@ -116,7 +116,7 @@ class CalculateLyingScoreDoFn(beam.DoFn):
                 edit_history_formatted = []
                 for event_doc in history_events:
                     event_data = event_doc.to_dict()
-                    ts = event_data.get('timestamp')
+                    ts = event_data.get('createdAt') or event_data.get('timestamp')
                     prev_ans = event_data.get('previousAnswer', '')
                     new_ans = event_data.get('newAnswer', '')
                     ts_str = ts.strftime('%Y-%m-%d %H:%M:%S') if isinstance(ts, datetime) else str(ts)
@@ -213,7 +213,7 @@ class UpdateLyingScoreDoFn(beam.DoFn):
             # self.logger.info(f"Updating lying score for {profile_id}, QA: {qa_id} to {lying_score:.2f}")
             # Assuming QAs are stored in a map/object within the profile document
             # Adjust path based on your Firestore structure (e.g., COLLECTIONS["USERS"] or profile collection)
-            profile_ref = self.db.collection(COLLECTIONS["USERS"]).document(profile_id)
+            profile_ref = self.db.collection(COLLECTIONS["USERS"]["USER_INFO"]).document(profile_id)
             # Use dot notation for updating nested fields in Firestore
             update_data = {f'questions_answers.{qa_id}.aiLyingScore': lying_score}
 

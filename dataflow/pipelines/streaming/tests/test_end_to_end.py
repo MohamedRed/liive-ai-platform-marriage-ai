@@ -259,7 +259,7 @@ class TestMarriageAIPipelines(unittest.TestCase):
         mock_query_result.usage = MagicMock(read_units=10) # Example value
 
         # QueryPinecone expects only the result, not a tuple with time
-             mock_pinecone_index.query.return_value = mock_query_result
+        mock_pinecone_index.query.return_value = mock_query_result
         # Store query_time for verification if needed, but don't return it
         mock_pinecone_index._test_query_time = query_time
 
@@ -655,23 +655,23 @@ class TestMarriageAIPipelines(unittest.TestCase):
         class ProcessCoGroupedForUpdateDoFn(beam.DoFn):
             def process(self, element):
                 user_id, grouped_data = element
-                 # Assuming Lying Scores branch produced aggregated results
-                 lying_data_list = grouped_data.get('lying_scores_tag', []) # Expect aggregate result here
-                 # Reranked data list might be empty if no matches
-                 # Scheduling list might be empty if scheduling failed or didn't run
-                 # Need robust handling
+                # Assuming Lying Scores branch produced aggregated results
+                lying_data_list = grouped_data.get('lying_scores_tag', []) # Expect aggregate result here
+                # Reranked data list might be empty if no matches
+                # Scheduling list might be empty if scheduling failed or didn't run
+                # Need robust handling
 
-                 if lying_data_list:
-                     # Assuming AggregateScoresDoFn output is tagged correctly
-                     # yield (user_id, lying_data_list[0]) # Yield (user_id, {'scores': {...}, 'aggregate': ...})
-                     # Let's yield the aggregate score data directly for UpdateAllScoresDoFn
-                     # This requires AggregateScoresDoFn to be run *before* the CoGroupByKey
-                     # Or adjust this processor / UpdateAllScoresDoFn input expectations.
-                     # For now, simulate the expected input for UpdateAllScores:
-                     yield (user_id, aggregate_score_data) # Simulate aggregation result
-                 else:
-                      # Handle case where no scores were calculated
-                      yield (user_id, {'scores': {}, 'aggregate': None})
+                if lying_data_list:
+                    # Assuming AggregateScoresDoFn output is tagged correctly
+                    # yield (user_id, lying_data_list[0]) # Yield (user_id, {'scores': {...}, 'aggregate': ...})
+                    # Let's yield the aggregate score data directly for UpdateAllScoresDoFn
+                    # This requires AggregateScoresDoFn to be run *before* the CoGroupByKey
+                    # Or adjust this processor / UpdateAllScoresDoFn input expectations.
+                    # For now, simulate the expected input for UpdateAllScores:
+                    yield (user_id, aggregate_score_data) # Simulate aggregation result
+                else:
+                    # Handle case where no scores were calculated
+                    yield (user_id, {'scores': {}, 'aggregate': None})
 
         update_scores_dofn = UpdateAllScoresDoFn(project_id=TEST_PROJECT_ID, profiles_collection='user_profiles')
         suggest_next_q_dofn = SuggestNextProfileQuestionDoFn(project_id=TEST_PROJECT_ID, profiles_collection='user_profiles')
@@ -852,14 +852,14 @@ class TestMarriageAIPipelines(unittest.TestCase):
             # For checking downstream, expect embedding_data to be empty or raise error
             # Let's assume the ParDo fails and query_results is empty
             try:
-            embedding_data = profile_data | 'GenerateEmbeddingError' >> beam.ParDo(embed_dofn)
-            query_results = embedding_data | 'QueryPineconeError' >> beam.ParDo(query_dofn)
-                 # If no exception, assert query_results is empty
-            assert_that(query_results, is_empty(), label="CheckQueryOutputIsEmptyOnError")
+                embedding_data = profile_data | 'GenerateEmbeddingError' >> beam.ParDo(embed_dofn)
+                query_results = embedding_data | 'QueryPineconeError' >> beam.ParDo(query_dofn)
+                # If no exception, assert query_results is empty
+                assert_that(query_results, is_empty(), label="CheckQueryOutputIsEmptyOnError")
             except Exception as e:
-                 # Check if the exception is the one we expect from OpenAI mock
-                 self.assertIn(error_message, str(e))
-                 # If exception is raised, assert_that won't run, which is expected.
+                # Check if the exception is the one we expect from OpenAI mock
+                self.assertIn(error_message, str(e))
+                # If exception is raised, assert_that won't run, which is expected.
 
         # --- Verification ---
         # Firestore

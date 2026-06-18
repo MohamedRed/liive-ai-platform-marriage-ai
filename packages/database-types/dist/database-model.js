@@ -44,6 +44,8 @@ exports.COLLECTIONS = {
         MATCHES: 'MATCHES', // Match results
         LAYER2_FOUNDATIONAL_QUESTIONS: 'LAYER2_FOUNDATIONAL_QUESTIONS', // Template questions for Layer 2
         // No LAYER3 collection needed per Scenario 2 (Dynamic Generation)
+        MATCH_CANDIDATE_SCOREBOARD: 'MATCH_CANDIDATE_SCOREBOARD', // Stores aggregated scores for potential matches
+        MARRIAGE_PROFILE_SUMMARIES: 'MARRIAGE_PROFILE_SUMMARIES', // Stores pre-generated LLM summaries of user profiles
     },
     // Collections for the COOKING database
     COOKING: {

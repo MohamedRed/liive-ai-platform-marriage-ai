@@ -635,8 +635,7 @@ class SelectBestQuestionDoFn(beam.DoFn):
         for i, qa in enumerate(history[:MAX_HISTORY_ITEMS_FOR_PROMPT]):
             q_text = qa.get('question', '[Question Missing]')
             a_text = qa.get('answer', '[Answer Missing]')
-            entry = f"History Item {i+1} (Most Recent = 1):
-"
+            entry = f"History Item {i+1} (Most Recent = 1):\n"
             entry += f"  Q: {q_text}\n"
             entry += f"  A: {a_text}\n"
             formatted_list.append(entry)

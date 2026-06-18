@@ -13,7 +13,6 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "yarn build",
     "dev": "tsc -w",
     "update-version": "node -e \"const pkg = require('./package.json'); const [major, minor, patch] = pkg.version.split('.'); pkg.version = `${major}.${minor}.${parseInt(patch) + 1}`; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n')\"",
     "publish-update": "./update.sh"
@@ -25,6 +24,9 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "firebase-admin": "^13.1.0"
+    "@firebase/firestore-types": "^3.0.4",
+    "dayjs": "^1.11.21",
+    "firebase-admin": "^13.1.0",
+    "zod": "^3.25.76"
   }
 }

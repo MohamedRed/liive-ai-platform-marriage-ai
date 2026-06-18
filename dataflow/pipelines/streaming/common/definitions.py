@@ -1,8 +1,11 @@
 # common/definitions.py
-from ..packages.database_types.src.database_model import COLLECTIONS as TS_COLLECTIONS # Assuming this path is accessible
 
-# Define collection names based on the structure in
-# /Users/mrr/liive-ai-platform/apps/marriage-ai/packages/database-types/src/database-model.ts
+# Keep the Python pipeline self-contained. Earlier versions tried to import a
+# generated TypeScript database model package from inside the Dataflow tree, but
+# that package is not shipped with the Python Flex Template and prevented the
+# pipeline from importing at startup. These constants intentionally mirror the
+# backend contract names used by the Firebase functions and native service
+# contracts.
 COLLECTIONS = {
     # Core user collections
     'USERS': {

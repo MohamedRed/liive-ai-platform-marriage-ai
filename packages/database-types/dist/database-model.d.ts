@@ -36,6 +36,8 @@ export declare const COLLECTIONS: {
         readonly WALI_INFO: "WALI_INFO";
         readonly MATCHES: "MATCHES";
         readonly LAYER2_FOUNDATIONAL_QUESTIONS: "LAYER2_FOUNDATIONAL_QUESTIONS";
+        readonly MATCH_CANDIDATE_SCOREBOARD: "MATCH_CANDIDATE_SCOREBOARD";
+        readonly MARRIAGE_PROFILE_SUMMARIES: "MARRIAGE_PROFILE_SUMMARIES";
     };
     readonly COOKING: {
         readonly RECIPES: "RECIPES";

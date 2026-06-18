@@ -230,33 +230,33 @@ describe("Cloud Functions Tests", () => {
       // Verify that some expected functions exist
       expect(functionNames.length).toBeGreaterThan(0);
       
-      // Verify specific functions are available
-      expect(myFunctions.createWali).toBeDefined();
-      expect(myFunctions.sendPushNotification).toBeDefined();
-      expect(myFunctions.onMatchUpdate).toBeDefined();
-      expect(myFunctions.onUserQuestionsUpdate).toBeDefined();
+      // Verify specific domain groups and callable functions are available.
+      expect(myFunctions.userFunctions).toBeDefined();
+      expect(myFunctions.marriageFunctions).toBeDefined();
+      expect(myFunctions.identityVerificationFunctions).toBeDefined();
+      expect(myFunctions.generateMealPlan).toBeDefined();
     });
   });
 
-  // Simply test that HTTP functions exist
-  describe("HTTP Functions", () => {
-    it("createWali should be defined", () => {
-      expect(myFunctions.createWali).toBeDefined();
+  // Simply test that Marriage callable functions exist
+  describe("Marriage Functions", () => {
+    it("getUserQA should be defined", () => {
+      expect(myFunctions.marriageFunctions.getUserQA).toBeDefined();
     });
 
-    it("sendPushNotification should be defined", () => {
-      expect(myFunctions.sendPushNotification).toBeDefined();
+    it("updateUserAnswers should be defined", () => {
+      expect(myFunctions.marriageFunctions.updateUserAnswers).toBeDefined();
     });
   });
 
-  // Simply test that Firestore trigger functions exist
-  describe("Firestore Trigger Functions", () => {
-    it("onMatchUpdate should be defined", () => {
-      expect(myFunctions.onMatchUpdate).toBeDefined();
+  // Simply test that identity verification functions exist
+  describe("Identity Verification Functions", () => {
+    it("createIdentityVerificationSession should be defined", () => {
+      expect(myFunctions.identityVerificationFunctions.createIdentityVerificationSession).toBeDefined();
     });
 
-    it("onUserQuestionsUpdate should be defined", () => {
-      expect(myFunctions.onUserQuestionsUpdate).toBeDefined();
+    it("stripeIdentityWebhook should be defined", () => {
+      expect(myFunctions.identityVerificationFunctions.stripeIdentityWebhook).toBeDefined();
     });
   });
 }); 

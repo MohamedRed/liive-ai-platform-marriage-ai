@@ -1,4 +1,3 @@
-import type { Dayjs } from 'dayjs';
 import type { IDateValue, IDatePickerControl } from './common-types';
 
 // ----------------------------------------------------------------------

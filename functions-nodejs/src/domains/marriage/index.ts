@@ -7,6 +7,7 @@ import {
   QuestionsAnswers,
   WaliInfo,
   RelationshipType,
+  QuestionLayer,
   LEGACY_COLLECTIONS
 } from '@livve-1/database-types';
 
@@ -49,7 +50,7 @@ export const updateUserAnswers = onCall(async (request) => {
   }
 
   const userID = request.auth.uid;
-  const { questionId, answer } = request.data;
+  const { questionId, question, answer, layer, section } = request.data;
   const timestamp = firestore.Timestamp.now();
 
   try {
@@ -57,8 +58,9 @@ export const updateUserAnswers = onCall(async (request) => {
     const db = admin.firestore();
     
     // Validate input
-    if (!questionId || typeof answer !== 'string') {
-      throw new Error("Invalid input. Question ID and answer are required.");
+    const validLayers = Object.values(QuestionLayer).filter((value) => typeof value === 'number');
+    if (!questionId || typeof answer !== 'string' || !validLayers.includes(layer)) {
+      throw new Error("Invalid input. Question ID, answer, and a valid question layer are required.");
     }
 
     await db.runTransaction(async (transaction) => {
@@ -71,8 +73,10 @@ export const updateUserAnswers = onCall(async (request) => {
           userId: userID,
           questions: {
             [questionId]: {
-              question: questionId, // This should be replaced with actual question text
+              question: typeof question === 'string' && question.trim() ? question : questionId,
               answer,
+              layer,
+              section,
               createdAt: timestamp,
               updatedAt: timestamp
             }
@@ -88,8 +92,11 @@ export const updateUserAnswers = onCall(async (request) => {
         
         // Create or update question
         questions[questionId] = {
-          question: existingQuestion?.question || questionId, // Preserve existing question text
+          question: typeof question === 'string' && question.trim()
+            ? question
+            : existingQuestion?.question || questionId,
           answer,
+          layer,
           section: existingQuestion?.section,
           createdAt: existingQuestion?.createdAt || timestamp,
           updatedAt: timestamp
@@ -103,7 +110,9 @@ export const updateUserAnswers = onCall(async (request) => {
       transaction.set(editLogRef, {
         userId: userID,
         questionId,
-        previousAnswer: "",  // This should be populated with the previous answer
+        previousAnswer: qaDoc.exists
+          ? ((qaDoc.data() as QuestionsAnswers).questions || {})[questionId]?.answer || ""
+          : "",
         newAnswer: answer,
         createdAt: timestamp,
         metadata: {

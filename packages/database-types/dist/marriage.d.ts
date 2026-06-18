@@ -86,11 +86,30 @@ export interface NextQuestionSuggestion extends Timestamping {
     nextSuggestedQuestionClarificationTag?: string;
     nextSuggestionCandidateCount?: number | null;
 }
+/**
+ * Represents an entry in the match candidate scoreboard.
+ * Path: MATCH_CANDIDATE_SCOREBOARD/{triggering_user_id}/candidate_scores/{matched_user_id}
+ */
+export interface MatchCandidateScoreboardEntry extends Timestamping {
+    triggering_user_id: string;
+    matched_user_id: string;
+    score: number;
+}
+/**
+ * Represents a pre-generated LLM summary of a user's profile.
+ * Path: MARRIAGE_PROFILE_SUMMARIES/{userId}
+ */
+export interface MarriageProfileSummary extends Timestamping {
+    userId: string;
+    profileSummaryText: string;
+    qasVersionHash: string;
+}
 export interface Matches extends Timestamping {
     userId: string;
     matches: {
         userId: string;
-        vector_score: number;
+        aggregated_score?: number;
+        cross_encoder_score?: number;
         ai_score: number;
         suggested_questions: {
             question: string;
