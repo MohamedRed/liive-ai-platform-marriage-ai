@@ -1,0 +1,85 @@
+name: Backend production readiness
+
+on:
+  pull_request:
+    branches:
+      - before-release
+    paths:
+      - ".github/workflows/backend-production-readiness.yml"
+      - "dataflow/**"
+      - "functions-nodejs/**"
+      - "packages/database-types/**"
+      - "firebase.json"
+      - "firestore.indexes.json"
+      - "firestore.rules"
+  push:
+    branches:
+      - before-release
+      - "codex/**"
+    paths:
+      - ".github/workflows/backend-production-readiness.yml"
+      - "dataflow/**"
+      - "functions-nodejs/**"
+      - "packages/database-types/**"
+      - "firebase.json"
+      - "firestore.indexes.json"
+      - "firestore.rules"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-production-readiness:
+    name: Backend production readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: dataflow/pipelines/streaming/requirements.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: functions-nodejs/package-lock.json
+
+      - name: Install Dataflow dependencies
+        run: python -m pip install -r dataflow/pipelines/streaming/requirements.txt
+
+      - name: Compile streaming pipeline
+        run: python3 -m compileall -q dataflow/pipelines/streaming
+
+      - name: Run backend production-readiness tests
+        run: python3 -m unittest dataflow.pipelines.streaming.tests.test_backend_production_readiness -v
+
+      - name: Validate Firebase JSON
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('firebase.json','utf8')); JSON.parse(require('fs').readFileSync('firestore.indexes.json','utf8')); console.log('firebase json ok')"
+
+      - name: Install database-types dependencies
+        run: npm --prefix packages/database-types install --no-package-lock --ignore-scripts --no-audit --no-fund
+
+      - name: Build database-types
+        run: npm --prefix packages/database-types run build
+
+      - name: Install functions dependencies
+        run: npm --prefix functions-nodejs install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+
+      - name: Build functions
+        run: npm --prefix functions-nodejs run build
+
+      - name: Test functions
+        run: npm --prefix functions-nodejs test -- --runInBand
+
+      - name: Check whitespace errors
+        run: git diff --check HEAD
