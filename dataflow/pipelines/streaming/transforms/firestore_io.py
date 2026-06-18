@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 class UpdateFirestoreDoFn(beam.DoFn):
     """DoFn for updating Firestore with reranked matches"""
+    OUTPUT_TAG = 'main'
+    ERROR_TAG = 'error'
 
     def __init__(self, project_id: str, collection_name: str):
         self.project_id = project_id
@@ -49,7 +51,11 @@ class UpdateFirestoreDoFn(beam.DoFn):
         if not isinstance(element, dict) or 'user_id' not in element or 'matches' not in element:
             self.logger.error(f"Invalid input element format for UpdateFirestoreDoFn (missing user_id or matches): {element}")
             self.error_counter.inc()
-            raise TypeError(f"Invalid input element format for UpdateFirestoreDoFn: {type(element)}")
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": f"Invalid input element format for UpdateFirestoreDoFn: {type(element)}",
+                "element": element,
+            })
+            return
 
         user_id = element.get('user_id')
         matches_list = element.get('matches', [])
@@ -65,6 +71,10 @@ class UpdateFirestoreDoFn(beam.DoFn):
         if not user_id:
             self.logger.warning("No user_id found in element for Firestore update.")
             self.missing_user_id_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": "Missing user_id in element for Firestore update",
+                "element": element,
+            })
             return
 
         try:
@@ -99,11 +109,15 @@ class UpdateFirestoreDoFn(beam.DoFn):
         except Exception as e:
             self.error_counter.inc()
             self.logger.error(f"Firestore update failed for user {user_id}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
-            raise
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": f"Firestore update failed for user {user_id}: {str(e)}",
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
 
 
 @beam.ptransform_fn
-def WriteMatchesToFirestore(pcoll: beam.PCollection[dict], project_id: str, collection_name: str) -> beam.PCollection[dict]:
+def WriteMatchesToFirestore(pcoll: beam.PCollection[dict], project_id: str, collection_name: str) -> beam.PCollectionTuple:
     """Composite PTransform to write reranked matches to Firestore.
 
     Args:
@@ -119,5 +133,5 @@ def WriteMatchesToFirestore(pcoll: beam.PCollection[dict], project_id: str, coll
         | "UpdateFirestore" >> beam.ParDo(UpdateFirestoreDoFn(
             project_id=project_id,
             collection_name=collection_name
-        ))
+        )).with_outputs(UpdateFirestoreDoFn.ERROR_TAG, main=UpdateFirestoreDoFn.OUTPUT_TAG)
     ) 

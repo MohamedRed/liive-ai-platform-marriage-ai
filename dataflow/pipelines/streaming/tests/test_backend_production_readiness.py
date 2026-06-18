@@ -44,6 +44,17 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn(">> ParseAnswerIntoStatements(", source)
         self.assertNotIn(">> ParseAnswerStatementsDoFn(", source)
 
+    def test_streaming_graph_has_no_known_composite_transform_wiring_blockers(self):
+        source = read("dataflow/pipelines/streaming/streaming.py")
+
+        self.assertNotIn("RerankMatchesDoFn.OUTPUT_ERROR_TAG", source)
+        self.assertNotIn("RerankAndScoreMatches(\n                project_id=known_args.project,\n                profiles_collection=user_info_collection, \n                pdf_bucket=known_args.pdf_bucket,\n                pdf_instructions_path=known_args.pdf_instructions_path\n            ).with_outputs", source)
+        self.assertNotIn(".with_outputs(ProcessAndValidateProfile", source)
+        self.assertNotIn("layer4_candidates_tagged[Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG]", source)
+        self.assertNotIn(".with_outputs(WriteMatchesToFirestore", source)
+        self.assertNotIn(".with_outputs(ScheduleDelayedMatching", source)
+        self.assertNotIn(".with_outputs(HandleMatchActions", source)
+
     def test_pinecone_store_transform_uses_existing_store_class(self):
         source = read("dataflow/pipelines/streaming/transforms/pinecone_ops.py")
 
@@ -139,6 +150,17 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("triggering_qa", source)
         self.assertIn("qa_id: params.questionId", source)
         self.assertIn("await publishMatchingEvent", source)
+
+    def test_delayed_matching_uses_authenticated_http_task_to_publish_pubsub(self):
+        source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+
+        self.assertNotIn("PubsubTarget", source)
+        self.assertIn("pubsub.googleapis.com/v1/{pubsub_topic_path}:publish", source)
+        self.assertIn("OAuthToken", source)
+        self.assertIn("OidcToken", source)
+        self.assertIn("service_account_email", source)
+        self.assertIn("with_outputs(ScheduleDelayedMatchingDoFn.ERROR_TAG", source)
+        self.assertIn("with_outputs(HandleMatchActionsDoFn.ERROR_TAG", source)
 
 
 if __name__ == "__main__":

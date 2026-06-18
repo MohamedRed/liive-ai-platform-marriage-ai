@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 # Import third-party libraries used within DoFns
 from google.cloud import tasks_v2, firestore
 from apache_beam.metrics import Metrics
+from google.protobuf.timestamp_pb2 import Timestamp
 
 # Import constants and metrics from common
 from .common import MetricNames, COLLECTIONS
@@ -18,12 +19,16 @@ logger = logging.getLogger(__name__)
 
 class ScheduleDelayedMatchingDoFn(beam.DoFn):
     """Schedules a delayed matching task using Cloud Tasks after immediate matching is done"""
-    def __init__(self, project_id: str, location: str, queue_name: str, topic_name: str, delay_seconds: int = 300):
+    OUTPUT_TAG = 'main'
+    ERROR_TAG = 'error'
+
+    def __init__(self, project_id: str, location: str, queue_name: str, topic_name: str, delay_seconds: int = 300, service_account_email: str | None = None):
         self.project_id = project_id
         self.location = location # e.g., 'us-central1'
         self.queue_name = queue_name # e.g., 'delayed-matching'
         self.topic_name = topic_name # e.g., 'delayed-matching' (PubSub topic)
         self.delay_seconds = delay_seconds # Delay in seconds (default 5 mins)
+        self.service_account_email = service_account_email
         self.logger = logging.getLogger(__name__)
         self.error_counter = Metrics.counter('ScheduleDelayedMatchingDoFn', MetricNames.ERRORS)
         self.tasks_created_counter = Metrics.counter('ScheduleDelayedMatchingDoFn', 'tasks_created')
@@ -49,6 +54,10 @@ class ScheduleDelayedMatchingDoFn(beam.DoFn):
         if not isinstance(element, dict) or 'user_id' not in element:
             self.logger.error(f"Invalid input element format for ScheduleDelayedMatchingDoFn: {element}")
             self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": "Invalid input element format for ScheduleDelayedMatchingDoFn",
+                "element": element,
+            })
             return
 
         user_id = element['user_id']
@@ -72,8 +81,13 @@ class ScheduleDelayedMatchingDoFn(beam.DoFn):
                 self.queue_name
             )
 
-            # Construct the Pub/Sub topic path
-            pubsub_topic_path = f'projects/{self.project_id}/topics/{self.topic_name}'
+            # Construct the Pub/Sub topic path. The Dataflow argument may be a
+            # full Pub/Sub resource path or a bare topic id.
+            pubsub_topic_path = (
+                self.topic_name
+                if self.topic_name.startswith('projects/')
+                else f'projects/{self.project_id}/topics/{self.topic_name}'
+            )
 
             # Prepare payload for Pub/Sub message
             pubsub_payload = {
@@ -86,13 +100,29 @@ class ScheduleDelayedMatchingDoFn(beam.DoFn):
             # Prepare attributes (must be strings)
             pubsub_attributes = {'userId': str(user_id)} # Ensure userId attribute is string
 
+            schedule_proto = Timestamp(seconds=int(schedule_timestamp))
+
+            # Cloud Tasks has no Pub/Sub target. Schedule an authenticated HTTP
+            # call to the Pub/Sub publish REST endpoint instead.
+            publish_body = json.dumps({
+                'messages': [{
+                    'data': pubsub_data,
+                    'attributes': pubsub_attributes,
+                }]
+            }).encode('utf-8')
+
             # Create the task request
             task = tasks_v2.Task(
-                schedule_time=tasks_v2.Timestamp(seconds=int(schedule_timestamp)),
-                pubsub_target=tasks_v2.PubsubTarget(
-                    topic_name=pubsub_topic_path,
-                    data=pubsub_data,
-                    attributes=pubsub_attributes
+                schedule_time=schedule_proto,
+                http_request=tasks_v2.HttpRequest(
+                    http_method=tasks_v2.HttpMethod.POST,
+                    url=f'https://pubsub.googleapis.com/v1/{pubsub_topic_path}:publish',
+                    headers={"Content-Type": "application/json"},
+                    body=publish_body,
+                    oauth_token=tasks_v2.OAuthToken(
+                        service_account_email=self.service_account_email,
+                        scope='https://www.googleapis.com/auth/pubsub',
+                    ) if self.service_account_email else None,
                 )
             )
 
@@ -119,19 +149,26 @@ class ScheduleDelayedMatchingDoFn(beam.DoFn):
         except Exception as e:
             self.error_counter.inc()
             self.logger.error(f"Failed to schedule delayed matching task for user {user_id}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
-            # Raise error to be caught by DLQ if scheduling fails
-            raise
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": f"Failed to schedule delayed matching task for user {user_id}: {str(e)}",
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
 
 
 class HandleMatchActionsDoFn(beam.DoFn):
     """Handles post-match actions (notifications or AI voice agent calls) via Cloud Tasks."""
-    def __init__(self, project_id: str, location: str, notification_queue: str, voice_agent_queue: str, notification_function_url: str, voice_agent_function_url: str):
+    OUTPUT_TAG = 'main'
+    ERROR_TAG = 'error'
+
+    def __init__(self, project_id: str, location: str, notification_queue: str, voice_agent_queue: str, notification_function_url: str, voice_agent_function_url: str, service_account_email: str | None = None):
         self.project_id = project_id
         self.location = location
         self.notification_queue = notification_queue
         self.voice_agent_queue = voice_agent_queue
         self.notification_function_url = notification_function_url
         self.voice_agent_function_url = voice_agent_function_url
+        self.service_account_email = service_account_email
         self.logger = logging.getLogger(__name__)
         self.error_counter = Metrics.counter('HandleMatchActionsDoFn', MetricNames.ERRORS)
         self.notifications_scheduled = Metrics.counter('HandleMatchActionsDoFn', 'notifications_scheduled')
@@ -224,11 +261,10 @@ class HandleMatchActionsDoFn(beam.DoFn):
                     http_method=tasks_v2.HttpMethod.POST,
                     url=function_url,
                     headers={"Content-Type": "application/json"},
-                    body=task_payload_bytes
-                    # Add OIDC token for authenticated Cloud Functions V2 / Cloud Run
-                    # oidc_token=tasks_v2.OidcToken(
-                    #     service_account_email=SERVICE_ACCOUNT_EMAIL # Needs service account email
-                    # )
+                    body=task_payload_bytes,
+                    oidc_token=tasks_v2.OidcToken(
+                        service_account_email=self.service_account_email,
+                    ) if self.service_account_email else None,
                 )
                 # Can add schedule_time if needed, otherwise runs ASAP
             )
@@ -253,6 +289,10 @@ class HandleMatchActionsDoFn(beam.DoFn):
         if not isinstance(element, dict) or 'user_id' not in element or 'matches' not in element:
             self.logger.error(f"Invalid input element format for HandleMatchActionsDoFn: {element}")
             self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": "Invalid input element format for HandleMatchActionsDoFn",
+                "element": element,
+            })
             return
 
         user_id = element['user_id']
@@ -314,17 +354,17 @@ class HandleMatchActionsDoFn(beam.DoFn):
         except Exception as e:
             self.error_counter.inc()
             self.logger.error(f"Error handling match actions for user {user_id}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
-            # Don't raise here to avoid blocking other elements, let DLQ handle the original element if needed
-            # However, the original pipeline raised from some DoFns, so consistency might require raising.
-            # If this step is considered non-critical, logging might be sufficient.
-            # For now, maintain consistency if other steps raise:
-            raise
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": f"Error handling match actions for user {user_id}: {str(e)}",
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
 
 
 # --- Composite PTransforms --- #
 
 @beam.ptransform_fn
-def ScheduleDelayedMatching(pcoll: beam.PCollection[dict], project_id: str, location: str, queue_name: str, topic_name: str, delay_seconds: int = 300) -> beam.PCollection[dict]:
+def ScheduleDelayedMatching(pcoll: beam.PCollection[dict], project_id: str, location: str, queue_name: str, topic_name: str, delay_seconds: int = 300, service_account_email: str | None = None) -> beam.PCollectionTuple:
     """Composite PTransform to schedule delayed matching tasks.
 
     Args:
@@ -332,11 +372,12 @@ def ScheduleDelayedMatching(pcoll: beam.PCollection[dict], project_id: str, loca
         project_id: GCP Project ID.
         location: Cloud Tasks location (e.g., 'us-central1').
         queue_name: Cloud Tasks queue name for delayed matching.
-        topic_name: PubSub topic name for delayed matching tasks.
+        topic_name: PubSub topic name/path for delayed matching tasks.
         delay_seconds: Delay in seconds before task execution.
+        service_account_email: Service account used by Cloud Tasks OAuth.
 
     Returns:
-        Input PCollection passed through.
+        PCollectionTuple with main pass-through records and error records.
     """
     return (
         pcoll
@@ -345,12 +386,13 @@ def ScheduleDelayedMatching(pcoll: beam.PCollection[dict], project_id: str, loca
             location=location,
             queue_name=queue_name,
             topic_name=topic_name,
-            delay_seconds=delay_seconds
-        ))
+            delay_seconds=delay_seconds,
+            service_account_email=service_account_email,
+        )).with_outputs(ScheduleDelayedMatchingDoFn.ERROR_TAG, main=ScheduleDelayedMatchingDoFn.OUTPUT_TAG)
     )
 
 @beam.ptransform_fn
-def HandleMatchActions(pcoll: beam.PCollection[dict], project_id: str, location: str, notification_queue: str, voice_agent_queue: str, notification_function_url: str, voice_agent_function_url: str) -> beam.PCollection[dict]:
+def HandleMatchActions(pcoll: beam.PCollection[dict], project_id: str, location: str, notification_queue: str, voice_agent_queue: str, notification_function_url: str, voice_agent_function_url: str, service_account_email: str | None = None) -> beam.PCollectionTuple:
     """Composite PTransform to handle post-match actions (notifications/voice agent).
 
     Args:
@@ -361,9 +403,10 @@ def HandleMatchActions(pcoll: beam.PCollection[dict], project_id: str, location:
         voice_agent_queue: Cloud Tasks queue for voice agent calls.
         notification_function_url: URL of the notification Cloud Function/Run service.
         voice_agent_function_url: URL of the voice agent Cloud Function/Run service.
+        service_account_email: Service account used by Cloud Tasks OIDC.
 
     Returns:
-        Input PCollection passed through.
+        PCollectionTuple with main pass-through records and error records.
     """
     return (
         pcoll
@@ -373,6 +416,7 @@ def HandleMatchActions(pcoll: beam.PCollection[dict], project_id: str, location:
             notification_queue=notification_queue,
             voice_agent_queue=voice_agent_queue,
             notification_function_url=notification_function_url,
-            voice_agent_function_url=voice_agent_function_url
-        ))
+            voice_agent_function_url=voice_agent_function_url,
+            service_account_email=service_account_email,
+        )).with_outputs(HandleMatchActionsDoFn.ERROR_TAG, main=HandleMatchActionsDoFn.OUTPUT_TAG)
     ) 

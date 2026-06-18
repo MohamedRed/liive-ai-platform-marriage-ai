@@ -222,14 +222,13 @@ def run_streaming_pipeline(argv=None):
         user_history_keyed | "DebugLogUserHistory" >> DebugLogDoFn(label="UserHistoryKeyed")
 
         # --- Process Profiles (Main User Document from USER_INFO) --- #
-        processed_profile_data, profile_proc_errors = (
+        processed_profile_data = (
             parsed_event_data # Contains user_id and potentially changed fields
             | "ProcessUserProfileData" >> ProcessAndValidateProfile(
                 project_id=known_args.project,
                 collection_name=user_info_collection # This is COLLECTIONS['USERS']['USER_INFO']
-            ).with_outputs(ProcessAndValidateProfile.ERROR_TAG, main=ProcessAndValidateProfile.OUTPUT_TAG)
+            )
         )
-        profile_proc_errors | "DLQ_ProfileProcErrors" >> dlq_sink("ProfileProcErrors")
         # processed_profile_data: (user_id, profile_data_dict from user_info_collection)
         # This profile_data_dict should contain 'questions_answers' if that's where they are stored directly in the user document.
         # Or, if QAs are in a separate collection, ProcessAndValidateProfile would need to fetch and include them.
@@ -416,14 +415,18 @@ def run_streaming_pipeline(argv=None):
         # layer1_candidates_tagged is PCollection of (user_id, [list_of_L1_cands])
 
         # Layer 2: Foundational Questions
-        layer2_candidates_tagged, layer2_errors = (
+        layer2_results = (
             processed_profile_data
             | "GenerateLayer2Candidates" >> beam.ParDo(Layer2CandidateDoFn(
                 project_id=known_args.project,
                 profiles_collection=user_info_collection
             )).with_outputs(Layer2CandidateDoFn.OUTPUT_ERROR_TAG, main='main')
+        )
+        layer2_candidates_tagged = (
+            layer2_results['main']
             | "KeyLayer2Candidates" >> beam.Map(lambda x: (x['user_id'], x.get('candidates', [])))
         )
+        layer2_errors = layer2_results[Layer2CandidateDoFn.OUTPUT_ERROR_TAG]
         layer2_errors | "DLQ_Layer2Errors" >> dlq_sink("Layer2Errors")
         # layer2_candidates_tagged is PCollection of (user_id, [list_of_L2_cands])
 
@@ -456,14 +459,14 @@ def run_streaming_pipeline(argv=None):
         layer3_candidates_tagged | "DebugLogLayer3Candidates" >> DebugLogDoFn(label="Layer3CandidatesOutput")
 
         # Layer 4: Assessment Templates (Needs user history)
-        layer4_candidates_tagged, layer4_errors = (
+        layer4_results = (
              user_history_keyed # Input is (user_id, list_of_qa_dicts)
              | "GenerateLayer4Candidates" >> beam.ParDo(Layer4CandidateDoFn(
                  project_id=known_args.project
              )).with_outputs(Layer4CandidateDoFn.OUTPUT_ERROR_TAG, main=Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG)
         )
-        layer4_candidates = layer4_candidates_tagged[Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG]
-        layer4_errors = layer4_candidates_tagged[Layer4CandidateDoFn.OUTPUT_ERROR_TAG]
+        layer4_candidates_tagged = layer4_results[Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG]
+        layer4_errors = layer4_results[Layer4CandidateDoFn.OUTPUT_ERROR_TAG]
         layer4_errors | "DLQ_Layer4Errors" >> dlq_sink("Layer4Errors") # DLQ sink for layer 4
 
         # --- Combine Candidate Layers and History --- #
@@ -580,7 +583,7 @@ def run_streaming_pipeline(argv=None):
                 profiles_collection=user_info_collection, 
                 pdf_bucket=known_args.pdf_bucket,
                 pdf_instructions_path=known_args.pdf_instructions_path
-            ).with_outputs(RerankMatchesDoFn.OUTPUT_ERROR_TAG, main='main') # Ensure main tag is explicit if not default
+            )
         )
         reranked_matches_data_results.error | "DLQ_LLMRerankingErrors" >> dlq_sink("LLMRerankingErrors")
         reranked_matches_data = reranked_matches_data_results.main # Get main output
@@ -740,42 +743,45 @@ def run_streaming_pipeline(argv=None):
         # --- Final Output/Actions (using matches_with_percentage from Branch A) --- #
 
         # Write reranked matches (including percentage) to Firestore
-        _, write_match_errors = (
+        write_match_results = (
             matches_with_percentage # Use the result from Branch A
             | "WriteMatchesToFirestore" >> WriteMatchesToFirestore(
                 project_id=known_args.project,
                 collection_name=matches_collection
-            ).with_outputs(WriteMatchesToFirestore.ERROR_TAG, main=WriteMatchesToFirestore.OUTPUT_TAG)
+            )
         )
+        write_match_errors = write_match_results.error
         write_match_errors | "DLQ_WriteMatchErrors" >> dlq_sink("WriteMatchErrors")
 
         # Schedule Delayed Matching
-        _, schedule_errors = (
+        schedule_results = (
             matches_with_percentage # Use the result from Branch A
             | "ScheduleDelayedMatching" >> ScheduleDelayedMatching(
                  project_id=known_args.project,
                  location=known_args.tasks_location,
                  queue_name=known_args.delayed_matching_queue,
-                target_topic=known_args.delayed_matching_pubsub_topic,
+                topic_name=known_args.delayed_matching_pubsub_topic,
                 delay_seconds=known_args.delayed_task_delay_seconds,
                 service_account_email=known_args.service_account_email
-             ).with_outputs(ScheduleDelayedMatching.ERROR_TAG, main=ScheduleDelayedMatching.OUTPUT_TAG)
+             )
         )
+        schedule_errors = schedule_results.error
         schedule_errors | "DLQ_ScheduleErrors" >> dlq_sink("ScheduleErrors")
 
         # Handle Actions (Notifications/Voice)
-        _, action_errors = (
+        action_results = (
              matches_with_percentage # Use the result from Branch A
              | "HandleMatchActions" >> HandleMatchActions(
                 project_id=known_args.project,
                 location=known_args.tasks_location,
                 notification_queue=known_args.notification_queue,
                 voice_agent_queue=known_args.voice_agent_queue,
-                notification_url=known_args.notification_function_url,
-                voice_agent_url=known_args.voice_agent_function_url,
+                notification_function_url=known_args.notification_function_url,
+                voice_agent_function_url=known_args.voice_agent_function_url,
                 service_account_email=known_args.service_account_email
-             ).with_outputs(HandleMatchActions.ERROR_TAG, main=HandleMatchActions.OUTPUT_TAG)
+             )
          )
+        action_errors = action_results.error
         action_errors | "DLQ_ActionErrors" >> dlq_sink("ActionErrors")
 
         logger.info("Streaming pipeline graph built.")
