@@ -4,7 +4,8 @@ import SwiftUI
 struct SettingsView: View {
     @State private var matchNotif = true
     @State private var notifyWali = true
-    @State private var hidePhoto = true
+    @State private var hidePhoto = false
+    @State private var showMembership = false
 
     var body: some View {
         ZStack {
@@ -19,6 +20,21 @@ struct SettingsView: View {
                             Text("Aisha B.").font(JMFont.headingSM)
                             JMBadge("Identity verified", tone: .success, soft: true)
                         }
+                    }
+
+                    // Premium membership entry
+                    Button { showMembership = true } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "crown.fill").foregroundColor(JMColor.cyanBright).frame(width: 26)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Membership & guarantee").font(JMFont.sans(15, .extrabold)).foregroundColor(.white)
+                                Text("99% match in 6 months — or fully refunded")
+                                    .font(JMFont.sans(12.5)).foregroundColor(.white.opacity(0.7))
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.right").foregroundColor(.white.opacity(0.6))
+                        }
+                        .padding(18).background(JMColor.ink900).clipShape(RoundedRectangle(cornerRadius: JMRadius.lg))
                     }
 
                     VStack(spacing: 0) {
@@ -44,6 +60,7 @@ struct SettingsView: View {
                 .padding(JMSpace.gutter)
             }
         }
+        .sheet(isPresented: $showMembership) { MembershipView() }
     }
 
     private var divider: some View { Rectangle().fill(JMColor.ink100).frame(height: 1) }

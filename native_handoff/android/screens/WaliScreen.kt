@@ -9,8 +9,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,11 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.justmarriage.design.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WaliScreen(modifier: Modifier = Modifier) {
-    var showVerify by remember { mutableStateOf(false) }
-
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
 
@@ -63,16 +61,8 @@ fun WaliScreen(modifier: Modifier = Modifier) {
             JMBadge("Verifying", tone = JMBadgeTone.Warning, soft = true)
         }
 
-        JMButton("Continue verification", onClick = { showVerify = true },
-            variant = JMButtonVariant.Primary, fullWidth = true, icon = Icons.Filled.Badge)
-        JMButton("Invite a different wali", onClick = {}, variant = JMButtonVariant.Ghost,
-            fullWidth = true, icon = Icons.Filled.PersonAdd)
-    }
-
-    if (showVerify) {
-        ModalBottomSheet(onDismissRequest = { showVerify = false }, containerColor = JMColors.surfacePage) {
-            VerifyScreen(onBack = { showVerify = false }, onDone = { showVerify = false })
-        }
+        JMButton("Continue verification", onClick = {}, variant = JMButtonVariant.Primary, fullWidth = true)
+        JMButton("Invite a different wali", onClick = {}, variant = JMButtonVariant.Ghost, fullWidth = true)
     }
 }
 

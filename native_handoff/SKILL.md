@@ -52,11 +52,11 @@ native_handoff/
 ├── ios/                  ← SwiftUI implementation
 │   ├── SKILL.md
 │   ├── JMColor.swift  JMTheme.swift  JMFont.swift  Components.swift
-│   └── screens/         ← all 9 product screens + RootView (entry)
+│   └── screens/         ← all 11 product screens + RootView (entry)
 └── android/             ← Jetpack Compose implementation
     ├── SKILL.md
     ├── Color.kt  Theme.kt  Type.kt  Dimens.kt  Shape.kt  Components.kt
-    └── screens/         ← all 9 product screens + RootScreen (entry)
+    └── screens/         ← all 11 product screens + RootScreen (entry)
 ```
 
 > Fonts are currently the Google-Fonts substitutes **Anton** (display) and **Public Sans**

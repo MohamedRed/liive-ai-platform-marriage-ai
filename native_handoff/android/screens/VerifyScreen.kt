@@ -3,7 +3,6 @@ package com.justmarriage.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
@@ -33,8 +32,7 @@ fun VerifyScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}, onDone:
         verticalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(38.dp).clip(CircleShape).background(JMPalette.Ink100).clickable(onClick = onBack),
-                contentAlignment = Alignment.Center) {
+            Box(Modifier.size(38.dp).clip(CircleShape).background(JMPalette.Ink100), contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.ArrowBack, "Back", tint = JMPalette.Ink700, modifier = Modifier.size(18.dp))
             }
             Text("Verification", style = JMText.headingSm)

@@ -3,7 +3,6 @@ package com.justmarriage.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,8 +37,7 @@ fun ChatScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
         Row(Modifier.fillMaxWidth().background(JMColors.surfaceCard)
             .border(0.dp, JMColors.borderSubtle).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Filled.ArrowBack, "Back", tint = JMPalette.Ink700,
-                modifier = Modifier.clickable(onClick = onBack))
+            Icon(Icons.Filled.ArrowBack, "Back", tint = JMPalette.Ink700)
             JMAvatar(initials = "A", size = 40.dp)
             Column(Modifier.weight(1f)) {
                 Text("Matched · 99%", fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp)

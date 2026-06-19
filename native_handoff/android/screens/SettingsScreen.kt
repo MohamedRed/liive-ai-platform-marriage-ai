@@ -23,7 +23,9 @@ import com.justmarriage.design.*
 fun SettingsScreen(modifier: Modifier = Modifier) {
     var matchNotif by remember { mutableStateOf(true) }
     var notifyWali by remember { mutableStateOf(true) }
-    var hidePhoto by remember { mutableStateOf(true) }
+    var hidePhoto by remember { mutableStateOf(false) }
+    // overlay: null | "membership" | "guarantee"
+    var overlay by remember { mutableStateOf<String?>(null) }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
@@ -36,6 +38,18 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 Text("Aisha B.", style = JMText.headingSm)
                 JMBadge("Identity verified", tone = JMBadgeTone.Success, soft = true)
             }
+        }
+
+        // Premium membership entry
+        Row(Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMColors.ink)
+            .clickable { overlay = "membership" }.padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(Icons.Filled.WorkspacePremium, null, tint = JMColors.secondary, modifier = Modifier.size(26.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Membership & guarantee", color = JMPalette.White, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                Text("99% match in 6 months — or fully refunded", color = JMPalette.White.copy(alpha = 0.7f), fontSize = 12.5.sp)
+            }
+            Icon(Icons.Filled.ArrowForward, null, tint = JMPalette.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
         }
 
         Column(Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMColors.surfaceCard)
@@ -54,8 +68,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        JMButton("Sign out", onClick = {}, variant = JMButtonVariant.Outline,
-            fullWidth = true, icon = Icons.Filled.Logout)
+        JMButton("Sign out", onClick = {}, variant = JMButtonVariant.Outline, fullWidth = true)
+    }
+
+    // Premium overlays (full-screen). In a real app these would be nav destinations.
+    when (overlay) {
+        "membership" -> MembershipScreen(onClose = { overlay = null }, onGuarantee = { overlay = "guarantee" })
+        "guarantee" -> GuaranteeScreen(onClose = { overlay = null }, onSeeMembership = { overlay = "membership" })
     }
 }
 

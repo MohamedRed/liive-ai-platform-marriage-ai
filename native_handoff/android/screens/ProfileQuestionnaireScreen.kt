@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.Icon
@@ -63,8 +62,7 @@ fun ProfileQuestionnaireScreen(modifier: Modifier = Modifier) {
             Spacer(Modifier.height(JMSpace.x4))
             JMScaleRating(value = rating, onChange = { rating = it }, lowLabel = "Flexible", highLabel = "Essential")
             Spacer(Modifier.height(JMSpace.x3))
-            JMButton("Save & continue", onClick = {}, variant = JMButtonVariant.Ink,
-                fullWidth = true, icon = Icons.Filled.ArrowForward)
+            JMButton("Save & continue", onClick = {}, variant = JMButtonVariant.Ink, fullWidth = true)
         }
 
         Text("SECTIONS", color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp)
