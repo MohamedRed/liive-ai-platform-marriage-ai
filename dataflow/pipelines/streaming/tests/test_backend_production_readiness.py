@@ -141,15 +141,27 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("match /MATCH_CANDIDATE_SCOREBOARD/{document=**}", rules)
         self.assertIn("allow write: if false", rules)
 
-    def test_update_user_answers_publishes_matching_event(self):
+    def test_update_user_answers_persists_matching_event_outbox_before_publish(self):
         source = read("functions-nodejs/src/domains/marriage/index.ts")
+        matching_events_source = read("functions-nodejs/src/domains/marriage/matching-events.ts")
+        combined_source = source + "\n" + matching_events_source
+        rules = read("firestore.rules")
 
-        self.assertIn("@google-cloud/pubsub", source)
-        self.assertIn("publishMatchingEvent", source)
-        self.assertIn("USER_PROFILE_UPDATED_PUBSUB_TOPIC", source)
-        self.assertIn("triggering_qa", source)
-        self.assertIn("qa_id: params.questionId", source)
-        self.assertIn("await publishMatchingEvent", source)
+        self.assertIn("@google-cloud/pubsub", combined_source)
+        self.assertIn("publishMatchingEvent", combined_source)
+        self.assertIn("USER_PROFILE_UPDATED_PUBSUB_TOPIC", combined_source)
+        self.assertIn("MATCHING_EVENT_OUTBOX", combined_source)
+        self.assertIn("republishPendingMatchingEvents", combined_source)
+        self.assertIn("matchingEventRef", combined_source)
+        self.assertIn("status: \"pending\"", combined_source)
+        self.assertIn("status: \"published\"", combined_source)
+        self.assertIn("status: \"publish_failed\"", combined_source)
+        self.assertIn("triggering_qa", combined_source)
+        self.assertIn("qa_id: params.questionId", combined_source)
+        self.assertIn("transaction.set(matchingEventRef", matching_events_source)
+        self.assertLess(source.index("queueMatchingEvent"), source.index("await publishMatchingEvent"))
+        self.assertIn("match /MATCHING_EVENT_OUTBOX/{document=**}", rules)
+        self.assertIn("allow read, write: if false", rules)
 
     def test_delayed_matching_uses_authenticated_http_task_to_publish_pubsub(self):
         source = read("dataflow/pipelines/streaming/transforms/scheduling.py")

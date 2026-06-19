@@ -1,8 +1,8 @@
 import { onCall } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import * as admin from 'firebase-admin';
 import { firestore } from "firebase-admin";
-import { PubSub } from "@google-cloud/pubsub";
 
 import {
   QuestionsAnswers,
@@ -12,44 +12,15 @@ import {
   LEGACY_COLLECTIONS
 } from '@livve-1/database-types';
 
-const pubSub = new PubSub();
-const MATCHING_TOPIC_ENV = "USER_PROFILE_UPDATED_PUBSUB_TOPIC";
-
-async function publishMatchingEvent(params: {
-  userID: string;
-  questionId: string;
-  questionText: string;
-  answer: string;
-  layer: QuestionLayer;
-  section?: string;
-}): Promise<void> {
-  const topicName = process.env[MATCHING_TOPIC_ENV];
-  if (!topicName) {
-    throw new Error(`${MATCHING_TOPIC_ENV} is not configured; refusing to save answer without triggering matching.`);
-  }
-
-  const payload = {
-    event_type: "qa_answer_updated",
-    user_id: params.userID,
-    triggering_qa: {
-      qa_id: params.questionId,
-      question: params.questionText,
-      answer: params.answer,
-      layer: params.layer,
-      section: params.section,
-    },
-    published_at: new Date().toISOString(),
-  };
-
-  await pubSub.topic(topicName).publishMessage({
-    data: Buffer.from(JSON.stringify(payload)),
-    attributes: {
-      event_type: "qa_answer_updated",
-      user_id: params.userID,
-      question_id: params.questionId,
-    },
-  });
-}
+import {
+  buildMatchingEventPayload,
+  createMatchingEventRef,
+  markMatchingEventPublishFailed,
+  markMatchingEventPublished,
+  publishMatchingEvent,
+  queueMatchingEvent,
+  republishPendingMatchingEventsHandler,
+} from "./matching-events";
 
 /**
  * Get user's questions and answers
@@ -105,6 +76,15 @@ export const updateUserAnswers = onCall(async (request) => {
 
     let questionTextForEvent = typeof question === 'string' && question.trim() ? question.trim() : questionId;
     const sectionForStorage = typeof section === 'string' && section.trim() ? section.trim() : undefined;
+    const matchingEventRef = createMatchingEventRef(db);
+    let matchingEventPayload = buildMatchingEventPayload({
+      userID,
+      questionId,
+      questionText: questionTextForEvent,
+      answer,
+      layer,
+      section: sectionForStorage,
+    });
 
     await db.runTransaction(async (transaction) => {
       const qaRef = db.collection(LEGACY_COLLECTIONS.QUESTIONS_ANSWERS).doc(userID);
@@ -164,18 +144,27 @@ export const updateUserAnswers = onCall(async (request) => {
           ipAddress: request.rawRequest.ip
         }
       });
+      // Persist matching outbox entry in the same transaction as the answer and audit log.
+      matchingEventPayload = buildMatchingEventPayload({
+        userID,
+        questionId,
+        questionText: questionTextForEvent,
+        answer,
+        layer,
+        section: sectionForStorage,
+      });
+      queueMatchingEvent(transaction, matchingEventRef, matchingEventPayload, timestamp);
     });
 
-    await publishMatchingEvent({
-      userID,
-      questionId,
-      questionText: questionTextForEvent,
-      answer,
-      layer,
-      section: sectionForStorage,
-    });
-
-    return { success: true };
+    try {
+      await publishMatchingEvent(matchingEventPayload);
+      await markMatchingEventPublished(db, matchingEventRef.id);
+      return { success: true, matchingEventId: matchingEventRef.id, matchingStatus: "published" };
+    } catch (publishError) {
+      logger.error(`Matching event publish failed for outbox ${matchingEventRef.id}:`, publishError);
+      await markMatchingEventPublishFailed(db, matchingEventRef.id, publishError);
+      return { success: true, matchingEventId: matchingEventRef.id, matchingStatus: "publish_failed" };
+    }
   } catch (error) {
     logger.error(`Error updating answer for ${userID}, question ${request.data.questionId}:`, error);
     throw new Error("Failed to update answer");
@@ -240,3 +229,7 @@ export async function updateWaliVerificationStatus(
     throw new Error("Failed to update Wali verification");
   }
 }
+
+export const republishPendingMatchingEvents = onSchedule("every 5 minutes", async () => {
+  await republishPendingMatchingEventsHandler();
+});
