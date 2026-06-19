@@ -23,7 +23,7 @@ on:
       screens:
         description: "Comma-separated visual screen keys"
         required: true
-        default: "onboarding,talk-active,talk-idle,talk-type,matches,match-detail,profile,verification,chat,wali,settings,membership,guarantee"
+        default: "onboarding,talk-active,talk-idle,talk-type,matches,match-detail,profile,verification,chat,wali,settings"
         type: string
 
 env:
