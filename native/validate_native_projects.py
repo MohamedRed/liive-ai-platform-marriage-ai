@@ -199,6 +199,10 @@ checks = {
         "/v1/apps/",
         "APPETIZE_URL=https://appetize.io/app/",
     ],
+    ROOT / "scripts/capture-appetize-visual-state.mjs": [
+        "membership",
+        "guarantee",
+    ],
     WORKSPACE_ROOT / ".github/workflows/native-visual-capture.yml": [
         "membership",
         "guarantee",

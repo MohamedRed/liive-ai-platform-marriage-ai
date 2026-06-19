@@ -15,6 +15,8 @@ const defaultScreens = [
   "chat",
   "wali",
   "settings",
+  "membership",
+  "guarantee",
 ].join(",");
 const screens = (process.env.VISUAL_SCREENS || defaultScreens)
   .split(",")
