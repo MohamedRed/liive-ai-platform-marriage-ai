@@ -202,10 +202,12 @@ checks = {
     ROOT / "scripts/capture-appetize-visual-state.mjs": [
         "membership",
         "guarantee",
+        "return 20_000;",
     ],
     WORKSPACE_ROOT / ".github/workflows/native-visual-capture.yml": [
         "membership",
         "guarantee",
+        "timeout-minutes: 35",
     ],
 }
 for path, needles in checks.items():

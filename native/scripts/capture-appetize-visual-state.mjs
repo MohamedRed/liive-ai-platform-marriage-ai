@@ -234,8 +234,8 @@ function round(value) {
 }
 
 function waitMs(platform, screen) {
-  if (platform === "ios" && screen === "talk-idle") return 45_000;
-  return 30_000;
+  if (platform === "ios" && screen === "talk-idle") return 35_000;
+  return 20_000;
 }
 
 function trimTrailingSlash(value) {
