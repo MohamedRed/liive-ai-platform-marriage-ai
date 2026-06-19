@@ -31,6 +31,10 @@ struct RootView: View {
                 VerifyView(autoFocus: false)
             } else if visualScreen == .chat {
                 ChatView()
+            } else if visualScreen == .membership {
+                MembershipView()
+            } else if visualScreen == .guarantee {
+                GuaranteeView()
             } else {
                 TabView(selection: $app.tab) {
                     CounselorHomeView(

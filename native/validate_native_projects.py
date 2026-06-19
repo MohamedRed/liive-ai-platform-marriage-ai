@@ -119,6 +119,8 @@ checks = {
         "ProfileQuestionnaireScreen",
         "WaliScreen",
         "SettingsScreen",
+        "MembershipScreen",
+        "GuaranteeScreen",
     ],
     ROOT / "android/app/src/main/java/com/justmarriage/app/SettingsScreen.kt": [
         "Membership & guarantee",
@@ -153,6 +155,8 @@ checks = {
         "ProfileQuestionnaireView",
         "WaliView",
         "SettingsView",
+        "MembershipView",
+        "GuaranteeView",
     ],
     ROOT / "ios/JustMarriage/Screens/SettingsView.swift": [
         "Membership & guarantee",
@@ -194,6 +198,10 @@ checks = {
         "https://api.appetize.io",
         "/v1/apps/",
         "APPETIZE_URL=https://appetize.io/app/",
+    ],
+    WORKSPACE_ROOT / ".github/workflows/native-visual-capture.yml": [
+        "membership",
+        "guarantee",
     ],
 }
 for path, needles in checks.items():

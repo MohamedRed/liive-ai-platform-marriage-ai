@@ -12,6 +12,8 @@ enum VisualParityScreen: String {
     case verification
     case chat
     case settings
+    case membership
+    case guarantee
 
     var tab: AppTab? {
         switch self {
@@ -25,7 +27,7 @@ enum VisualParityScreen: String {
             return .wali
         case .settings:
             return .settings
-        case .onboarding, .verification, .chat:
+        case .onboarding, .verification, .chat, .membership, .guarantee:
             return nil
         }
     }

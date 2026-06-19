@@ -11,7 +11,9 @@ enum class VisualParityScreen(val key: String) {
     Wali("wali"),
     Verification("verification"),
     Chat("chat"),
-    Settings("settings");
+    Settings("settings"),
+    Membership("membership"),
+    Guarantee("guarantee");
 
     val tab: AppTab?
         get() = when (this) {
@@ -20,7 +22,7 @@ enum class VisualParityScreen(val key: String) {
             Profile -> AppTab.Profile
             Wali -> AppTab.Wali
             Settings -> AppTab.Settings
-            Onboarding, Verification, Chat -> null
+            Onboarding, Verification, Chat, Membership, Guarantee -> null
         }
 
     companion object {

@@ -29,6 +29,14 @@ fun RootScreen(visualScreenKey: String? = null) {
             ChatScreen()
             return@JustMarriageTheme
         }
+        if (visualScreen == VisualParityScreen.Membership) {
+            MembershipScreen(onClose = {}, onGuarantee = {})
+            return@JustMarriageTheme
+        }
+        if (visualScreen == VisualParityScreen.Guarantee) {
+            GuaranteeScreen(onClose = {}, onSeeMembership = {})
+            return@JustMarriageTheme
+        }
 
         var tab by remember { mutableStateOf(visualScreen?.tab ?: AppTab.Talk) }
         var onboarded by remember { mutableStateOf(visualScreen != null) }
