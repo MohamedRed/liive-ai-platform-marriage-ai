@@ -2,12 +2,9 @@
 // These mirror the web design system's contracts (see ../components.md). Copy what you
 // need; they depend only on JMColor / JMTheme / JMFont.
 import SwiftUI
-
 // MARK: - Button
-
 public enum JMButtonVariant { case primary, secondary, ink, outline, ghost }
 public enum JMButtonSize { case sm, md, lg }
-
 public struct JMButton: View {
     let title: String
     var variant: JMButtonVariant = .primary
@@ -16,14 +13,12 @@ public struct JMButton: View {
     var fullWidth: Bool = false
     var systemIcon: String? = nil
     let action: () -> Void
-
     public init(_ title: String, variant: JMButtonVariant = .primary, size: JMButtonSize = .md,
                 pill: Bool = false, fullWidth: Bool = false, systemIcon: String? = nil,
                 action: @escaping () -> Void) {
         self.title = title; self.variant = variant; self.size = size
         self.pill = pill; self.fullWidth = fullWidth; self.systemIcon = systemIcon; self.action = action
     }
-
     private var height: CGFloat { switch size { case .sm: 36; case .md: 46; case .lg: 56 } }
     private var fontSize: CGFloat { switch size { case .sm: 13; case .md: 15; case .lg: 16 } }
     private var bg: Color {
@@ -34,7 +29,6 @@ public struct JMButton: View {
         switch variant { case .primary, .ink: JMColor.white; case .secondary: JMColor.onSecondary
         case .outline, .ghost: JMColor.ink900 }
     }
-
     public var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {

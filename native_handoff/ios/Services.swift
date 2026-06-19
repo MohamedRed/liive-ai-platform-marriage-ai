@@ -43,6 +43,10 @@ protocol NotificationService {
     func openNotifications() -> JMServiceResult
 }
 
+protocol MembershipService {
+    func purchasePremiumMembership() -> JMServiceResult
+}
+
 struct JustMarriageServices {
     let auth: AuthService
     let verification: VerificationService
@@ -51,6 +55,7 @@ struct JustMarriageServices {
     let wali: WaliService
     let chat: ChatService
     let notifications: NotificationService
+    let membership: MembershipService
 }
 
 enum PreviewJustMarriageServices {
@@ -61,7 +66,8 @@ enum PreviewJustMarriageServices {
         matching: PreviewMatchingService(),
         wali: PreviewWaliService(),
         chat: PreviewChatService(),
-        notifications: PreviewNotificationService()
+        notifications: PreviewNotificationService(),
+        membership: PreviewMembershipService()
     )
 }
 
@@ -104,5 +110,11 @@ private struct PreviewChatService: ChatService {
 private struct PreviewNotificationService: NotificationService {
     func openNotifications() -> JMServiceResult {
         .blocked("Notifications require push-service wiring before production.")
+    }
+}
+
+private struct PreviewMembershipService: MembershipService {
+    func purchasePremiumMembership() -> JMServiceResult {
+        .blocked("Payment service is required before membership can be activated. You have not been charged.")
     }
 }

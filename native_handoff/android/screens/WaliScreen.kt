@@ -34,8 +34,8 @@ fun WaliScreen(modifier: Modifier = Modifier) {
             Spacer(Modifier.height(8.dp))
             Text("Your wali guides the process", fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Spacer(Modifier.height(4.dp))
-            Text("A trusted guardian who reviews matches with you and is notified at every step — keeping everything halal.",
-                color = JMPalette.Cyan900, fontFamily = JMFontFamily.Sans, fontSize = 14.sp, lineHeight = 21.sp)
+            Text("A trusted guardian who reviews matches with you through the supervised service flow — keeping everything halal.",
+                color = JMColors.textSecondary, fontFamily = JMFontFamily.Sans, fontSize = 15.sp, lineHeight = 23.sp)
         }
 
         // Stepper

@@ -12,10 +12,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,14 +24,7 @@ import com.justmarriage.design.*
 
 @Composable
 fun WaliScreen(modifier: Modifier = Modifier) {
-    var boundaryNotice by remember { mutableStateOf<String?>(null) }
-    var showVerify by remember { mutableStateOf(false) }
-
-    if (showVerify) {
-        VerifyScreen(modifier = modifier, onBack = { showVerify = false }, onDone = { showVerify = false })
-        return
-    }
-    Column(modifier.fillMaxSize().background(JMColors.surfacePage).verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
 
         SectionHeader("Wali")
@@ -45,8 +34,8 @@ fun WaliScreen(modifier: Modifier = Modifier) {
             Spacer(Modifier.height(8.dp))
             Text("Your wali guides the process", fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Spacer(Modifier.height(4.dp))
-            Text("A trusted guardian who reviews matches with you. Notification delivery is handled by the wali service once connected, keeping every step halal.",
-                color = JMPalette.Cyan900, fontFamily = JMFontFamily.Sans, fontSize = 14.sp, lineHeight = 21.sp)
+            Text("A trusted guardian who reviews matches with you through the supervised service flow — keeping everything halal.",
+                color = JMColors.textSecondary, fontFamily = JMFontFamily.Sans, fontSize = 15.sp, lineHeight = 23.sp)
         }
 
         // Stepper
@@ -72,20 +61,8 @@ fun WaliScreen(modifier: Modifier = Modifier) {
             JMBadge("Verifying", tone = JMBadgeTone.Warning, soft = true)
         }
 
-        boundaryNotice?.let {
-            Row(Modifier.fillMaxWidth().clip(JMShapes.md).background(JMPalette.Amber50).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Filled.Info, null, tint = JMPalette.Amber500, modifier = Modifier.size(19.dp))
-                Text(it, color = JMColors.ink, fontFamily = JMFontFamily.Sans, fontSize = 13.sp, lineHeight = 18.sp)
-            }
-        }
-
-        JMButton("Continue verification", onClick = {
-            showVerify = true
-        }, variant = JMButtonVariant.Primary, fullWidth = true, icon = Icons.Filled.Badge)
-        JMButton("Invite a different wali", onClick = {
-            boundaryNotice = PreviewJustMarriageServices.current.wali.inviteDifferentWali().message()
-        }, variant = JMButtonVariant.Outline, fullWidth = true, icon = Icons.Filled.PersonAdd)
+        JMButton("Continue verification", onClick = {}, variant = JMButtonVariant.Primary, fullWidth = true)
+        JMButton("Invite a different wali", onClick = {}, variant = JMButtonVariant.Ghost, fullWidth = true)
     }
 }
 

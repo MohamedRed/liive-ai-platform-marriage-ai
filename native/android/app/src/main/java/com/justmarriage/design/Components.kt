@@ -11,8 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,7 +23,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -47,7 +44,6 @@ fun JMButton(
     pill: Boolean = false,
     fullWidth: Boolean = false,
     enabled: Boolean = true,
-    icon: ImageVector? = null,
 ) {
     val height = when (size) { JMButtonSize.Sm -> 36.dp; JMButtonSize.Md -> 46.dp; JMButtonSize.Lg -> 56.dp }
     val fontSize = when (size) { JMButtonSize.Sm -> 13.sp; JMButtonSize.Md -> 15.sp; JMButtonSize.Lg -> 16.sp }
@@ -57,33 +53,24 @@ fun JMButton(
         JMButtonVariant.Ink -> JMColors.ink
         else -> Color.Transparent
     }
-    val activeFg = when (variant) {
+    val fg = when (variant) {
         JMButtonVariant.Primary, JMButtonVariant.Ink -> JMColors.onPrimary
         JMButtonVariant.Secondary -> JMColors.onSecondary
         else -> JMColors.ink
     }
-    val fg = if (enabled) activeFg else JMColors.textDisabled
     val shape = if (pill) JMShapes.pill else JMShapes.md
     Box(
         modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .height(height)
             .clip(shape)
-            .background(if (enabled) bg else if (bg == Color.Transparent) Color.Transparent else bg.copy(alpha = 0.35f))
-            .then(if (variant == JMButtonVariant.Outline) Modifier.border(JMBorder.widthBold, if (enabled) JMColors.ink else JMColors.borderDefault, shape) else Modifier)
+            .background(if (enabled) bg else bg.copy(alpha = 0.45f))
+            .then(if (variant == JMButtonVariant.Outline) Modifier.border(JMBorder.widthBold, JMColors.ink, shape) else Modifier)
             .clickableNoRipple(enabled, onClick)
             .padding(horizontal = if (size == JMButtonSize.Lg) 30.dp else 22.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            icon?.let {
-                Icon(it, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
-            }
-            Text(text, color = fg, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = fontSize)
-        }
+        Text(text, color = fg, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.Bold, fontSize = fontSize)
     }
 }
 
@@ -112,7 +99,7 @@ fun JMBadge(
     Box(
         modifier
             .rotate(if (tilt) -4f else 0f)
-            .clip(JMShapes.pill)
+            .clip(JMShapes.xs)
             .background(bg)
             .padding(horizontal = 11.dp, vertical = 4.dp)
     ) {
@@ -248,8 +235,9 @@ fun JMAvatar(
         contentAlignment = Alignment.Center,
     ) {
         if (locked) {
-            Icon(Icons.Filled.Lock, contentDescription = "Locked photo", tint = JMColors.textTertiary,
-                modifier = Modifier.size(size * 0.42f))
+            // Replace with a Solar lock vector drawable; text shown as a placeholder.
+            Text("\uD83D\uDD12".let { "" }, color = JMColors.textTertiary) // intentionally blank; use Icon(painterResource(R.drawable.ic_lock))
+            Text("•", color = JMColors.textTertiary, fontSize = (size.value * 0.4).sp)
         } else {
             Text(initials, color = JMPalette.Pink700, fontFamily = JMFontFamily.Sans,
                 fontWeight = FontWeight.Bold, fontSize = (size.value * 0.38).sp)
@@ -262,10 +250,9 @@ fun JMAvatar(
 @Composable
 private fun Modifier.clickableNoRipple(enabled: Boolean, onClick: () -> Unit): Modifier {
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    return this.clickable(
-        interactionSource = interaction,
-        indication = null,
-        enabled = enabled,
-        onClick = onClick,
+    return this.then(
+        Modifier.clickable(
+            interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick,
+        )
     )
 }

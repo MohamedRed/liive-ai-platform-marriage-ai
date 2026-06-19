@@ -34,6 +34,10 @@ interface NotificationService {
     fun openNotifications(): JMServiceResult
 }
 
+interface MembershipService {
+    fun purchasePremiumMembership(): JMServiceResult
+}
+
 data class JustMarriageServices(
     val auth: AuthService,
     val verification: VerificationService,
@@ -42,6 +46,7 @@ data class JustMarriageServices(
     val wali: WaliService,
     val chat: ChatService,
     val notifications: NotificationService,
+    val membership: MembershipService,
 )
 
 object PreviewJustMarriageServices {
@@ -79,6 +84,11 @@ object PreviewJustMarriageServices {
         notifications = object : NotificationService {
             override fun openNotifications() = JMServiceResult.Blocked(
                 "Notifications require push-service wiring before production.",
+            )
+        },
+        membership = object : MembershipService {
+            override fun purchasePremiumMembership() = JMServiceResult.Blocked(
+                "Payment service is required before membership can be activated. You have not been charged.",
             )
         },
     )

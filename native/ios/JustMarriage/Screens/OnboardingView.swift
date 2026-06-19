@@ -10,31 +10,35 @@ struct OnboardingView: View {
             JMColor.ink900.ignoresSafeArea()
             VStack(alignment: .leading, spacing: JMSpace.x6) {
                 // Wordmark
-                JMBrandWordmark()
+                HStack(spacing: 6) {
+                    Text("JUST").font(JMFont.display(34)).foregroundColor(.white)
+                    Text("MARRIAGE").font(JMFont.display(28)).foregroundColor(JMColor.pink500)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(JMColor.cyanBright).clipShape(RoundedRectangle(cornerRadius: 7))
+                }
 
                 Spacer()
 
                 VStack(alignment: .leading, spacing: JMSpace.x5) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("No swap.").font(JMFont.display(46)).foregroundColor(.white)
-                        Text("No chat.").font(JMFont.display(46)).foregroundColor(.white)
-                        Text("No date.")
-                            .font(JMFont.display(46))
-                            .foregroundColor(JMColor.ink900)
-                            .padding(.horizontal, 8)
-                            .background(JMColor.yellow400)
-                            .clipShape(RoundedRectangle(cornerRadius: JMRadius.sm))
-                    }
-                    .textCase(.uppercase)
+                    (Text("No swap.\nNo chat.\n") + Text("No date.")
+                        .foregroundColor(JMColor.ink900))
+                        .font(JMFont.display(46))
+                        .foregroundColor(.white)
+                        .lineSpacing(-6)
+                        .textCase(.uppercase)
+                        .background(alignment: .bottomLeading) {
+                            // highlight block behind "No date." handled visually via accent below
+                            EmptyView()
+                        }
 
                     Text("A calm, guided path to marriage — led by an AI counselor, kept halal by your wali.")
-                        .font(JMFont.sans(16, .semibold))
-                        .foregroundColor(.white.opacity(0.88))
+                        .font(JMFont.sans(16))
+                        .foregroundColor(.white.opacity(0.85))
                         .lineSpacing(6)
 
                     VStack(alignment: .leading, spacing: JMSpace.x3) {
-                        Text("I AM A…").font(JMFont.sans(13, .extrabold))
-                            .tracking(0.6).foregroundColor(.white.opacity(0.78))
+                        Text("I AM A…").font(JMFont.sans(13, .bold))
+                            .tracking(0.6).foregroundColor(.white.opacity(0.7))
                         HStack(spacing: JMSpace.x3) {
                             roleCard("brother", "Brother", "person.fill")
                             roleCard("sister", "Sister", "person.fill")
@@ -52,10 +56,10 @@ struct OnboardingView: View {
                 .disabled(role == nil)
 
                 HStack { Spacer()
-                    Text("Already a member? ").foregroundColor(.white.opacity(0.66))
-                    + Text("Sign in").foregroundColor(JMColor.cyanBright).font(JMFont.sans(13, .bold))
+                    Text("Already a member? ").foregroundColor(.white.opacity(0.6))
+                    + Text("Sign in").foregroundColor(JMColor.cyanBright).bold()
                     Spacer() }
-                    .font(JMFont.sans(13, .semibold))
+                    .font(JMFont.sans(13))
             }
             .padding(JMSpace.x6)
         }
