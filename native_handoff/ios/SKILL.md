@@ -83,7 +83,6 @@ Complete, faithful recreations of the product — add them after the token/compo
 |---|---|
 | `RootView.swift` | TabView (Talk/Matches/Profile/Wali/Settings) + onboarding gate. **Entry point.** |
 | `JMModels.swift` | `AppState`, `Prospect`, `JMSectionHeader`. |
-| `Services.swift` | Explicit service contracts and preview blockers for production wiring boundaries. |
 | `OnboardingView.swift` | Intent + brother/sister. |
 | `CounselorHomeView.swift` | Voice home **with Talk / Type toggle** + text conversation. |
 | `MatchmakingView.swift` | Best 99% match + search list; `MatchDetailSheet`. |
@@ -91,7 +90,9 @@ Complete, faithful recreations of the product — add them after the token/compo
 | `WaliView.swift` | Guardian explainer + verification stepper. |
 | `VerifyView.swift` | Phone OTP. |
 | `ChatView.swift` | Wali-supervised post-match chat. |
-| `SettingsView.swift` | Profile + preference toggles. |
+| `SettingsView.swift` | Profile + preference toggles; entry to membership. |
+| `MembershipView.swift` | **Premium paywall** — £2,500 one-time, guarantee-first. |
+| `GuaranteeView.swift` | **99%-in-6-months-or-refund** explainer (4 steps). |
 
 Launch with `RootView()`. All screens depend only on the token/component files in this
 folder. Fonts fall back to the system face until you bundle Anton + Public Sans.

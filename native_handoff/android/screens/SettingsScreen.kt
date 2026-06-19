@@ -5,10 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,41 +24,42 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var matchNotif by remember { mutableStateOf(true) }
     var notifyWali by remember { mutableStateOf(true) }
     var hidePhoto by remember { mutableStateOf(false) }
-    var signOutNotice by remember { mutableStateOf<String?>(null) }
+    // overlay: null | "membership" | "guarantee"
+    var overlay by remember { mutableStateOf<String?>(null) }
 
-    Column(modifier.fillMaxSize().background(JMColors.surfacePage).verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(JMSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(JMSpace.x5)) {
 
         SectionHeader("Settings")
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(JMSpace.x4)) {
-            Box(Modifier.size(70.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(66.dp).clip(CircleShape).border(3.dp, JMColors.primary, CircleShape).padding(3.dp)) {
-                    JMAvatar(initials = "AB", size = 60.dp)
-                }
-                Box(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(JMColors.secondary)
-                        .border(2.dp, JMColors.surfacePage, CircleShape)
-                )
-            }
+            JMAvatar(initials = "AB", size = 60.dp)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Aisha B.", style = JMText.headingSm)
                 JMBadge("Identity verified", tone = JMBadgeTone.Success, soft = true)
             }
         }
 
+        // Premium membership entry
+        Row(Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMColors.ink)
+            .clickable { overlay = "membership" }.padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(Icons.Filled.WorkspacePremium, null, tint = JMColors.secondary, modifier = Modifier.size(26.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Membership & guarantee", color = JMPalette.White, fontFamily = JMFontFamily.Sans, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                Text("99% match in 6 months — or fully refunded", color = JMPalette.White.copy(alpha = 0.7f), fontSize = 12.5.sp)
+            }
+            Icon(Icons.Filled.ArrowForward, null, tint = JMPalette.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+        }
+
         Column(Modifier.fillMaxWidth().clip(JMShapes.lg).background(JMColors.surfaceCard)
             .border(1.dp, JMColors.borderSubtle, JMShapes.lg)) {
             ToggleRow(Icons.Filled.Notifications, "Match notifications", matchNotif) { matchNotif = it }
-            HorizontalDivider(color = JMPalette.Ink100)
+            Divider(color = JMPalette.Ink100)
             ToggleRow(Icons.Filled.Shield, "Notify my wali", notifyWali) { notifyWali = it }
-            HorizontalDivider(color = JMPalette.Ink100)
+            Divider(color = JMPalette.Ink100)
             ToggleRow(Icons.Filled.VisibilityOff, "Hide my photo until match", hidePhoto) { hidePhoto = it }
-            HorizontalDivider(color = JMPalette.Ink100)
+            Divider(color = JMPalette.Ink100)
             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Icon(Icons.Filled.Language, null, tint = JMColors.textTertiary, modifier = Modifier.size(22.dp))
@@ -69,12 +68,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        signOutNotice?.let {
-            Text(it, color = JMColors.textTertiary, fontFamily = JMFontFamily.Sans, fontSize = 13.sp, lineHeight = 18.sp)
-        }
-        JMButton("Sign out", onClick = {
-            signOutNotice = PreviewJustMarriageServices.current.auth.signOut().message()
-        }, variant = JMButtonVariant.Outline, fullWidth = true, icon = Icons.AutoMirrored.Filled.Logout)
+        JMButton("Sign out", onClick = {}, variant = JMButtonVariant.Outline, fullWidth = true)
+    }
+
+    // Premium overlays (full-screen). In a real app these would be nav destinations.
+    when (overlay) {
+        "membership" -> MembershipScreen(onClose = { overlay = null }, onGuarantee = { overlay = "guarantee" })
+        "guarantee" -> GuaranteeScreen(onClose = { overlay = null }, onSeeMembership = { overlay = "membership" })
     }
 }
 

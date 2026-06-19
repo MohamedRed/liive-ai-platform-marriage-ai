@@ -27,13 +27,18 @@ regenerate or diff values.
 ## Where things live
 
 ```
-ios/      JMColor.swift JMTheme.swift JMFont.swift Components.swift Services.swift  +  screens/ (RootView + 9 screens)
-android/  Color.kt Dimens.kt Shape.kt Type.kt Theme.kt Components.kt  +  screens/ (Services + RootScreen + 9 screens)
+ios/      JMColor.swift JMTheme.swift JMFont.swift Components.swift  +  screens/ (RootView + 11 screens)
+android/  Color.kt Dimens.kt Shape.kt Type.kt Theme.kt Components.kt  +  screens/ (RootScreen + 11 screens)
 ```
 
-The 9 screens (both platforms): Onboarding · Counselor home (voice **+ Talk/Type** text
+The 11 screens (both platforms): Onboarding · Counselor home (voice **+ Talk/Type** text
 conversation) · Matchmaking + match detail · Profile questionnaire (1–10 scale) · Wali
-verification stepper · Phone OTP · Wali-supervised chat · Settings.
+verification stepper · Phone OTP · Wali-supervised chat · Settings · **Membership paywall
+(£2,500 one-time)** · **Guarantee explainer (99% match in 6 months, or full refund)**.
+
+The **premium membership + money-back guarantee is the core differentiator** — a large
+upfront fee that signals a serious, vetted service, fully refundable if no 99% match is
+found within six months. Treat the membership/guarantee screens as primary, not optional.
 
 ## Rules — do not violate
 
@@ -49,6 +54,10 @@ verification stepper · Phone OTP · Wali-supervised chat · Settings.
 - **Modesty model:** candidate photos are **locked** until a match is mutually accepted
   (`JMAvatar(locked: true)`); post-match conversations are **wali-supervised** (show the
   indicator).
+- **Premium + guarantee:** the business model is a **single £2,500 upfront fee, fully
+  refundable** if no wali-approved 99% match within 6 months. Lead with the guarantee, keep
+  the qualifying terms light (stay active + complete profile). The price figure lives in one
+  constant per platform (`JM_PRICE`).
 - Brand: pink `#F5269B` (primary), cyan `#1FE6D8` (secondary), ink `#15161B`, yellow
   `#FFD23E`. Fonts: **Anton** (display, all-caps headlines) + **Public Sans** (body/UI).
 

@@ -88,7 +88,6 @@ your module). Add after the token/component files:
 |---|---|
 | `RootScreen.kt` | `Scaffold` + bottom `NavigationBar` + onboarding gate. **Entry point — call `RootScreen()`.** |
 | `Models.kt` | `Prospect`, `AppTab`, `Mock` data. |
-| `Services.kt` | Explicit service contracts and preview blockers for production wiring boundaries. |
 | `OnboardingScreen.kt` | Intent + brother/sister. |
 | `CounselorHomeScreen.kt` | Voice home **with Talk / Type toggle** + text conversation + `JMVoiceBars`. |
 | `MatchmakingScreen.kt` | Best 99% match + list; `ModalBottomSheet` detail; shared `SectionHeader`. |
@@ -96,7 +95,9 @@ your module). Add after the token/component files:
 | `WaliScreen.kt` | Guardian explainer + verification stepper. |
 | `VerifyScreen.kt` | Phone OTP. |
 | `ChatScreen.kt` | Wali-supervised post-match chat. |
-| `SettingsScreen.kt` | Profile + preference toggles. |
+| `SettingsScreen.kt` | Profile + preference toggles; entry to membership. |
+| `MembershipScreen.kt` | **Premium paywall** — £2,500 one-time, guarantee-first. |
+| `GuaranteeScreen.kt` | **99%-in-6-months-or-refund** explainer (4 steps). |
 
 Uses `androidx.compose.material:material-icons-extended` for the icon set (swap for Solar
 vector drawables for production). Fonts fall back to the system face until you wire
