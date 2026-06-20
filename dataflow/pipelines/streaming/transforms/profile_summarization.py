@@ -95,7 +95,7 @@ class GenerateProfileSummaryDoFn(beam.DoFn):
         # Input: (user_id, profile_data_dict)
         # profile_data_dict is expected to contain 'questions_answers'
         if not self.openai_client:
-            error_message = self.setup_error_message or "GenerateProfileSummaryDoFn not initialized"
+            error_message = self.setup_error_message or "GenerateProfileSummaryDoFn setup failed"
             self.logger.error("%s. Skipping summary generation.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
@@ -190,7 +190,7 @@ class UpdateProfileSummaryInDedicatedCollectionDoFn(beam.DoFn):
     def process(self, element: Tuple[str, str, str]):
         # Input: (user_id, summary_text, qas_version_hash)
         if not self.db:
-            error_message = self.setup_error_message or "UpdateProfileSummaryInDedicatedCollectionDoFn not initialized"
+            error_message = self.setup_error_message or "UpdateProfileSummaryInDedicatedCollectionDoFn setup failed"
             self.logger.error("%s. Skipping summary storage.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})

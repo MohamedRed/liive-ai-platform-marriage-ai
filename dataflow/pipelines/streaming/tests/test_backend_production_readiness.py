@@ -276,6 +276,8 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("setup_error_message", summary_source)
         self.assertIn("GenerateProfileSummaryDoFn setup failed", summary_source)
         self.assertIn("UpdateProfileSummaryInDedicatedCollectionDoFn setup failed", summary_source)
+        self.assertIn("error_message = self.setup_error_message or \"GenerateProfileSummaryDoFn setup failed\"", summary_source)
+        self.assertIn("error_message = self.setup_error_message or \"UpdateProfileSummaryInDedicatedCollectionDoFn setup failed\"", summary_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", summary_source)
         self.assertIn(").with_outputs(GenerateProfileSummaryDoFn.OUTPUT_ERROR_TAG, main='main')", summary_source)
         self.assertIn(").with_outputs(UpdateProfileSummaryInDedicatedCollectionDoFn.OUTPUT_ERROR_TAG, main='main')", summary_source)
@@ -283,6 +285,8 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("summary_results_tuple.storage_errors | \"DLQ_SummaryStorageErrors\" >> dlq_sink(\"SummaryStorageErrors\")", streaming_source)
         self.assertNotIn("Failed GenerateProfileSummaryDoFn setup: {e}", summary_source)
         self.assertNotIn("Failed UpdateProfileSummaryInDedicatedCollectionDoFn setup: {e}", summary_source)
+        self.assertNotIn("GenerateProfileSummaryDoFn not initialized", summary_source)
+        self.assertNotIn("UpdateProfileSummaryInDedicatedCollectionDoFn not initialized", summary_source)
         self.assertNotIn("raise # Critical setup failure", summary_source)
 
     def test_streaming_dlq_writer_persists_structured_error_record(self):
