@@ -80,9 +80,28 @@ class GenerateStatementEmbeddingsDoFn(beam.DoFn): # Renamed class
             })
             return
 
-        parsed_statements = element.get('parsed_statements', [])
+        parsed_statements = element.get('parsed_statements')
         profile_match_metadata = build_match_metadata(element.get('profile_data'))
         # user_id_from_element = element.get('user_id') # The top-level user_id from the element
+
+        if parsed_statements is None:
+            self.logger.error("Missing parsed_statements for statement embedding. Element: %s", element)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Missing parsed_statements for statement embedding",
+                "element": element,
+            })
+            return
+
+        if not isinstance(parsed_statements, list):
+            self.logger.error("Invalid parsed_statements shape for statement embedding: %s. Element: %s", type(parsed_statements), element)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Invalid parsed_statements shape for statement embedding",
+                "element": element,
+                "parsed_statements_type": str(type(parsed_statements)),
+            })
+            return
 
         if not parsed_statements:
             self.logger.warning(f"No parsed_statements found in element for user '{element.get('user_id', 'UNKNOWN')}', original_qid '{element.get('question_id', 'UNKNOWN')}'. Element: {element}")
