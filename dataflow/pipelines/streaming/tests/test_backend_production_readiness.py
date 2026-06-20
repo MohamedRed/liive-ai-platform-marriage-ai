@@ -143,18 +143,22 @@ class BackendProductionReadinessTests(unittest.TestCase):
             "Layer1CandidateDoFn",
             "Layer2CandidateDoFn",
             "Layer3CandidateDoFn",
+            "Layer4CandidateDoFn",
         ):
             self.assertIn(f"class {class_name}", next_question_source)
 
-        self.assertGreaterEqual(next_question_source.count("OUTPUT_ERROR_TAG = 'errors'"), 3)
+        self.assertGreaterEqual(next_question_source.count("OUTPUT_ERROR_TAG = 'errors'"), 4)
         self.assertIn("setup_error_message", next_question_source)
         self.assertIn("Layer1CandidateDoFn setup failed", next_question_source)
         self.assertIn("Layer2CandidateDoFn setup failed", next_question_source)
         self.assertIn("Layer3CandidateDoFn setup failed", next_question_source)
+        self.assertIn("Layer4CandidateDoFn setup failed", next_question_source)
+        self.assertIn("error_message = self.setup_error_message or \"Layer4CandidateDoFn setup failed\"", next_question_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", next_question_source)
         self.assertIn("layer1_errors | \"DLQ_Layer1Errors\" >> dlq_sink(\"Layer1Errors\")", streaming_source)
         self.assertIn("layer2_errors | \"DLQ_Layer2Errors\" >> dlq_sink(\"Layer2Errors\")", streaming_source)
         self.assertIn("layer3_errors | \"DLQ_Layer3Errors\" >> dlq_sink(\"Layer3Errors\")", streaming_source)
+        self.assertIn("layer4_errors | \"DLQ_Layer4Errors\" >> dlq_sink(\"Layer4Errors\")", streaming_source)
         self.assertNotIn("Failed Layer1CandidateDoFn setup due to missing library: {e}", next_question_source)
         self.assertNotIn("Failed Layer1CandidateDoFn setup: {e}", next_question_source)
         self.assertNotIn("Failed Layer2CandidateDoFn setup: {e}", next_question_source)

@@ -1257,6 +1257,7 @@ class Layer4CandidateDoFn(beam.DoFn):
         self.project_id = project_id
         self.logger = logging.getLogger(__name__)
         self.db = None
+        self.setup_error_message = None
         # Store templates loaded during setup, keyed by framework name
         self._assessment_templates: Dict[str, List[Dict]] = {}
         self.framework_collections = COLLECTIONS.get('ASSESSMENTS', {})
@@ -1270,8 +1271,10 @@ class Layer4CandidateDoFn(beam.DoFn):
 
     def setup(self):
         self.logger.info("Setting up Layer4CandidateDoFn (Assessment Templates)...")
+        setup_errors = []
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             if not self.framework_collections:
                 self.logger.warning("Layer 4: Skipping template loading as no frameworks are defined.")
                 return
@@ -1312,19 +1315,22 @@ class Layer4CandidateDoFn(beam.DoFn):
                     self.logger.info(f"Layer 4: Loaded {count} valid templates (skipped {invalid_count} invalid) for framework '{framework_name}'.")
 
                 except Exception as e:
+                    setup_errors.append(f"{framework_name}/{collection_name}: {e}")
                     self.logger.error(f"Layer 4: Failed to load templates for framework '{framework_name}' from '{collection_name}': {e}", exc_info=True)
-                    # Continue loading other frameworks, but log the error
+                    # Continue loading other frameworks, but preserve failures for per-element DLQ if no usable templates load.
 
             # Log final loaded state
             loaded_summary = {fw: len(tpls) for fw, tpls in self._assessment_templates.items()}
             self.logger.info(f"Layer 4: Finished template loading. Summary: {loaded_summary}")
+            if setup_errors and not any(loaded_summary.values()):
+                self.setup_error_message = f"Layer4CandidateDoFn setup failed: {'; '.join(setup_errors)}"
 
             # TODO: Consider adding a caching layer if Firestore reads are too frequent/slow.
 
         except Exception as e:
-            self.logger.error(f"Layer 4: Failed during setup: {e}", exc_info=True)
-            # Allow pipeline to continue? Or raise? Raising might be safer if templates are crucial.
-            # raise RuntimeError("Layer 4 setup failed") from e
+            self.setup_error_message = f"Layer4CandidateDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
+            # Allow pipeline to continue; process will emit the failed element to the error tag.
 
     def _get_answered_ids(self, user_history: List[Dict]) -> Set[str]:
         """Extracts the set of answered question IDs from the user history."""
@@ -1354,10 +1360,19 @@ class Layer4CandidateDoFn(beam.DoFn):
             return
 
         if not self.db:
-            self.logger.error(f"Layer 4 ({user_id}): Firestore client not initialized. Skipping.")
+            error_message = self.setup_error_message or "Layer4CandidateDoFn setup failed"
+            self.logger.error("Layer 4 (%s): %s. Skipping.", user_id, error_message)
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'DoFn setup failed', 'user_id': user_id})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': error_message, 'user_id': user_id, 'element': element})
             # Yield empty list for CoGroupByKey compatibility
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, (user_id, []))
+            return
+
+        if self.setup_error_message and not self._assessment_templates:
+            error_message = self.setup_error_message or "Layer4CandidateDoFn setup failed"
+            self.logger.error("Layer 4 (%s): %s. Skipping.", user_id, error_message)
+            Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': error_message, 'user_id': user_id, 'element': element})
             yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, (user_id, []))
             return
 
