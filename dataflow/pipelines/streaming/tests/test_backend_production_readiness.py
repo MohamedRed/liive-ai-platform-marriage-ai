@@ -163,7 +163,10 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("Layer2CandidateDoFn setup failed", next_question_source)
         self.assertIn("Layer3CandidateDoFn setup failed", next_question_source)
         self.assertIn("Layer4CandidateDoFn setup failed", next_question_source)
+        self.assertIn("error_message = self.setup_error_message or \"Layer1CandidateDoFn setup failed\"", next_question_source)
+        self.assertIn("error_message = self.setup_error_message or \"Layer3CandidateDoFn setup failed\"", next_question_source)
         self.assertIn("error_message = self.setup_error_message or \"Layer4CandidateDoFn setup failed\"", next_question_source)
+        self.assertIn("if not self.db or not self.prediction_client or not self.model_endpoint", next_question_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", next_question_source)
         self.assertIn("layer1_errors | \"DLQ_Layer1Errors\" >> dlq_sink(\"Layer1Errors\")", streaming_source)
         self.assertIn("layer2_errors | \"DLQ_Layer2Errors\" >> dlq_sink(\"Layer2Errors\")", streaming_source)
@@ -174,6 +177,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Failed Layer2CandidateDoFn setup: {e}", next_question_source)
         self.assertNotIn("Failed Layer3CandidateDoFn setup due to missing aiplatform v1beta1 library: {e}", next_question_source)
         self.assertNotIn("Failed Layer3CandidateDoFn setup: {e}", next_question_source)
+        self.assertNotIn("Vertex AI client not loaded", next_question_source)
         self.assertNotIn("# Propagate exception to potentially fail the pipeline startup", next_question_source)
 
     def test_select_best_question_setup_failures_are_tagged_not_silent_fallbacks(self):

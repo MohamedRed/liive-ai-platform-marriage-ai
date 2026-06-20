@@ -338,8 +338,11 @@ class Layer3CandidateDoFn(beam.DoFn):
         Calls the LLM with the combined context, applying token reduction by reducing
         the number of matches included if needed. Uses Gemini API via PredictionServiceClient.
         """
-        if not self.prediction_client:
-            self.logger.error(f"Vertex AI client not loaded for user {user_id}. Cannot generate Layer 3 candidates.")
+        if not self.prediction_client or not self.model_endpoint:
+            error_message = self.setup_error_message or "Layer3CandidateDoFn setup failed"
+            if not self.setup_error_message:
+                self.setup_error_message = error_message
+            self.logger.error("%s. Cannot generate Layer 3 candidates for user %s.", error_message, user_id)
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
             return []
 
@@ -491,7 +494,7 @@ class Layer3CandidateDoFn(beam.DoFn):
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'Missing user_id', 'element': element})
             return
 
-        if not self.db or not self.prediction_client: # Also check prediction client
+        if not self.db or not self.prediction_client or not self.model_endpoint:
              error_message = self.setup_error_message or "Layer3CandidateDoFn setup failed"
              self.logger.error("%s. Skipping.", error_message)
              Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
@@ -1062,8 +1065,11 @@ class Layer1CandidateDoFn(beam.DoFn):
         Calls an LLM with the sequence of Q&As for a specific tag,
         asking if the *latest* answer needs clarification.
         """
-        if not self.prediction_client:
-            self.logger.error(f"Layer 1: Vertex AI client not loaded for user {user_id}. Skipping clarification check.")
+        if not self.prediction_client or not self.model_endpoint:
+            error_message = self.setup_error_message or "Layer1CandidateDoFn setup failed"
+            if not self.setup_error_message:
+                self.setup_error_message = error_message
+            self.logger.error("%s. Cannot run clarification check for user %s.", error_message, user_id)
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
             return []
         if not qa_sequence: # Should not happen if called correctly, but check
@@ -1185,7 +1191,7 @@ class Layer1CandidateDoFn(beam.DoFn):
             return
 
         # --- Fetch the sequence using the helper --- #
-        if not self.db:
+        if not self.db or not self.prediction_client or not self.model_endpoint:
              error_message = self.setup_error_message or "Layer1CandidateDoFn setup failed"
              self.logger.error("%s. Cannot fetch sequence.", error_message)
              Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
