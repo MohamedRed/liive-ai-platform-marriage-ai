@@ -162,6 +162,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Failed Layer3CandidateDoFn setup: {e}", next_question_source)
         self.assertNotIn("# Propagate exception to potentially fail the pipeline startup", next_question_source)
 
+    def test_update_next_question_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        next_question_source = read("dataflow/pipelines/streaming/transforms/next_question.py")
+
+        self.assertIn("class UpdateNextQuestionDoFn", next_question_source)
+        self.assertIn("OUTPUT_ERROR_TAG = 'errors'", next_question_source)
+        self.assertIn("setup_error_message", next_question_source)
+        self.assertIn("UpdateNextQuestionDoFn setup failed", next_question_source)
+        self.assertIn("error_message = self.setup_error_message or \"UpdateNextQuestionDoFn setup failed\"", next_question_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", next_question_source)
+        self.assertIn(").with_outputs(UpdateNextQuestionDoFn.OUTPUT_ERROR_TAG, main='main')", streaming_source)
+        self.assertIn("update_next_q_errors | \"DLQ_UpdateNextQErrors\" >> dlq_sink(\"UpdateNextQErrors\")", streaming_source)
+        self.assertNotIn("Failed UpdateNextQuestionDoFn setup: {e}", next_question_source)
+        self.assertNotIn("# ... (error handling for db init) ...", next_question_source)
+
     def test_firestore_match_writer_client_initialization_failures_are_tagged_not_raised(self):
         firestore_source = read("dataflow/pipelines/streaming/transforms/firestore_io.py")
 

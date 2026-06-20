@@ -856,6 +856,7 @@ class UpdateNextQuestionDoFn(beam.DoFn):
     def __init__(self, project_id: str):
         self.project_id = project_id
         self.db = None
+        self.setup_error_message = None
         # Ensure this uses the correct path from definitions
         self.suggestions_collection_name = COLLECTIONS.get('MARRIAGE', {}).get('NEXT_QUESTION_SUGGESTIONS')
         self.logger = logging.getLogger(__name__)
@@ -866,16 +867,20 @@ class UpdateNextQuestionDoFn(beam.DoFn):
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info(f"UpdateNextQuestionDoFn setup complete (Firestore collection: {self.suggestions_collection_name})")
         except Exception as e:
-            self.logger.error(f"Failed UpdateNextQuestionDoFn setup: {e}", exc_info=True)
-            raise
+            self.setup_error_message = f"UpdateNextQuestionDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Dict[str, Any]):
         # Expects element like: {'user_id': ..., 'selected_question': { ... }, 'candidate_count': ...}
         if not self.db:
-            # ... (error handling for db init) ...
-                return
+            error_message = self.setup_error_message or "UpdateNextQuestionDoFn setup failed"
+            self.logger.error("%s. Cannot update next-question suggestion.", error_message)
+            Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': error_message, 'element': element})
+            return
 
         user_id = element.get('user_id')
         selected_question = element.get('selected_question') # This can be None now
