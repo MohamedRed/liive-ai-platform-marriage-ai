@@ -235,6 +235,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn('"collectionGroup": "MATCHING_EVENT_OUTBOX"', indexes)
         self.assertIn('"fieldPath": "status"', indexes)
 
+    def test_scoreboard_cleanup_removes_stale_question_evidence_before_reembedding(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        scoreboard_source = read("dataflow/pipelines/streaming/transforms/scoreboard.py")
+
+        self.assertIn("DeleteStaleScoreboardEvidence", streaming_source)
+        self.assertLess(
+            streaming_source.index('| "DeleteStaleScoreboardEvidence"'),
+            streaming_source.index('| "DeleteStaleQuestionVectors"'),
+        )
+        self.assertIn("class DeleteStaleScoreboardEvidenceDoFn", scoreboard_source)
+        self.assertIn("triggering_original_question_id", scoreboard_source)
+        self.assertIn("transaction.delete(evidence_ref", scoreboard_source)
+        self.assertIn("transaction.delete(candidate_doc_ref", scoreboard_source)
+        self.assertIn("_score_from_remaining_evidence_docs", scoreboard_source)
+
 
 if __name__ == "__main__":
     unittest.main()

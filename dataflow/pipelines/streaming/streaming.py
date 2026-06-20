@@ -59,6 +59,7 @@ from .transforms.reranking import (
 #     FetchTopCandidatesDoFn
 # )
 from .transforms.scoreboard import (
+    DeleteStaleScoreboardEvidence,
     WriteToScoreboard, # Already imported for writing
     FetchTopCandidatesFromScoreboard, # Import from scoreboard.py
     FetchTopCandidatesDoFn # Import from scoreboard.py
@@ -310,11 +311,21 @@ def run_streaming_pipeline(argv=None):
         # parsed_statements_results.main is PCollection of elements like input, augmented with 'parsed_statements' list
         parsed_statements_results.main | "DebugLogParsedStatementsElement" >> DebugLogDoFn(label="ParsedStatementsElement")
 
-        # 2. Delete stale vectors for this edited answer before generating the
-        # replacement statement embeddings. This prevents old extra statements
-        # from previous answer versions from remaining matchable in Pinecone.
-        stale_vector_cleanup_results = (
+        # 2. Delete stale scoreboard evidence and vectors for this edited
+        # answer before generating replacement statement embeddings. This keeps
+        # both Firestore ranking evidence and Pinecone vectors consistent with
+        # the current answer version.
+        stale_scoreboard_cleanup_results = (
             parsed_statements_results.main
+            | "DeleteStaleScoreboardEvidence" >> DeleteStaleScoreboardEvidence(
+                project_id=known_args.project,
+                collection_name=match_candidate_scoreboard_collection
+            )
+        )
+        stale_scoreboard_cleanup_results.error | "DLQ_StaleScoreboardCleanupErrors" >> dlq_sink("StaleScoreboardCleanupErrors")
+
+        stale_vector_cleanup_results = (
+            stale_scoreboard_cleanup_results.main
             | "DeleteStaleQuestionVectors" >> DeleteStaleQuestionVectors(
                 project_id=known_args.project,
                 pinecone_region=known_args.pinecone_region,

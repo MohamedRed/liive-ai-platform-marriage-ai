@@ -26,6 +26,167 @@ SCOREBOARD_UPDATE_ERRORS = 'ScoreboardUpdateErrors'
 DEFAULT_TOP_N_CANDIDATES = 10
 
 
+class DeleteStaleScoreboardEvidenceDoFn(beam.DoFn):
+    """Deletes stale scoreboard evidence for an edited question.
+
+    Pinecone vector cleanup removes old vectors before re-embedding an edited
+    answer, but the Firestore scoreboard can still contain evidence rows created
+    by those old vectors. This DoFn removes evidence whose triggering question is
+    the edited question and recomputes each affected candidate score. Empty
+    candidate docs are deleted so reranking cannot see score shells with no live
+    evidence.
+    """
+
+    OUTPUT_ERROR_TAG = 'error'
+
+    def __init__(self, project_id: str, collection_name: str = DEFAULT_SCOREBOARD_COLLECTION):
+        self.project_id = project_id
+        self.collection_name = collection_name
+        self.db = None
+        self.logger = logging.getLogger(__name__)
+        self.cleanup_counter = Metrics.counter('DeleteStaleScoreboardEvidenceDoFn', 'stale_scoreboard_evidence_deleted')
+        self.candidate_deleted_counter = Metrics.counter('DeleteStaleScoreboardEvidenceDoFn', 'empty_scoreboard_candidates_deleted')
+        self.error_counter = Metrics.counter('DeleteStaleScoreboardEvidenceDoFn', SCOREBOARD_UPDATE_ERRORS)
+
+    def setup(self):
+        try:
+            self.db = firestore.Client(project=self.project_id)
+            self.logger.info(f"DeleteStaleScoreboardEvidenceDoFn: Firestore client initialized for project {self.project_id}.")
+        except Exception as e:
+            self.logger.error(f"DeleteStaleScoreboardEvidenceDoFn: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
+            raise RuntimeError(f"DeleteStaleScoreboardEvidenceDoFn: Firestore client failed to initialize: {e}")
+
+    @staticmethod
+    def _score_from_remaining_evidence_docs(evidence_docs: Iterable[Any]) -> tuple[float, int]:
+        total_score = 0.0
+        total_count = 0
+        for doc in evidence_docs:
+            data = doc.to_dict() or {}
+            score = data.get('weighted_score')
+            if score is None:
+                continue
+            try:
+                total_score += float(score)
+                total_count += 1
+            except (TypeError, ValueError):
+                continue
+        return total_score, total_count
+
+    def _cleanup_candidate_for_question(self, candidate_doc_ref: Any, question_id: str) -> int:
+        if not self.db:
+            raise RuntimeError("Firestore client not initialized in scoreboard cleanup")
+        evidence_collection_ref = candidate_doc_ref.collection('evidence')
+        transaction = self.db.transaction()
+
+        @firestore.transactional
+        def cleanup_in_transaction(transaction):
+            evidence_docs = list(evidence_collection_ref.stream(transaction=transaction))
+            stale_evidence_refs = []
+            remaining_evidence_docs = []
+
+            for evidence_doc in evidence_docs:
+                data = evidence_doc.to_dict() or {}
+                if str(data.get('triggering_original_question_id')) == question_id:
+                    stale_evidence_refs.append(evidence_doc.reference)
+                else:
+                    remaining_evidence_docs.append(evidence_doc)
+
+            if not stale_evidence_refs:
+                return 0
+
+            total_score, evidence_count = self._score_from_remaining_evidence_docs(remaining_evidence_docs)
+            for evidence_ref in stale_evidence_refs:
+                transaction.delete(evidence_ref)
+
+            if evidence_count == 0:
+                transaction.delete(candidate_doc_ref)
+            else:
+                transaction.set(candidate_doc_ref, {
+                    'score': float(total_score),
+                    'evidence_count': evidence_count,
+                    'last_updated': SERVER_TIMESTAMP,
+                }, merge=True)
+            return len(stale_evidence_refs)
+
+        return cleanup_in_transaction(transaction)
+
+    def process(self, element: Dict[str, Any]):
+        if not self.db:
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Firestore client not initialized in scoreboard cleanup",
+                "element": element,
+            })
+            return
+
+        user_id = element.get('user_id')
+        question_id = element.get('question_id')
+        if not user_id or not question_id:
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Missing user_id or question_id for stale scoreboard cleanup",
+                "element": element,
+            })
+            return
+
+        try:
+            user_id = str(user_id)
+            question_id = str(question_id)
+            candidate_scores_ref = (self.db.collection(self.collection_name)
+                                    .document(user_id)
+                                    .collection('candidate_scores'))
+            deleted_count = 0
+            empty_candidate_deletions = 0
+
+            for candidate_doc in candidate_scores_ref.stream():
+                candidate_ref = candidate_doc.reference
+                deleted_for_candidate = self._cleanup_candidate_for_question(candidate_ref, question_id)
+                if deleted_for_candidate:
+                    deleted_count += deleted_for_candidate
+                    # If the candidate was deleted, a follow-up get avoids relying
+                    # on transaction internals for the metric only.
+                    try:
+                        if not candidate_ref.get().exists:
+                            empty_candidate_deletions += 1
+                    except Exception:
+                        pass
+
+            if deleted_count:
+                self.cleanup_counter.inc(deleted_count)
+            if empty_candidate_deletions:
+                self.candidate_deleted_counter.inc(empty_candidate_deletions)
+            yield element
+
+        except Exception as e:
+            self.error_counter.inc()
+            self.logger.error(
+                f"DeleteStaleScoreboardEvidenceDoFn: Error cleaning stale evidence for element {element}: {e}\n"
+                f"Traceback: {traceback.format_exc()}",
+                exc_info=True,
+            )
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Stale scoreboard cleanup failed: {str(e)}",
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
+
+
+@beam.ptransform_fn
+def DeleteStaleScoreboardEvidence(pcoll: beam.PCollection[Dict[str, Any]],
+                                  project_id: str,
+                                  collection_name: str = DEFAULT_SCOREBOARD_COLLECTION) -> beam.PCollectionTuple:
+    """Delete old scoreboard evidence for the edited answer before re-embedding."""
+    return (
+        pcoll
+        | 'DeleteStaleScoreboardEvidenceInFirestore' >> beam.ParDo(
+            DeleteStaleScoreboardEvidenceDoFn(
+                project_id=project_id,
+                collection_name=collection_name,
+            )
+        ).with_outputs(DeleteStaleScoreboardEvidenceDoFn.OUTPUT_ERROR_TAG, main='main')
+    )
+
+
 class UpdateScoreboardDoFn(beam.DoFn):
     """Updates a Firestore scoreboard using idempotent match evidence documents.
 
