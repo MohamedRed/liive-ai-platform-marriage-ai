@@ -250,10 +250,12 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("FetchFullQAsDoFn.OUTPUT_ERROR_TAG", common_source)
         self.assertIn("setup_error_message", common_source)
         self.assertIn("FetchFullQAsDoFn setup failed", common_source)
+        self.assertIn("error_message = self.setup_error_message or \"FetchFullQAsDoFn setup failed\"", common_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", common_source)
         self.assertIn(").with_outputs(FetchFullQAsDoFn.OUTPUT_ERROR_TAG, main='main')", common_source)
         self.assertIn("fetch_qas_errors | \"DLQ_FetchQAsErrors\" >> dlq_sink(\"FetchQAsErrors\")", streaming_source)
         self.assertNotIn("FetchFullQAsDoFn: Failed to initialize Firestore client in setup: {str(e)}", common_source)
+        self.assertNotIn("Firestore client not initialized", common_source)
         self.assertNotIn("raise\n\n    def process(self, element: Tuple[str, Dict[str, Any]]):", common_source)
 
     def test_profile_summary_setup_failures_are_tagged_not_raised(self):

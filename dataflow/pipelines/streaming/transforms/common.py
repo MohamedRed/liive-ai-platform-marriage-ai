@@ -382,7 +382,7 @@ class FetchFullQAsDoFn(beam.DoFn):
         user_id, passthrough_data = element
 
         if not self.db:
-            error_message = self.setup_error_message or "Firestore client not initialized"
+            error_message = self.setup_error_message or "FetchFullQAsDoFn setup failed"
             self.logger.error("FetchFullQAsDoFn: %s. Skipping Q&A fetch.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
