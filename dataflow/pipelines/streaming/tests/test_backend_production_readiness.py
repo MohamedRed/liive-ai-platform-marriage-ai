@@ -625,6 +625,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("candidate_identity_verification_coll", scoreboard_source)
         self.assertIn("candidate_wali_verification_coll", scoreboard_source)
 
+    def test_statement_embedding_errors_are_tagged_and_written_to_dlq(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        embedding_source = read("dataflow/pipelines/streaming/transforms/embedding.py")
+
+        self.assertIn("GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG", embedding_source)
+        self.assertIn("setup_error_message", embedding_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", embedding_source)
+        self.assertIn(".with_outputs(GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG, main='main')", embedding_source)
+        self.assertIn("return SimpleNamespace(main=embedding_results.main, error=embedding_results[GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG])", embedding_source)
+        self.assertIn("statement_embedding_results =", streaming_source)
+        self.assertIn("statement_embedding_results.error | \"DLQ_StatementEmbeddingErrors\" >> dlq_sink(\"StatementEmbeddingErrors\")", streaming_source)
+        self.assertIn("statement_embeddings = statement_embedding_results.main", streaming_source)
+        self.assertNotIn("statement_embeddings = (\n            stale_vector_cleanup_results.main", streaming_source)
+        self.assertNotIn("Failed to setup OpenAI client for statement embedding: {e}", embedding_source)
+
     def test_firestore_indexes_include_matching_production_queries(self):
         indexes = read("firestore.indexes.json")
 

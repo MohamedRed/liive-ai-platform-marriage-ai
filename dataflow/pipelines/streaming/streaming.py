@@ -344,13 +344,15 @@ def run_streaming_pipeline(argv=None):
         stale_vector_cleanup_results.error | "DLQ_StaleVectorCleanupErrors" >> dlq_sink("StaleVectorCleanupErrors")
 
         # 3. Generate Embeddings for Statements
-        statement_embeddings = (
+        statement_embedding_results = (
             stale_vector_cleanup_results.main
             | "GenerateStatementEmbeddings" >> GenerateEmbeddingsForStatements(
                 project_id=known_args.project
               )
-            # Output: (vector_id, embedding_vector, metadata)
+            # Output main: (vector_id, embedding_vector, metadata)
         )
+        statement_embedding_results.error | "DLQ_StatementEmbeddingErrors" >> dlq_sink("StatementEmbeddingErrors")
+        statement_embeddings = statement_embedding_results.main
         statement_embeddings | "DebugLogStatementEmbeddings" >> DebugLogDoFn(label="StatementEmbeddingsGenerated")
 
         # 4. Store Statement Embeddings (Sink)
