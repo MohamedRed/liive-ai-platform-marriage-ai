@@ -222,6 +222,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Failed ScheduleDelayedMatchingDoFn setup: {e}", scheduling_source)
         self.assertNotIn("Failed HandleMatchActionsDoFn setup: {e}", scheduling_source)
 
+    def test_fetch_user_history_setup_failures_are_tagged_not_generic(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        common_source = read("dataflow/pipelines/streaming/transforms/common.py")
+
+        self.assertIn("FetchUserHistoryDoFn.ERROR_TAG", streaming_source)
+        self.assertIn("setup_error_message", common_source)
+        self.assertIn("FetchUserHistoryDoFn setup failed", common_source)
+        self.assertIn("error_message = self.setup_error_message or \"FetchUserHistoryDoFn setup failed\"", common_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG", common_source)
+        self.assertIn(").with_outputs(FetchUserHistoryDoFn.ERROR_TAG, main='main')", streaming_source)
+        self.assertIn("user_history_results[FetchUserHistoryDoFn.ERROR_TAG] | \"DLQ_UserHistoryErrors\" >> dlq_sink(\"UserHistoryErrors\")", streaming_source)
+        self.assertNotIn("Failed to initialize Firestore client in setup: {str(e)}", common_source)
+        self.assertNotIn('"error_message": "Firestore client not initialized"', common_source)
+        self.assertNotIn("# raise # Uncomment to fail fast", common_source)
+
     def test_fetch_full_qas_setup_failures_are_tagged_not_raised(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         common_source = read("dataflow/pipelines/streaming/transforms/common.py")

@@ -269,6 +269,7 @@ class FetchUserHistoryDoFn(beam.DoFn):
         self.project_id = project_id
         self.qa_collection_name = qa_collection_name
         self.db = None
+        self.setup_error_message = None
         self.logger = logging.getLogger(__name__)
         
         # Metrics
@@ -280,13 +281,11 @@ class FetchUserHistoryDoFn(beam.DoFn):
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info(f"{self.__class__.__name__}: Firestore client initialized for project {self.project_id}.")
         except Exception as e:
-            self.logger.error(f"{self.__class__.__name__}: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
-            # Allow pipeline to start, but process method will fail if db is None
-            # Alternatively, raise e to fail fast if DB is critical for all elements.
-            # For now, let process handle db being None.
-            # raise # Uncomment to fail fast
+            self.setup_error_message = f"FetchUserHistoryDoFn setup failed: {str(e)}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Dict[str, Any]):
         # Expected input element: Dict from ParseFirestoreTriggerEventDoFn, e.g., {'user_id': ..., 'qa_id': ...}
@@ -303,10 +302,11 @@ class FetchUserHistoryDoFn(beam.DoFn):
             return
 
         if not self.db:
-            self.logger.error(f"{self.__class__.__name__}: Firestore client not initialized. Cannot fetch history for {user_id}.")
+            error_message = self.setup_error_message or "FetchUserHistoryDoFn setup failed"
+            self.logger.error("%s. Cannot fetch history for %s.", error_message, user_id)
             self.error_counter.inc() # Counts as a processing error
             yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
-                "error_message": "Firestore client not initialized",
+                "error_message": error_message,
                 "user_id": user_id,
                 "element": element
             })
