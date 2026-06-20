@@ -198,15 +198,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("# ... (error handling for db init) ...", next_question_source)
 
     def test_firestore_match_writer_client_initialization_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         firestore_source = read("dataflow/pipelines/streaming/transforms/firestore_io.py")
 
+        self.assertIn("class UpdateFirestoreDoFn", firestore_source)
         self.assertIn("UpdateFirestoreDoFn.ERROR_TAG", firestore_source)
         self.assertIn("WriteMatchesToFirestore", firestore_source)
+        self.assertIn("setup_error_message", firestore_source)
+        self.assertIn("UpdateFirestoreDoFn setup failed", firestore_source)
+        self.assertIn("error_message = self.setup_error_message or \"UpdateFirestoreDoFn setup failed\"", firestore_source)
         self.assertIn(".with_outputs(UpdateFirestoreDoFn.ERROR_TAG, main=UpdateFirestoreDoFn.OUTPUT_TAG)", firestore_source)
-        self.assertIn("Firestore client not initialized in UpdateFirestoreDoFn", firestore_source)
+        self.assertIn("write_match_errors | \"DLQ_WriteMatchErrors\" >> dlq_sink(\"WriteMatchErrors\")", streaming_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG", firestore_source)
         self.assertNotIn("raise RuntimeError(\"Setup failed for UpdateFirestoreDoFn\")", firestore_source)
-        self.assertNotIn("Failed to initialize Firestore client in UpdateFirestoreDoFn setup: {str(e)}", firestore_source)
+        self.assertNotIn("Firestore client initialization failed in UpdateFirestoreDoFn setup", firestore_source)
+        self.assertNotIn("Firestore client not initialized in UpdateFirestoreDoFn", firestore_source)
 
     def test_cloud_tasks_side_effect_setup_failures_are_tagged_not_raised(self):
         scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")

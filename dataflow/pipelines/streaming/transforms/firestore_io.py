@@ -37,7 +37,7 @@ class UpdateFirestoreDoFn(beam.DoFn):
             self.setup_error_message = None
             self.logger.info(f"UpdateFirestoreDoFn setup complete for project {self.project_id}")
         except Exception as e:
-            self.setup_error_message = f"Firestore client initialization failed in UpdateFirestoreDoFn setup: {str(e)}"
+            self.setup_error_message = f"UpdateFirestoreDoFn setup failed: {str(e)}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element):
@@ -52,7 +52,7 @@ class UpdateFirestoreDoFn(beam.DoFn):
         #   'minConfidenceWeightUsed': ...
         # }
         if not self.db:
-            error_message = self.setup_error_message or "Firestore client not initialized in UpdateFirestoreDoFn"
+            error_message = self.setup_error_message or "UpdateFirestoreDoFn setup failed"
             self.logger.error("%s. Skipping match write.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
