@@ -223,13 +223,15 @@ def run_streaming_pipeline(argv=None):
         user_history_keyed | "DebugLogUserHistory" >> DebugLogDoFn(label="UserHistoryKeyed")
 
         # --- Process Profiles (Main User Document from USER_INFO) --- #
-        processed_profile_data = (
+        processed_profile_results = (
             parsed_event_data # Contains user_id and potentially changed fields
             | "ProcessUserProfileData" >> ProcessAndValidateProfile(
                 project_id=known_args.project,
                 collection_name=user_info_collection # This is COLLECTIONS['USERS']['USER_INFO']
             )
         )
+        processed_profile_results.error | "DLQ_ProfileProcessingErrors" >> dlq_sink("ProfileProcessingErrors")
+        processed_profile_data = processed_profile_results.main
         # processed_profile_data: (user_id, profile_data_dict from user_info_collection)
         # This profile_data_dict should contain 'questions_answers' if that's where they are stored directly in the user document.
         # Or, if QAs are in a separate collection, ProcessAndValidateProfile would need to fetch and include them.

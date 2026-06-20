@@ -3,6 +3,7 @@ import apache_beam as beam
 import logging
 import json
 import traceback
+from types import SimpleNamespace
 from typing import Dict, Any, Tuple, Optional # Added Optional
 from apache_beam.metrics import Metrics
 # Import Firestore client
@@ -38,6 +39,8 @@ logger = logging.getLogger(__name__)
 #     return results
 
 class FetchProfileDoFn(beam.DoFn):
+    OUTPUT_ERROR_TAG = 'error'
+
     def __init__(self, project_id, collection_name, is_test=False):
         self.project_id = project_id
         self.collection_name = collection_name # This should be USER_INFO collection
@@ -47,34 +50,39 @@ class FetchProfileDoFn(beam.DoFn):
         self.error_counter = Metrics.counter('FetchProfileDoFn', MetricNames.ERRORS)
         self.profiles_not_found = Metrics.counter('FetchProfileDoFn', 'profiles_not_found')
         self.db = None # Initialize db to None
+        self.setup_error_message = None
 
     def setup(self):
         # Setup runs once per worker process
         if not self.is_test:
             try:
                 self.db = firestore.Client(project=self.project_id)
+                self.setup_error_message = None
                 self.logger.info(f"FetchProfileDoFn: Firestore client initialized successfully for project {self.project_id}.")
             except Exception as e:
-                 self.logger.error(f"FetchProfileDoFn: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
-                 # If setup fails, subsequent process calls might fail. Raising here might be appropriate.
-                 raise
+                self.setup_error_message = f"FetchProfileDoFn Firestore client setup failed: {str(e)}"
+                self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, event_dict: Dict[str, Any]): # Input is the event dictionary
         if not self.db and not self.is_test:
-             self.logger.error("FetchProfileDoFn: Firestore client not initialized. Skipping profile fetch.")
-             self.error_counter.inc()
-             # If setup failed, we should probably let the error propagate rather than just returning
-             # raise RuntimeError("Firestore client failed to initialize in setup.")
-             # For DLQ purposes, maybe output the input event to error tag?
-             # Yielding nothing means the element is dropped.
-             return
+            error_message = self.setup_error_message or "FetchProfileDoFn: Firestore client not initialized"
+            self.logger.error("%s. Skipping profile fetch.", error_message)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": error_message,
+                "element": event_dict,
+            })
+            return
 
-        user_id = event_dict.get('user_id')
+        user_id = event_dict.get('user_id') if isinstance(event_dict, dict) else None
         if not user_id:
-             self.logger.error(f"FetchProfileDoFn: Missing user_id in event dictionary: {event_dict}")
-             self.error_counter.inc()
-             # Yield to error tag or just return?
-             return
+            self.logger.error(f"FetchProfileDoFn: Missing user_id in event dictionary: {event_dict}")
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Missing user_id in profile fetch event",
+                "element": event_dict,
+            })
+            return
 
         try:
             self.logger.info(f"Fetching profile for user: {user_id} from {self.collection_name}")
@@ -95,14 +103,23 @@ class FetchProfileDoFn(beam.DoFn):
             if not doc.exists:
                 self.logger.warning(f"Profile {user_id} not found in collection {self.collection_name}")
                 self.profiles_not_found.inc()
-                # Don't yield if profile not found, effectively dropping the element
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                    "error_message": f"Profile {user_id} not found in {self.collection_name}",
+                    "user_id": user_id,
+                    "element": event_dict,
+                })
                 return
 
             profile = doc.to_dict()
             if profile is None:
-                 self.logger.error(f"Profile data for {user_id} is None after fetch.")
-                 self.error_counter.inc()
-                 return # Drop element
+                self.logger.error(f"Profile data for {user_id} is None after fetch.")
+                self.error_counter.inc()
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                    "error_message": f"Profile data for {user_id} is None after fetch",
+                    "user_id": user_id,
+                    "element": event_dict,
+                })
+                return
 
             profile['id'] = user_id # Ensure ID is part of the profile dict
             yield (profile, event_dict) # Yield tuple: (fetched_profile, original_event_data)
@@ -110,12 +127,16 @@ class FetchProfileDoFn(beam.DoFn):
         except Exception as e:
             self.error_counter.inc()
             self.logger.error(f"Error fetching profile for {user_id}: {str(e)}", exc_info=True)
-            # Re-raising stops the element processing. Needs DLQ handling in the main pipeline.
-            # Consider outputting event_dict to an error tag here if needed.
-            raise
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Error fetching profile for {user_id}: {str(e)}",
+                "user_id": user_id,
+                "element": event_dict,
+                "traceback": traceback.format_exc(),
+            })
 
 class ValidateProfileDoFn(beam.DoFn):
     """Validates if a user's identity and Wali relation are verified by checking Firestore verification collections."""
+    OUTPUT_ERROR_TAG = 'error'
 
     def __init__(self, project_id: str, is_test: bool = False):
         self.project_id = project_id
@@ -126,6 +147,7 @@ class ValidateProfileDoFn(beam.DoFn):
         self.verification_fetch_failed = Metrics.counter('ValidateProfileDoFn', 'verification_fetch_failed')
         self.error_counter = Metrics.counter('ValidateProfileDoFn', MetricNames.ERRORS)
         self.db = None # Firestore client
+        self.setup_error_message = None
         # Get collection names from central definitions
         self.identity_verification_coll = COLLECTIONS['MARRIAGE']['IDENTITY_VERIFICATIONS']
         self.wali_verification_coll = COLLECTIONS['MARRIAGE']['USER_WALI_RELATION_VERIFICATIONS']
@@ -135,10 +157,11 @@ class ValidateProfileDoFn(beam.DoFn):
         if not self.is_test:
             try:
                 self.db = firestore.Client(project=self.project_id)
+                self.setup_error_message = None
                 self.logger.info("ValidateProfileDoFn: Firestore client initialized.")
             except Exception as e:
-                self.logger.error(f"ValidateProfileDoFn: Failed Firestore client setup: {e}", exc_info=True)
-                raise
+                self.setup_error_message = f"ValidateProfileDoFn Firestore client setup failed: {e}"
+                self.logger.error(self.setup_error_message, exc_info=True)
         # else: self.logger.info("ValidateProfileDoFn: Running in test mode, Firestore client not initialized.") # Optional log for test mode
 
     def _is_verified(self, collection_name: str, user_id: str) -> bool:
@@ -148,8 +171,7 @@ class ValidateProfileDoFn(beam.DoFn):
             self.logger.debug(f"TEST MODE: Assuming verification '{collection_name}' is TRUE for user {user_id}")
             return True
         if not self.db:
-            self.logger.error(f"ValidateProfileDoFn: Firestore client not available for verification check ({collection_name}, user {user_id}).")
-            return False
+            raise RuntimeError(f"Firestore client not available for verification check ({collection_name}, user {user_id})")
 
         try:
             doc_ref = self.db.collection(collection_name).document(user_id)
@@ -170,11 +192,40 @@ class ValidateProfileDoFn(beam.DoFn):
         except Exception as e:
             self.logger.error(f"Error fetching verification status for user {user_id} from {collection_name}: {e}", exc_info=True)
             self.verification_fetch_failed.inc()
-            return False # Assume not verified on error
+            raise RuntimeError(f"Verification fetch failed for user {user_id} from {collection_name}: {e}") from e
 
     def process(self, element: Tuple[Dict, Dict]): # Input is tuple: (profile, event_dict)
-        profile, event_dict = element # Unpack the tuple
+        try:
+            profile, event_dict = element # Unpack the tuple
+        except Exception as e:
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Invalid validation input shape: {str(e)}",
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
+            return
+
+        if not isinstance(profile, dict) or not isinstance(event_dict, dict):
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Invalid validation input fields",
+                "element": element,
+            })
+            return
+
         user_id = profile.get('id', event_dict.get('user_id', '[UNKNOWN_ID]')) # Get ID for logging
+
+        if not self.db and not self.is_test:
+            error_message = self.setup_error_message or "ValidateProfileDoFn: Firestore client not initialized"
+            self.logger.error("%s. Skipping profile validation for %s.", error_message, user_id)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": error_message,
+                "user_id": user_id,
+                "element": element,
+            })
+            return
 
         try:
             # Perform validation by checking Firestore verification collections
@@ -203,21 +254,25 @@ class ValidateProfileDoFn(beam.DoFn):
             else:
                 self.logger.warning(f"Profile {user_id} FAILED validation (Identity verified: {identity_verified}, Wali verified: {wali_verified})")
                 self.validation_failed.inc()
-                # Do not yield profile if validation fails, dropping the element
+                # Do not yield profile if validation fails; this is a business rejection, not a DLQ error.
 
         except Exception as e:
             # Catch potential errors during validation/merging logic itself
             self.error_counter.inc()
             self.logger.error(f"Error during validation processing for {user_id}: {str(e)}", exc_info=True)
-            # Re-raising stops the element. Needs DLQ handling.
-            raise
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Error during validation processing for {user_id}: {str(e)}",
+                "user_id": user_id,
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
 
 
 @beam.ptransform_fn
 def ProcessAndValidateProfile(pcoll: beam.PCollection[Dict[str, Any]], # Input is dict from parser
                               project_id: str,
                               collection_name: str, # This is the USER_INFO collection name
-                              is_test: bool = False) -> beam.PCollection[Dict[str, Any]]: # Output is merged dict
+                              is_test: bool = False) -> SimpleNamespace:
     """Composite PTransform to fetch profile, validate verifications, and merge with trigger event data.
 
     Args:
@@ -227,30 +282,36 @@ def ProcessAndValidateProfile(pcoll: beam.PCollection[Dict[str, Any]], # Input i
         is_test: Boolean flag for testing mode.
 
     Returns:
-        PCollection of merged dictionaries containing profile data and triggering Q&A details
-        ONLY FOR USERS whose identity and Wali relation are verified.
+        SimpleNamespace with:
+        - main: merged dictionaries ONLY FOR USERS whose identity and Wali relation are verified.
+        - error: structured fetch/validation errors for DLQ persistence.
     """
-    OUTPUT_TAG = 'validated_profile'
-    ERROR_TAG = 'processing_errors'
-
     fetched_data = (
         pcoll
         | "FetchProfiles" >> beam.ParDo(FetchProfileDoFn(
             project_id=project_id,
             collection_name=collection_name, # Pass USER_INFO collection name
             is_test=is_test
-        ))
-        # Output: PCollection[Tuple[Dict, Dict]] -> (profile, event_dict)
+        )).with_outputs(FetchProfileDoFn.OUTPUT_ERROR_TAG, main='main')
+        # Output main: PCollection[Tuple[Dict, Dict]] -> (profile, event_dict)
     )
 
     validated_data = (
-        fetched_data
+        fetched_data.main
         | "ValidateVerificationsAndMerge" >> beam.ParDo(ValidateProfileDoFn(
             project_id=project_id,
             is_test=is_test
             # No need to pass collection names here, they are accessed via COLLECTIONS
-            ))
-        # Output: PCollection[Dict[str, Any]] -> merged dictionary for verified users
+            )).with_outputs(ValidateProfileDoFn.OUTPUT_ERROR_TAG, main='main')
+        # Output main: PCollection[Dict[str, Any]] -> merged dictionary for verified users
     )
 
-    return validated_data
+    processing_errors = (
+        (
+            fetched_data[FetchProfileDoFn.OUTPUT_ERROR_TAG],
+            validated_data[ValidateProfileDoFn.OUTPUT_ERROR_TAG],
+        )
+        | "FlattenProfileProcessingErrors" >> beam.Flatten()
+    )
+
+    return SimpleNamespace(main=validated_data.main, error=processing_errors)

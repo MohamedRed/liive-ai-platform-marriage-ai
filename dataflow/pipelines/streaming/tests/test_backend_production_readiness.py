@@ -570,6 +570,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("'answer_text': event_dict.get('answer_text')", profile_processing_source)
         self.assertIn("'question_text': event_dict.get('question_text')", profile_processing_source)
 
+    def test_profile_processing_errors_are_tagged_and_written_to_dlq(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        profile_processing_source = read("dataflow/pipelines/streaming/transforms/profile_processing.py")
+
+        self.assertIn("FetchProfileDoFn.OUTPUT_ERROR_TAG", profile_processing_source)
+        self.assertIn("ValidateProfileDoFn.OUTPUT_ERROR_TAG", profile_processing_source)
+        self.assertIn("FetchProfiles" , profile_processing_source)
+        self.assertIn(".with_outputs(FetchProfileDoFn.OUTPUT_ERROR_TAG, main='main')", profile_processing_source)
+        self.assertIn(".with_outputs(ValidateProfileDoFn.OUTPUT_ERROR_TAG, main='main')", profile_processing_source)
+        self.assertIn("FlattenProfileProcessingErrors", profile_processing_source)
+        self.assertIn("processed_profile_results =", streaming_source)
+        self.assertIn("processed_profile_results.error | \"DLQ_ProfileProcessingErrors\" >> dlq_sink(\"ProfileProcessingErrors\")", streaming_source)
+        self.assertIn("processed_profile_data = processed_profile_results.main", streaming_source)
+        self.assertNotIn("raise\n", profile_processing_source)
+
     def test_match_hard_filters_reject_ineligible_candidates_even_with_high_score(self):
         eligibility = importlib.import_module("dataflow.pipelines.streaming.transforms.eligibility")
 
