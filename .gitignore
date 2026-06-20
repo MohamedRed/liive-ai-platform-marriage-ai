@@ -12,6 +12,7 @@
 **/*service-account*.json
 **/GoogleService-Info.plist
 **/google-services.json
+/dataflow/pipelines/streaming/deploy_flex_templates.env
 
 logs
 *.log

@@ -103,6 +103,50 @@ class BackendProductionReadinessTests(unittest.TestCase):
                 self.assertNotIn(" #", line, f"Dockerfile instruction has inline shell-style comment: {line}")
         self.assertIn("Dockerfile runs `python scripts/runtime_smoke.py`", readme)
 
+    def test_streaming_deploy_script_requires_external_config_without_baked_in_placeholders(self):
+        deploy_script = read("dataflow/pipelines/streaming/deploy_flex_templates.sh")
+        example_path = REPO_ROOT / "dataflow/pipelines/streaming/deploy_flex_templates.env.example"
+        self.assertTrue(example_path.exists(), "streaming deploy env example must exist")
+        example = example_path.read_text()
+
+        self.assertIn("set -euo pipefail", deploy_script)
+        self.assertIn("DEPLOY_CONFIG", deploy_script)
+        self.assertIn("required_var()", deploy_script)
+        self.assertIn("Streaming deploy config", deploy_script)
+        self.assertNotIn("YOUR_", deploy_script)
+        self.assertNotIn("your-", deploy_script)
+        self.assertNotIn("*** REPLACE", deploy_script)
+        self.assertNotIn('PROJECT_ID="marriage-ai-289c6"', deploy_script)
+        self.assertNotIn('BUCKET_NAME="marriage-ai-289c6-dataflow-assets"', deploy_script)
+
+        required_config_vars = (
+            "PROJECT_ID",
+            "REGION",
+            "BUCKET_NAME",
+            "ARTIFACT_REPO",
+            "IMAGE_NAME_STREAMING",
+            "IMAGE_TAG",
+            "PINECONE_INDEX",
+            "PINECONE_REGION",
+            "TOP_K",
+            "PDF_BUCKET",
+            "PDF_INSTRUCTIONS_PATH",
+            "TASKS_LOCATION",
+            "DELAYED_MATCHING_QUEUE",
+            "NOTIFICATION_QUEUE",
+            "VOICE_AGENT_QUEUE",
+            "NOTIFICATION_FUNCTION_URL",
+            "VOICE_AGENT_FUNCTION_URL",
+            "DELAYED_TASK_DELAY_SECONDS",
+            "DATAFLOW_WORKER_SA",
+            "IMMEDIATE_TOPIC",
+            "DELAYED_TOPIC",
+        )
+        for var_name in required_config_vars:
+            self.assertIn(f"required_var {var_name}", deploy_script)
+            self.assertIn(f"{var_name}=", example)
+        self.assertIn("deploy_flex_templates.env.example", read("dataflow/README.md"))
+
     def test_streaming_deploy_preflight_checks_required_runtime_resources(self):
         preflight_path = REPO_ROOT / "dataflow/pipelines/streaming/scripts/preflight_deploy.py"
         self.assertTrue(preflight_path.exists(), "streaming deploy preflight script must exist")

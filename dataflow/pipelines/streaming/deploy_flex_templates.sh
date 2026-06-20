@@ -1,49 +1,52 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# ============================
-# Configuration - Update Below
-# ============================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}"
 
-# GCP Project ID
-PROJECT_ID="marriage-ai-289c6"
+DEPLOY_CONFIG="${DEPLOY_CONFIG:-${SCRIPT_DIR}/deploy_flex_templates.env}"
+if [[ -f "${DEPLOY_CONFIG}" ]]; then
+    echo "Streaming deploy config: ${DEPLOY_CONFIG}"
+    set -a
+    # shellcheck source=/dev/null
+    source "${DEPLOY_CONFIG}"
+    set +a
+else
+    echo "Streaming deploy config file not found at ${DEPLOY_CONFIG}; using environment only."
+fi
 
-# GCP Region (e.g., us-central1)
-REGION="us-central1"
+required_var() {
+    local name="$1"
+    if [[ -z "${!name:-}" ]]; then
+        echo "Missing required deploy config: ${name}. Set it in DEPLOY_CONFIG=${DEPLOY_CONFIG} or export it in the environment." >&2
+        exit 2
+    fi
+}
 
-# Google Cloud Storage Bucket Name (Ensure this is the bucket, not the firebase storage path)
-BUCKET_NAME="marriage-ai-289c6-dataflow-assets" # Example: Adjust if needed
+required_var PROJECT_ID
+required_var REGION
+required_var BUCKET_NAME
+required_var ARTIFACT_REPO
+required_var IMAGE_NAME_STREAMING
+required_var IMAGE_TAG
+required_var PINECONE_INDEX
+required_var PINECONE_REGION
+required_var TOP_K
+required_var PDF_BUCKET
+required_var PDF_INSTRUCTIONS_PATH
+required_var TASKS_LOCATION
+required_var DELAYED_MATCHING_QUEUE
+required_var NOTIFICATION_QUEUE
+required_var VOICE_AGENT_QUEUE
+required_var NOTIFICATION_FUNCTION_URL
+required_var VOICE_AGENT_FUNCTION_URL
+required_var DELAYED_TASK_DELAY_SECONDS
+required_var DATAFLOW_WORKER_SA
+required_var IMMEDIATE_TOPIC
+required_var DELAYED_TOPIC
 
-# Docker Image Details for Streaming Pipeline
-ARTIFACT_REPO="dataflow-repo" # Repository name in Artifact Registry
-IMAGE_NAME_STREAMING="streaming-pipeline"
-IMAGE_TAG="latest"
-
-# Template paths and metadata
+STREAMING_METADATA="${STREAMING_METADATA:-template_spec.json}"
 TEMPLATE_BUCKET_PATH="gs://${BUCKET_NAME}/dataflow/streaming"
-STREAMING_METADATA="template_spec.json"
-
-# Pipeline parameters (Add defaults or ensure they are passed/configured elsewhere)
-# Use placeholder values if they need to be overridden at runtime, but define them
-PINECONE_INDEX="profiles"
-PINECONE_REGION="us-central1-gcp" # Example value, replace with your Pinecone env
-PROFILES_COLLECTION="USERS"
-MATCHES_COLLECTION="MATCHES"
-TOP_K="20"
-PDF_BUCKET="your-pdf-bucket-name" # *** REPLACE WITH ACTUAL BUCKET ***
-PDF_INSTRUCTIONS_PATH="agent-instructions-1.0.pdf"
-TASKS_LOCATION="us-central1"
-DELAYED_MATCHING_QUEUE="delayed-matching"
-NOTIFICATION_QUEUE="match-notifications"
-VOICE_AGENT_QUEUE="voice-agent-calls"
-NOTIFICATION_FUNCTION_URL="YOUR_NOTIFICATION_FUNCTION_URL" # *** REPLACE ***
-VOICE_AGENT_FUNCTION_URL="YOUR_VOICE_AGENT_FUNCTION_URL"   # *** REPLACE ***
-DELAYED_TASK_DELAY_SECONDS="300"
-DATAFLOW_WORKER_SA="YOUR_DATAFLOW_WORKER_SA_EMAIL" # *** REPLACE ***
-IMMEDIATE_TOPIC="user-profile-updated" # Example topic name
-DELAYED_TOPIC="delayed-matching" # Example topic name
-
-# Construct derived variables
 IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${IMAGE_NAME_STREAMING}:${IMAGE_TAG}"
 TEMPLATE_SPEC_GCS_PATH="${TEMPLATE_BUCKET_PATH}/templates/streaming.json"
 STAGING_LOCATION="${TEMPLATE_BUCKET_PATH}/staging"
@@ -60,17 +63,17 @@ echo "Enabling required services..."
 gcloud services enable dataflow compute_component logging storage_component \
     storage_api cloudresourcemanager.googleapis.com \
     artifactregistry.googleapis.com cloudbuild.googleapis.com \
-    --project=${PROJECT_ID}
+    --project="${PROJECT_ID}"
 
 # ============================
 # Step 2: Create GCS Bucket
 # ============================
 
 echo "Creating Google Cloud Storage bucket if it doesn't exist..."
-if gsutil ls -b gs://${BUCKET_NAME} > /dev/null 2>&1; then
+if gsutil ls -b "gs://${BUCKET_NAME}" > /dev/null 2>&1; then
     echo "Bucket gs://${BUCKET_NAME} already exists."
 else
-    gsutil mb -p ${PROJECT_ID} -l ${REGION} gs://${BUCKET_NAME}
+    gsutil mb -p "${PROJECT_ID}" -l "${REGION}" "gs://${BUCKET_NAME}"
     echo "Bucket gs://${BUCKET_NAME} created."
 fi
 
@@ -79,14 +82,14 @@ fi
 # ============================
 
 echo "Checking if Artifact Registry repository exists..."
-if gcloud artifacts repositories describe ${ARTIFACT_REPO} --location=${REGION} --project=${PROJECT_ID} > /dev/null 2>&1; then
+if gcloud artifacts repositories describe "${ARTIFACT_REPO}" --location="${REGION}" --project="${PROJECT_ID}" > /dev/null 2>&1; then
     echo "Artifact Registry repository '${ARTIFACT_REPO}' already exists."
 else
     echo "Creating Artifact Registry repository..."
-    gcloud artifacts repositories create ${ARTIFACT_REPO} \
+    gcloud artifacts repositories create "${ARTIFACT_REPO}" \
         --repository-format=docker \
-        --location=${REGION} \
-        --project=${PROJECT_ID}
+        --location="${REGION}" \
+        --project="${PROJECT_ID}"
     echo "Artifact Registry repository created."
 fi
 
@@ -95,19 +98,18 @@ fi
 # ============================
 
 echo "Creating folder structure in the bucket..."
-
-# Function to create a "folder" by uploading a placeholder file
 create_folder() {
     local folder_path=$1
-    gsutil ls gs://${BUCKET_NAME}/${folder_path}/ > /dev/null 2>&1 || {
-        touch placeholder
-        gsutil cp placeholder gs://${BUCKET_NAME}/${folder_path}/
-        rm placeholder
-        echo "Created folder: gs://${BUCKET_NAME}/${folder_path}/"
-    }
+    if gsutil ls "gs://${BUCKET_NAME}/${folder_path}/" > /dev/null 2>&1; then
+        return
+    fi
+    local placeholder
+    placeholder="$(mktemp)"
+    gsutil cp "${placeholder}" "gs://${BUCKET_NAME}/${folder_path}/placeholder"
+    rm -f "${placeholder}"
+    echo "Created folder: gs://${BUCKET_NAME}/${folder_path}/"
 }
 
-# Create separate folders for Streaming pipelines
 create_folder "dataflow/streaming/templates"
 create_folder "dataflow/streaming/temp"
 create_folder "dataflow/streaming/staging"
@@ -138,22 +140,20 @@ python3 scripts/preflight_deploy.py \
     --pinecone-region "${PINECONE_REGION}"
 
 # ============================
-# Step 6: Build and Deploy Template (Corrected Build Command)
+# Step 6: Build and Deploy Template
 # ============================
 
 echo "Building Streaming Flex Template..."
-# Assuming Dockerfile and requirements.txt are in the current directory relative to script execution
-gcloud dataflow flex-template build ${TEMPLATE_SPEC_GCS_PATH} \
+gcloud dataflow flex-template build "${TEMPLATE_SPEC_GCS_PATH}" \
     --image "${IMAGE_PATH}" \
     --sdk-language PYTHON \
     --metadata-file "${STREAMING_METADATA}" \
-    --requirements-file ./requirements.txt # Path relative to where command is run
-    # Removed: --flex-template-base-image, --py-path, --env flags
+    --requirements-file ./requirements.txt
 
 echo "Streaming Flex Template built and uploaded to ${TEMPLATE_SPEC_GCS_PATH}."
 
 # ============================
-# Step 7: Run Template (Corrected Run Command with All Parameters)
+# Step 7: Run Template
 # ============================
 
 echo "Running Streaming Flex Template..."
@@ -185,8 +185,6 @@ gcloud dataflow flex-template run "streaming-job-$(date +%Y%m%d-%H%M%S)" \
     --parameters voice_agent_function_url="${VOICE_AGENT_FUNCTION_URL}" \
     --parameters delayed_task_delay_seconds="${DELAYED_TASK_DELAY_SECONDS}" \
     --parameters dlq_gcs_path="${DLQ_GCS_PATH}"
-
-# Add other Dataflow options like --max-workers, --machine-type if needed.
 
 echo "Streaming job started."
 

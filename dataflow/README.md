@@ -91,26 +91,33 @@ sentence-transformers>=2.7.0
 
 ### 1. Configuration
 
-Update the configuration in `scripts/deploy_flex_templates.sh`:
+Streaming deployment configuration is externalized. Copy the committed example,
+fill real values, and keep the local file uncommitted:
 
 ```bash
-# GCP Project ID
-PROJECT_ID="your-project-id"
-
-# GCP Region
-REGION="your-region"
-
-# Google Cloud Storage Bucket Name
-BUCKET_NAME="your-bucket-name"
+cd dataflow/pipelines/streaming
+cp deploy_flex_templates.env.example deploy_flex_templates.env
+$EDITOR deploy_flex_templates.env
 ```
+
+Alternatively, export the same variables in the shell or point `DEPLOY_CONFIG` at
+a different env file:
+
+```bash
+DEPLOY_CONFIG=/secure/path/streaming-prod.env ./deploy_flex_templates.sh
+```
+
+The deploy script refuses to continue when required variables are missing; do not
+add project IDs, service URLs, or placeholder production values directly to the
+script.
 
 ### 2. Deploy Flex Templates
 
 Run the deployment script to build Docker containers and deploy the flex templates:
 
 ```bash
-cd vite-ts/dataflow
-./scripts/deploy_flex_templates.sh
+cd dataflow/pipelines/streaming
+./deploy_flex_templates.sh
 ```
 
 This will:
