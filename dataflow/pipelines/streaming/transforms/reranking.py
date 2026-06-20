@@ -46,8 +46,9 @@ def read_pdf_from_firebase(project_id: str, bucket_name: str, file_path: str) ->
         return text
     except Exception as e:
         logger.error(f"Failed to read PDF from Firebase Storage gs://{bucket_name}/{file_path}: {e}", exc_info=True)
-        # Depending on criticality, either return empty string or raise error
-        raise RuntimeError(f"Failed to read PDF instructions from gs://{bucket_name}/{file_path}") from e
+        # Surface setup-time instruction load failures with the owning DoFn name
+        # so DLQ rows identify the active reranking boundary.
+        raise RuntimeError("RerankMatchesDoFn setup failed") from e
 
 
 # --- DoFn for Lying Score Calculation --- #
@@ -531,7 +532,12 @@ class RerankMatchesDoFn(beam.DoFn):
             self.logger.info("RerankMatchesDoFn setup complete.")
 
         except Exception as e:
-            self.setup_error_message = f"RerankMatchesDoFn setup failed: {e}"
+            error_message = str(e)
+            self.setup_error_message = (
+                error_message
+                if error_message.startswith("RerankMatchesDoFn setup failed")
+                else f"RerankMatchesDoFn setup failed: {e}"
+            )
             self.logger.error(self.setup_error_message, exc_info=True)
 
     def _fetch_profile(self, user_id):

@@ -873,6 +873,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("reranked_matches_data_results.error | \"DLQ_LLMRerankingErrors\" >> dlq_sink(\"LLMRerankingErrors\")", streaming_source)
         self.assertNotIn("Failed RerankMatchesDoFn setup: {e}", reranking_source)
         self.assertNotIn("raise RuntimeError(\"Setup failed for RerankMatchesDoFn\")", reranking_source)
+        self.assertNotIn("Failed to read PDF instructions", reranking_source)
         self.assertNotIn("raise\n\n    def _fetch_profile", reranking_source)
 
     def test_answer_parsing_setup_and_llm_failures_are_tagged_not_silently_main(self):
