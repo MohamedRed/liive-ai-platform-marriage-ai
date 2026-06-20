@@ -655,7 +655,10 @@ class SelectBestQuestionDoFn(beam.DoFn):
     def _call_llm_selector(self, user_id: str, formatted_history: str, formatted_candidates: str) -> Optional[str]:
         """Calls the LLM to select the best question."""
         if not self.prediction_client or not self.selector_model_endpoint:
-            self.logger.error(f"Selector LLM client not initialized for user {user_id}. Cannot select question.")
+            error_message = self.setup_error_message or "SelectBestQuestionDoFn setup failed"
+            if not self.setup_error_message:
+                self.setup_error_message = error_message
+            self.logger.error("%s. Cannot select question for user %s.", error_message, user_id)
             self.llm_selection_errors.inc()
             return None
 
