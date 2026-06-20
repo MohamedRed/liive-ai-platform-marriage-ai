@@ -4,7 +4,7 @@ import logging
 import openai
 import traceback
 import json # For parsing LLM JSON output
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from apache_beam.metrics import Metrics
 
 from ..common import config # For ANSWER_PARSING_MODEL_NAME
@@ -49,7 +49,7 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
             self.setup_error_message = f"ParseAnswerStatementsDoFn setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
-    def _parse_llm_response_for_statements(self, llm_response_content: str, question_text: str, original_answer: str) -> List[Dict[str, str]]:
+    def _parse_llm_response_for_statements(self, llm_response_content: str, question_text: str, original_answer: str) -> Tuple[List[Dict[str, str]], Optional[str]]:
         """Parses the LLM's JSON response to extract statement objects."""
         try:
             # The LLM is prompted to return a JSON object because the OpenAI
@@ -61,11 +61,13 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
             else:
                 parsed_statements = parsed_payload
             if not isinstance(parsed_statements, list):
-                self.logger.warning(f"LLM response was not a list for Q: '{question_text}', A: '{original_answer}'. Response: {llm_response_content}")
+                error_message = f"ParseAnswerStatementsDoFn response parse failed: expected statements list for Q: '{question_text}'. Response: {llm_response_content}"
+                self.logger.warning(error_message)
                 self.llm_parse_failure_counter.inc()
-                return []
+                return [], error_message
 
             valid_statements = []
+            parse_errors = []
             for stmt_obj in parsed_statements:
                 if isinstance(stmt_obj, dict) and 'statement' in stmt_obj and 'facet' in stmt_obj:
                     if stmt_obj['facet'] in ['attribute', 'preference']:
@@ -74,22 +76,28 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
                             'facet': stmt_obj['facet']
                         })
                     else:
+                        parse_errors.append(f"Invalid facet '{stmt_obj['facet']}' in statement '{stmt_obj['statement']}'")
                         self.logger.warning(f"Invalid facet '{stmt_obj['facet']}' in LLM response for Q: '{question_text}'. Statement: '{stmt_obj['statement']}'")
                         self.llm_parse_failure_counter.inc()
                 else:
+                    parse_errors.append(f"Malformed statement object: {stmt_obj}")
                     self.logger.warning(f"Malformed statement object in LLM response for Q: '{question_text}'. Object: {stmt_obj}")
                     self.llm_parse_failure_counter.inc()
             
             self.statements_extracted_counter.inc(len(valid_statements))
-            return valid_statements
+            if parse_errors:
+                return valid_statements, f"ParseAnswerStatementsDoFn response parse failed for Q: '{question_text}': {'; '.join(parse_errors)}"
+            return valid_statements, None
         except json.JSONDecodeError as e:
-            self.logger.error(f"JSONDecodeError parsing LLM response for Q: '{question_text}', A: '{original_answer}': {e}. Response content: {llm_response_content}", exc_info=True)
+            error_message = f"ParseAnswerStatementsDoFn response parse failed: JSON decode error for Q: '{question_text}': {e}"
+            self.logger.error(f"{error_message}. Response content: {llm_response_content}", exc_info=True)
             self.llm_parse_failure_counter.inc()
-            return []
+            return [], error_message
         except Exception as e:
-            self.logger.error(f"Unexpected error parsing LLM response for Q: '{question_text}': {e}. Response: {llm_response_content}", exc_info=True)
+            error_message = f"ParseAnswerStatementsDoFn response parse failed: unexpected parse error for Q: '{question_text}': {e}"
+            self.logger.error(f"{error_message}. Response: {llm_response_content}", exc_info=True)
             self.llm_parse_failure_counter.inc()
-            return []
+            return [], error_message
 
     def _get_statements_from_llm(self, question_text: str, answer_text: str) -> List[Dict[str, str]]:
         """Calls an LLM to segment the answer and classify facets for each segment."""
@@ -123,7 +131,12 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
             )
             if response and response.choices and len(response.choices) > 0:
                 content = response.choices[0].message.content
-                return self._parse_llm_response_for_statements(content, question_text, answer_text)
+                if not content:
+                    raise RuntimeError(f"ParseAnswerStatementsDoFn response parse failed: empty response content for Q: '{question_text}'")
+                statements, parse_error_message = self._parse_llm_response_for_statements(content, question_text, answer_text)
+                if parse_error_message:
+                    raise RuntimeError(parse_error_message)
+                return statements
             else:
                 error_message = f"LLM returned no valid choice for answer parsing. Q: '{question_text}'. Response: {response}"
                 self.logger.warning(error_message)
