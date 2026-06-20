@@ -458,6 +458,16 @@ class CrossEncodeDoFn(beam.DoFn):
                     sentence_pairs_to_score.append([triggering_user_profile_text, candidate_profile_text])
                     original_candidate_info_map.append(candidate_info)
                 else:
+                    partial_profile_fetch_errors.append({
+                        'error_message': f"CrossEncodeDoFn candidate profile text unavailable for {matched_user_id}",
+                        'triggering_user_id': triggering_user_id,
+                        'user_id': matched_user_id,
+                        'candidate_info': candidate_info,
+                        'element': element,
+                        'profile_role': 'candidate',
+                        'partial_profile_text_failure': True,
+                        'fallback_cross_encoder_score': -1.0,
+                    })
                     # If candidate profile text can't be fetched, keep original info but score will be low/default
                     enriched_candidates.append({**candidate_info, 'cross_encoder_score': -1.0}) # Default low score
             
