@@ -333,6 +333,77 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("non_empty_matches_for_side_effects", schedule_block)
         self.assertIn("non_empty_matches_for_side_effects", action_block)
 
+    def test_final_match_write_guard_is_idempotent_and_freshness_aware(self):
+        guard = importlib.import_module("dataflow.pipelines.streaming.transforms.match_write_guard")
+        base_element = {
+            "user_id": "user-a",
+            "matches": [
+                {
+                    "id": "match-a",
+                    "ai_score": 92,
+                    "scoreboard_score": 0.83,
+                    "sourceScoreboardUpdatedAt": "2026-06-20T11:00:00Z",
+                }
+            ],
+            "topMatchPercentage": 88,
+            "rawTopMatchAiScore": 0.92,
+        }
+        reordered_element = {
+            "rawTopMatchAiScore": 0.92,
+            "matches": [dict(reversed(list(base_element["matches"][0].items())))],
+            "topMatchPercentage": 88,
+            "user_id": "user-a",
+        }
+
+        fingerprint = guard.build_match_write_fingerprint(base_element)
+
+        self.assertEqual(fingerprint, guard.build_match_write_fingerprint(reordered_element))
+        self.assertEqual(
+            guard.extract_match_write_source_version(base_element),
+            "2026-06-20T11:00:00Z",
+        )
+        self.assertTrue(guard.should_apply_match_write({}, "2026-06-20T11:00:00Z", fingerprint))
+        self.assertFalse(guard.should_apply_match_write(
+            {
+                "matchWriteFingerprint": fingerprint,
+                "matchWriteSourceVersion": "2026-06-20T11:00:00Z",
+            },
+            "2026-06-20T11:00:00Z",
+            fingerprint,
+        ))
+        self.assertFalse(guard.should_apply_match_write(
+            {"matchWriteSourceVersion": "2026-06-20T12:00:00Z"},
+            "2026-06-20T11:00:00Z",
+            "older-different-fingerprint",
+        ))
+        self.assertTrue(guard.should_apply_match_write(
+            {"matchWriteSourceVersion": "2026-06-20T10:00:00Z"},
+            "2026-06-20T11:00:00Z",
+            "newer-different-fingerprint",
+        ))
+
+    def test_final_match_writer_audits_guarded_writes_and_side_effects_follow_successful_writes(self):
+        firestore_source = read("dataflow/pipelines/streaming/transforms/firestore_io.py")
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+
+        self.assertIn("build_match_write_fingerprint", firestore_source)
+        self.assertIn("extract_match_write_source_version", firestore_source)
+        self.assertIn("should_apply_match_write", firestore_source)
+        self.assertIn("doc_ref.get()", firestore_source)
+        self.assertIn("matchWriteFingerprint", firestore_source)
+        self.assertIn("matchWriteSourceVersion", firestore_source)
+        self.assertIn("lastMatchWriteAt", firestore_source)
+        self.assertIn("stale_or_duplicate_match_writes_skipped", firestore_source)
+
+        self.assertIn("successful_match_writes = write_match_results.main", streaming_source)
+        self.assertIn("non_empty_matches_for_side_effects", streaming_source)
+        side_effect_filter_block = streaming_source[
+            streaming_source.index("non_empty_matches_for_side_effects = ("):
+            streaming_source.index("# Schedule Delayed Matching")
+        ]
+        self.assertIn("successful_match_writes", side_effect_filter_block)
+        self.assertNotIn("matches_with_percentage", side_effect_filter_block)
+
 
 if __name__ == "__main__":
     unittest.main()

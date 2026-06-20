@@ -7,6 +7,11 @@ from apache_beam.metrics import Metrics
 
 # Import constants and metrics from common
 from .common import MetricNames, COLLECTIONS
+from .match_write_guard import (
+    build_match_write_fingerprint,
+    extract_match_write_source_version,
+    should_apply_match_write,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,7 @@ class UpdateFirestoreDoFn(beam.DoFn):
         self.logger = logging.getLogger(__name__)
         self.error_counter = Metrics.counter('UpdateFirestoreDoFn', MetricNames.ERRORS)
         self.update_success_counter = Metrics.counter('UpdateFirestoreDoFn', 'firestore_updates_success')
+        self.skipped_write_counter = Metrics.counter('UpdateFirestoreDoFn', 'stale_or_duplicate_match_writes_skipped')
         self.missing_user_id_counter = Metrics.counter('UpdateFirestoreDoFn', 'missing_user_id')
         self.db = None
 
@@ -79,6 +85,19 @@ class UpdateFirestoreDoFn(beam.DoFn):
 
         try:
             doc_ref = self.db.collection(self.collection_name).document(user_id)
+            existing_snapshot = doc_ref.get()
+            existing_data = existing_snapshot.to_dict() if getattr(existing_snapshot, 'exists', False) else {}
+            match_write_fingerprint = build_match_write_fingerprint(element)
+            match_write_source_version = extract_match_write_source_version(element)
+
+            if not should_apply_match_write(existing_data, match_write_source_version, match_write_fingerprint):
+                self.skipped_write_counter.inc()
+                self.logger.info(
+                    "Skipping stale or duplicate match write for user %s with source version %s",
+                    user_id,
+                    match_write_source_version,
+                )
+                return
 
             update_data = {
                 "matches": matches_list,
@@ -88,6 +107,9 @@ class UpdateFirestoreDoFn(beam.DoFn):
                 "currentUserAnsweredCoreQuestionsCount": answered_core_count,
                 "totalCoreQuestionsInSystem": total_core_system,
                 "minConfidenceWeightUsed": min_confidence_weight,
+                "matchWriteFingerprint": match_write_fingerprint,
+                "matchWriteSourceVersion": match_write_source_version,
+                "lastMatchWriteAt": firestore.SERVER_TIMESTAMP,
                 "last_updated": firestore.SERVER_TIMESTAMP
             }
 
@@ -98,6 +120,8 @@ class UpdateFirestoreDoFn(beam.DoFn):
             # rawTopMatchAiScore could be None if no matches or score extraction failed
             if raw_top_match_ai_score is None:
                 del update_data['rawTopMatchAiScore']
+            if match_write_source_version is None:
+                del update_data['matchWriteSourceVersion']
             # Other numeric fields will default to 0 or 0.0 if not found by .get() and calculation had issues,
             # which is usually fine for Firestore.
             

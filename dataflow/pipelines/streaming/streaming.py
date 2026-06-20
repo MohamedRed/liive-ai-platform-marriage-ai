@@ -776,9 +776,10 @@ def run_streaming_pipeline(argv=None):
         )
         write_match_errors = write_match_results.error
         write_match_errors | "DLQ_WriteMatchErrors" >> dlq_sink("WriteMatchErrors")
+        successful_match_writes = write_match_results.main
 
         non_empty_matches_for_side_effects = (
-            matches_with_percentage
+            successful_match_writes
             | "FilterNonEmptyMatchesForSideEffects" >> beam.Filter(lambda element: bool(element.get('matches')))
         )
 

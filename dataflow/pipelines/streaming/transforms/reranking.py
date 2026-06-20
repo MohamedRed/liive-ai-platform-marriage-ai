@@ -16,6 +16,7 @@ from sentence_transformers import CrossEncoder # Added import
 
 # Import constants and metrics from common
 from .common import MetricNames, COLLECTIONS # Import COLLECTIONS if needed here
+from .match_write_guard import latest_source_version
 # Import utility functions
 from ..utils import access_secret
 
@@ -606,6 +607,11 @@ class RerankMatchesDoFn(beam.DoFn):
         triggering_user_id, data_dict = element
         candidates_list = data_dict.get('candidates', [])
         user_qas_for_triggering_user = data_dict.get('user_qas', {})
+        source_scoreboard_max_updated_at = latest_source_version(tuple(
+            candidate.get('last_updated')
+            for candidate in candidates_list
+            if isinstance(candidate, dict)
+        ))
         # The 'scores' dict from old input (containing per-QA lying scores and aggregate) is no longer directly passed.
         # Lying scores per QA should be part of the fetched profile data.
         # Aggregate lying/consistency score might need to be fetched or computed if still used.
@@ -657,6 +663,7 @@ class RerankMatchesDoFn(beam.DoFn):
                         'cross_encoder_score': candidate_info.get('cross_encoder_score'),
                         'ai_score': 0, # Default if LLM rerank fails for this candidate
                         'suggested_questions': [],
+                        'sourceScoreboardUpdatedAt': candidate_info.get('last_updated'),
                         'notes': 'Profile fetch failed for LLM reranking'
                     })
                     continue
@@ -678,6 +685,7 @@ class RerankMatchesDoFn(beam.DoFn):
                     'cross_encoder_score': candidate_info.get('cross_encoder_score'),
                     'ai_score': ai_score, # Score from LLM reranking
                     'suggested_questions': suggested_questions,
+                    'sourceScoreboardUpdatedAt': candidate_info.get('last_updated'),
                     # 'metadata': candidate_info.get('original_pinecone_metadata') # If we passed original metadata through cross-encoder
                 })
 
@@ -687,7 +695,9 @@ class RerankMatchesDoFn(beam.DoFn):
             yield {
                 'user_id': triggering_user_id,
                 'matches': reranked_matches,
-                'user_qas': user_qas_for_triggering_user # Pass through for downstream calculation
+                'user_qas': user_qas_for_triggering_user, # Pass through for downstream calculation
+                'sourceScoreboardMaxUpdatedAt': source_scoreboard_max_updated_at,
+                'matchWriteSourceVersion': source_scoreboard_max_updated_at,
             }
 
         except Exception as e:
