@@ -764,7 +764,9 @@ def run_streaming_pipeline(argv=None):
 
         # --- Final Output/Actions (using matches_with_percentage from Branch A) --- #
 
-        # Write reranked matches (including percentage) to Firestore
+        # Write all final results, including an empty matches list, so the UI and
+        # stored state are cleared when the final eligibility gate removes every
+        # candidate. Side effects below run only for non-empty final match sets.
         write_match_results = (
             matches_with_percentage # Use the result from Branch A
             | "WriteMatchesToFirestore" >> WriteMatchesToFirestore(
@@ -775,9 +777,14 @@ def run_streaming_pipeline(argv=None):
         write_match_errors = write_match_results.error
         write_match_errors | "DLQ_WriteMatchErrors" >> dlq_sink("WriteMatchErrors")
 
+        non_empty_matches_for_side_effects = (
+            matches_with_percentage
+            | "FilterNonEmptyMatchesForSideEffects" >> beam.Filter(lambda element: bool(element.get('matches')))
+        )
+
         # Schedule Delayed Matching
         schedule_results = (
-            matches_with_percentage # Use the result from Branch A
+            non_empty_matches_for_side_effects
             | "ScheduleDelayedMatching" >> ScheduleDelayedMatching(
                  project_id=known_args.project,
                  location=known_args.tasks_location,
@@ -792,7 +799,7 @@ def run_streaming_pipeline(argv=None):
 
         # Handle Actions (Notifications/Voice)
         action_results = (
-             matches_with_percentage # Use the result from Branch A
+             non_empty_matches_for_side_effects
              | "HandleMatchActions" >> HandleMatchActions(
                 project_id=known_args.project,
                 location=known_args.tasks_location,

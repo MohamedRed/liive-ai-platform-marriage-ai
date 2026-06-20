@@ -299,6 +299,40 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("match.get('id')", final_gate_source)
         self.assertIn("filtered_matches", final_gate_source)
 
+    def test_empty_final_matches_are_written_but_do_not_trigger_side_effects(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+
+        self.assertIn("matches_with_percentage", streaming_source)
+        self.assertIn("non_empty_matches_for_side_effects", streaming_source)
+        self.assertIn('| "FilterNonEmptyMatchesForSideEffects"', streaming_source)
+        self.assertIn("bool(element.get('matches'))", streaming_source)
+        self.assertLess(
+            streaming_source.index('| "CalculateAdjustedTopMatchPercentage"'),
+            streaming_source.index('| "WriteMatchesToFirestore"'),
+        )
+        self.assertLess(
+            streaming_source.index('| "CalculateAdjustedTopMatchPercentage"'),
+            streaming_source.index('| "FilterNonEmptyMatchesForSideEffects"'),
+        )
+        self.assertLess(
+            streaming_source.index('| "FilterNonEmptyMatchesForSideEffects"'),
+            streaming_source.index('| "ScheduleDelayedMatching"'),
+        )
+        self.assertLess(
+            streaming_source.index('| "FilterNonEmptyMatchesForSideEffects"'),
+            streaming_source.index('| "HandleMatchActions"'),
+        )
+        schedule_block = streaming_source[
+            streaming_source.index("schedule_results = ("):
+            streaming_source.index("schedule_errors = schedule_results.error")
+        ]
+        action_block = streaming_source[
+            streaming_source.index("action_results = ("):
+            streaming_source.index("action_errors = action_results.error")
+        ]
+        self.assertIn("non_empty_matches_for_side_effects", schedule_block)
+        self.assertIn("non_empty_matches_for_side_effects", action_block)
+
 
 if __name__ == "__main__":
     unittest.main()
