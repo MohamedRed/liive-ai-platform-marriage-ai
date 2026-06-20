@@ -924,26 +924,38 @@ class UpdateNextQuestionDoFn(beam.DoFn):
         if selected_question is None:
             # If no question selected, maybe clear the suggestion or set specific state?
             # Option 1: Clear the suggestion document (or specific fields)
-            self.logger.info(f"No question selected for user {user_id} (candidate count: {candidate_count}). Clearing suggestion.")
-            suggestion_ref = self.db.collection(self.suggestions_collection_name).document(user_id)
-            # Update with minimal fields or delete?
-            suggestion_ref.set({
-                'userId': user_id,
-                'suggestionCompletionState': 'no_candidates_found', # Example state
-                'lastActivity': firestore.SERVER_TIMESTAMP,
-                'nextSuggestionCandidateCount': candidate_count, # Still store count
-                # Clear out old question fields explicitly
-                'nextSuggestedQuestionId': None,
-                'nextSuggestedQuestionText': None,
-                'nextSuggestedQuestionLayer': None,
-                'nextSuggestedQuestionSection': None,
-                'nextSuggestedQuestionTimestamp': None,
-                'nextSuggestedQuestionReasoning': None,
-                'nextSuggestionSource': None,
-                'nextSuggestedQuestionFramework': None,
-                'nextSuggestedQuestionClarificationTag': None
-            }, merge=True)
-            Metrics.counter(self.__class__.__name__, 'suggestions_cleared').inc()
+            try:
+                self.logger.info(f"No question selected for user {user_id} (candidate count: {candidate_count}). Clearing suggestion.")
+                suggestion_ref = self.db.collection(self.suggestions_collection_name).document(user_id)
+                # Update with minimal fields or delete?
+                suggestion_ref.set({
+                    'userId': user_id,
+                    'suggestionCompletionState': 'no_candidates_found', # Example state
+                    'lastActivity': firestore.SERVER_TIMESTAMP,
+                    'nextSuggestionCandidateCount': candidate_count, # Still store count
+                    # Clear out old question fields explicitly
+                    'nextSuggestedQuestionId': None,
+                    'nextSuggestedQuestionText': None,
+                    'nextSuggestedQuestionLayer': None,
+                    'nextSuggestedQuestionSection': None,
+                    'nextSuggestedQuestionTimestamp': None,
+                    'nextSuggestedQuestionReasoning': None,
+                    'nextSuggestionSource': None,
+                    'nextSuggestedQuestionFramework': None,
+                    'nextSuggestedQuestionClarificationTag': None
+                }, merge=True)
+                Metrics.counter(self.__class__.__name__, 'suggestions_cleared').inc()
+            except Exception as e:
+                Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+                self.logger.error(f"Clearing next-question suggestion failed ({user_id}): {str(e)}", exc_info=True)
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                    'error': str(e),
+                    'user_id': user_id,
+                    'candidate_count': candidate_count,
+                    'element': element,
+                    'operation': 'clear_next_question_suggestion',
+                    'trace': traceback.format_exc(),
+                })
             return # Stop processing for this element
 
         # --- Proceed if a question was selected --- #

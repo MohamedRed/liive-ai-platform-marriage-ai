@@ -217,6 +217,8 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("UpdateNextQuestionDoFn setup failed", next_question_source)
         self.assertIn("error_message = self.setup_error_message or \"UpdateNextQuestionDoFn setup failed\"", next_question_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", next_question_source)
+        self.assertIn("Clearing next-question suggestion failed", next_question_source)
+        self.assertIn("'operation': 'clear_next_question_suggestion'", next_question_source)
         self.assertIn(").with_outputs(UpdateNextQuestionDoFn.OUTPUT_ERROR_TAG, main='main')", streaming_source)
         self.assertIn("update_next_q_errors | \"DLQ_UpdateNextQErrors\" >> dlq_sink(\"UpdateNextQErrors\")", streaming_source)
         self.assertNotIn("Failed UpdateNextQuestionDoFn setup: {e}", next_question_source)
