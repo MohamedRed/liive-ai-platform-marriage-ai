@@ -886,6 +886,8 @@ class BackendProductionReadinessTests(unittest.TestCase):
 
         self.assertIn("GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG", embedding_source)
         self.assertIn("setup_error_message", embedding_source)
+        self.assertIn("GenerateStatementEmbeddingsDoFn setup failed", embedding_source)
+        self.assertIn("error_message = self.setup_error_message or \"GenerateStatementEmbeddingsDoFn setup failed\"", embedding_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", embedding_source)
         self.assertIn(".with_outputs(GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG, main='main')", embedding_source)
         self.assertIn("return SimpleNamespace(main=embedding_results.main, error=embedding_results[GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG])", embedding_source)
@@ -894,6 +896,9 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("statement_embeddings = statement_embedding_results.main", streaming_source)
         self.assertNotIn("statement_embeddings = (\n            stale_vector_cleanup_results.main", streaming_source)
         self.assertNotIn("Failed to setup OpenAI client for statement embedding: {e}", embedding_source)
+        self.assertNotIn("Statement embedding OpenAI client setup failed", embedding_source)
+        self.assertNotIn("OpenAI client not initialized for statement embedding", embedding_source)
+        self.assertNotIn("OpenAI client for embedding is not initialized", embedding_source)
 
     def test_firestore_indexes_include_matching_production_queries(self):
         indexes = read("firestore.indexes.json")

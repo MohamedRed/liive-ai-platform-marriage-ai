@@ -41,13 +41,13 @@ class GenerateStatementEmbeddingsDoFn(beam.DoFn): # Renamed class
             self.setup_error_message = None
             self.logger.info("OpenAI client setup complete for statement embedding.")
         except Exception as e:
-            self.setup_error_message = f"Statement embedding OpenAI client setup failed: {e}"
+            self.setup_error_message = f"GenerateStatementEmbeddingsDoFn setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
     def _get_embedding(self, text: str) -> List[float]:
         """Get embedding for a single text using the initialized client."""
         if not self.client:
-            raise RuntimeError("OpenAI client for embedding is not initialized.")
+            raise RuntimeError("GenerateStatementEmbeddingsDoFn setup failed")
         try:
             response = self.client.embeddings.create(
                 model="text-embedding-3-large", # Consider making model configurable via config.py
@@ -62,7 +62,7 @@ class GenerateStatementEmbeddingsDoFn(beam.DoFn): # Renamed class
     def process(self, element: Dict[str, Any]):
         """Processes an element containing parsed statements and generates embeddings for each."""
         if not self.client:
-            error_message = self.setup_error_message or "OpenAI client not initialized for statement embedding"
+            error_message = self.setup_error_message or "GenerateStatementEmbeddingsDoFn setup failed"
             self.logger.error("%s. Skipping statement embedding generation.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
