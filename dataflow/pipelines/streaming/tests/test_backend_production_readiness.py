@@ -771,6 +771,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("setup_error_message", profile_processing_source)
         self.assertIn("error_message = self.setup_error_message or \"FetchProfileDoFn setup failed\"", profile_processing_source)
         self.assertIn("error_message = self.setup_error_message or \"ValidateProfileDoFn setup failed\"", profile_processing_source)
+        self.assertIn("raise RuntimeError(error_message)", profile_processing_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", profile_processing_source)
         self.assertIn(".with_outputs(FetchProfileDoFn.OUTPUT_ERROR_TAG, main='main')", profile_processing_source)
         self.assertIn(".with_outputs(ValidateProfileDoFn.OUTPUT_ERROR_TAG, main='main')", profile_processing_source)
@@ -779,6 +780,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("ValidateProfileDoFn Firestore client setup failed", profile_processing_source)
         self.assertNotIn("FetchProfileDoFn: Firestore client not initialized", profile_processing_source)
         self.assertNotIn("ValidateProfileDoFn: Firestore client not initialized", profile_processing_source)
+        self.assertNotIn("Firestore client not available for verification check", profile_processing_source)
 
     def test_match_hard_filters_reject_ineligible_candidates_even_with_high_score(self):
         eligibility = importlib.import_module("dataflow.pipelines.streaming.transforms.eligibility")

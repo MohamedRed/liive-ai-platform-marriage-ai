@@ -171,7 +171,10 @@ class ValidateProfileDoFn(beam.DoFn):
             self.logger.debug(f"TEST MODE: Assuming verification '{collection_name}' is TRUE for user {user_id}")
             return True
         if not self.db:
-            raise RuntimeError(f"Firestore client not available for verification check ({collection_name}, user {user_id})")
+            error_message = self.setup_error_message or "ValidateProfileDoFn setup failed"
+            if not self.setup_error_message:
+                self.setup_error_message = error_message
+            raise RuntimeError(error_message)
 
         try:
             doc_ref = self.db.collection(collection_name).document(user_id)
