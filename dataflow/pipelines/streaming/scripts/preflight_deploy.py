@@ -165,6 +165,77 @@ def worker_iam_checks(project: str, service_account_email: str) -> list[CheckRes
     return checks
 
 
+def cloud_tasks_service_agent_email(project_number: str) -> str:
+    return f"service-{project_number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"
+
+
+def cloud_tasks_token_creator_check(project: str, service_account_email: str) -> list[CheckResult]:
+    """Verify Cloud Tasks can mint OAuthToken/OidcToken for task HTTP calls."""
+    project_number_command_hint = "gcloud projects describe"
+    project_number_result = subprocess.run(
+        [
+            "gcloud",
+            "projects",
+            "describe",
+            project,
+            "--format=value(projectNumber)",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if project_number_result.returncode != 0:
+        stderr = (project_number_result.stderr or project_number_result.stdout or "").strip().splitlines()
+        detail = stderr[-1] if stderr else f"{project_number_command_hint} failed"
+        return [CheckResult("cloud-tasks-token-creator:project-number", False, detail)]
+
+    project_number = project_number_result.stdout.strip()
+    if not project_number:
+        return [CheckResult("cloud-tasks-token-creator:project-number", False, "empty project number")]
+
+    service_agent = cloud_tasks_service_agent_email(project_number)
+    service_account_policy_command_hint = "gcloud iam service-accounts get-iam-policy"
+    policy_result = subprocess.run(
+        [
+            "gcloud",
+            "iam",
+            "service-accounts",
+            "get-iam-policy",
+            service_account_email,
+            "--project",
+            project,
+            "--flatten=bindings[].members",
+            f"--filter=bindings.members:serviceAccount:{service_agent}",
+            "--format=value(bindings.role)",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if policy_result.returncode != 0:
+        stderr = (policy_result.stderr or policy_result.stdout or "").strip().splitlines()
+        detail = stderr[-1] if stderr else f"{service_account_policy_command_hint} failed"
+        return [CheckResult("cloud-tasks-token-creator:policy", False, detail)]
+
+    granted_roles = {
+        line.strip()
+        for line in policy_result.stdout.splitlines()
+        if line.strip().startswith("roles/")
+    }
+    required_role = "roles/iam.serviceAccountTokenCreator"
+    return [
+        CheckResult(
+            "cloud-tasks-token-creator",
+            required_role in granted_roles,
+            (
+                f"{service_agent} can mint OAuthToken/OidcToken for {service_account_email}"
+                if required_role in granted_roles
+                else f"missing {required_role} for serviceAccount:{service_agent} on {service_account_email}"
+            ),
+        )
+    ]
+
+
 def local_config_checks(args: argparse.Namespace) -> list[CheckResult]:
     checks = [require_command(command) for command in REQUIRED_COMMANDS]
     checks.extend(
@@ -283,6 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         results.extend(cloud_resource_checks(args))
         if not args.skip_iam_checks:
             results.extend(worker_iam_checks(args.project, args.service_account_email))
+            results.extend(cloud_tasks_token_creator_check(args.project, args.service_account_email))
 
     print_results(results)
     failures = [result for result in results if not result.ok]

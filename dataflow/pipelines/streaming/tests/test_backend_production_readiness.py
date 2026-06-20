@@ -170,6 +170,25 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("IAM permissions", readme)
         self.assertIn("Dataflow worker service account", readme)
 
+    def test_streaming_deploy_preflight_checks_cloud_tasks_token_creator(self):
+        preflight_source = read("dataflow/pipelines/streaming/scripts/preflight_deploy.py")
+        scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+        readme = read("dataflow/README.md")
+
+        self.assertIn("tasks_v2.OAuthToken", scheduling_source)
+        self.assertIn("tasks_v2.OidcToken", scheduling_source)
+        self.assertIn("cloud_tasks_service_agent_email", preflight_source)
+        self.assertIn("service-", preflight_source)
+        self.assertIn("gcp-sa-cloudtasks.iam.gserviceaccount.com", preflight_source)
+        self.assertIn("roles/iam.serviceAccountTokenCreator", preflight_source)
+        self.assertIn("gcloud projects describe", preflight_source)
+        self.assertIn("gcloud iam service-accounts get-iam-policy", preflight_source)
+        self.assertIn("cloud-tasks-token-creator", preflight_source)
+        self.assertIn("Cloud Tasks service agent", readme)
+        self.assertIn("roles/iam.serviceAccountTokenCreator", readme)
+        self.assertIn("OAuthToken", readme)
+        self.assertIn("OidcToken", readme)
+
     def test_streaming_deploy_preflight_checks_required_runtime_resources(self):
         preflight_path = REPO_ROOT / "dataflow/pipelines/streaming/scripts/preflight_deploy.py"
         self.assertTrue(preflight_path.exists(), "streaming deploy preflight script must exist")

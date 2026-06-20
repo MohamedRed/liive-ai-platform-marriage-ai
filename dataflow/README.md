@@ -170,6 +170,22 @@ If production uses narrower resource-level IAM bindings instead of project-level
 roles, verify those bindings separately and pass `--skip-iam-checks` to the
 preflight command.
 
+Because the streaming scheduler creates Cloud Tasks HTTP requests with
+`OAuthToken` for delayed Pub/Sub publishes and `OidcToken` for notification/voice
+HTTP calls, the Cloud Tasks service agent must also be able to mint tokens for
+the configured Dataflow worker service account. The preflight derives the service
+agent as `service-PROJECT_NUMBER@gcp-sa-cloudtasks.iam.gserviceaccount.com` and
+checks that it has `roles/iam.serviceAccountTokenCreator` on the Dataflow worker
+service account. Grant it with:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  "dataflow-worker@your-project-id.iam.gserviceaccount.com" \
+  --project "your-project-id" \
+  --member "serviceAccount:service-PROJECT_NUMBER@gcp-sa-cloudtasks.iam.gserviceaccount.com" \
+  --role "roles/iam.serviceAccountTokenCreator"
+```
+
 ### 4. Run the Pipelines
 
 #### Streaming Pipeline
