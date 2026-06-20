@@ -338,7 +338,7 @@ class Layer3CandidateDoFn(beam.DoFn):
             self.logger.error(f"Unexpected error preparing context for user {user_id}: {e}", exc_info=True)
             return json.dumps({"error": "unexpected_context_preparation_error"}), 0
 
-    def _call_llm_for_analysis_and_candidates(self, user_id: str, user_qas: Dict, match_qas: Dict, original_matches_list: List[Dict]) -> List[Dict]:
+    def _call_llm_for_analysis_and_candidates(self, user_id: str, user_qas: Dict, match_qas: Dict, original_matches_list: List[Dict]) -> Tuple[List[Dict], Optional[str]]:
         """
         Calls the LLM with the combined context, applying token reduction by reducing
         the number of matches included if needed. Uses Gemini API via PredictionServiceClient.
@@ -349,7 +349,7 @@ class Layer3CandidateDoFn(beam.DoFn):
                 self.setup_error_message = error_message
             self.logger.error("%s. Cannot generate Layer 3 candidates for user %s.", error_message, user_id)
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-            return []
+            return [], error_message
 
         # 1. Prepare Initial Context & Estimate Tokens (using all *fetched* match QAs)
         initial_num_matches = len(match_qas)
@@ -358,9 +358,10 @@ class Layer3CandidateDoFn(beam.DoFn):
         )
 
         if estimated_tokens == 0 and "error" in analysis_context_str:
-            self.logger.error(f"Skipping LLM call for user {user_id} due to context preparation error.")
+            error_message = f"Layer3CandidateDoFn context preparation failed for user {user_id}"
+            self.logger.error("%s. Skipping LLM call.", error_message)
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-            return []
+            return [], error_message
 
         self.logger.info(f"User {user_id}: Initial estimated context tokens: {estimated_tokens} (using {initial_num_matches} matches)")
         Metrics.distribution(self.__class__.__name__, 'layer3_initial_estimated_tokens').update(estimated_tokens)
@@ -389,9 +390,10 @@ class Layer3CandidateDoFn(beam.DoFn):
                     break # Stop at the first successful reduction level
 
             if not reduction_successful:
-                self.logger.error(f"User {user_id}: Context still too large ({estimated_tokens} tokens) even after reducing to 1 match. Skipping LLM call.")
+                error_message = f"Layer3CandidateDoFn token reduction failed for user {user_id}: context still too large ({estimated_tokens} tokens)"
+                self.logger.error(error_message)
                 Metrics.counter(self.__class__.__name__, 'layer3_token_reduction_failed').inc()
-                return [] # Cannot proceed
+                return [], error_message # Cannot proceed
 
         # Log final estimated tokens and number of matches used
         final_num_matches = applied_reduction_level if applied_reduction_level is not None else initial_num_matches
@@ -448,9 +450,10 @@ class Layer3CandidateDoFn(beam.DoFn):
 
             # Process response (remains the same)
             if not response.predictions:
-                self.logger.warning(f"LLM call for Layer 3 (user {user_id}) returned no predictions.")
+                error_message = f"Layer3CandidateDoFn LLM returned no predictions for user {user_id}"
+                self.logger.warning(error_message)
                 Metrics.counter(self.__class__.__name__, MetricNames.LLM_ERRORS).inc()
-                return []
+                return [], error_message
 
             prediction_result = json_format.MessageToDict(response.predictions[0])
             candidates_list = prediction_result.get('candidates', [])
@@ -464,9 +467,10 @@ class Layer3CandidateDoFn(beam.DoFn):
                  raw_output = prediction_result.get('content', '')
 
             if not raw_output:
-                self.logger.warning(f"LLM call for Layer 3 (user {user_id}) returned empty content in prediction structure: {prediction_result}")
+                error_message = f"Layer3CandidateDoFn LLM returned empty content for user {user_id}"
+                self.logger.warning("%s. Prediction structure: %s", error_message, prediction_result)
                 Metrics.counter(self.__class__.__name__, MetricNames.LLM_ERRORS).inc()
-                return []
+                return [], error_message
 
             # 5. Parse LLM Output (remains the same)
             candidates = parse_llm_json_output(raw_output, self.logger, f"Layer 3 LLM (user {user_id})")
@@ -478,16 +482,20 @@ class Layer3CandidateDoFn(beam.DoFn):
                 else:
                         self.logger.warning(f"Invalid candidate structure from Layer 3 LLM for user {user_id}: {cand}")
             else:
-                self.logger.warning(f"Layer 3 LLM output for user {user_id} was not a list after parsing: {type(candidates)}")
+                error_message = f"Layer3CandidateDoFn LLM output parse failed for user {user_id}: expected list, got {type(candidates)}"
+                self.logger.warning(error_message)
+                Metrics.counter(self.__class__.__name__, MetricNames.LLM_ERRORS).inc()
+                return [], error_message
 
             Metrics.counter(self.__class__.__name__, 'layer3_candidates_generated').inc(len(valid_candidates))
             self.logger.info(f"Generated {len(valid_candidates)} valid Layer 3 candidates for user {user_id}.")
-            return valid_candidates
+            return valid_candidates, None
 
         except Exception as e:
-            self.logger.error(f"Error calling/parsing Layer 3 LLM for user {user_id}: {e}", exc_info=True)
+            error_message = f"Layer3CandidateDoFn LLM call failed for user {user_id}: {e}"
+            self.logger.error(error_message, exc_info=True)
             Metrics.counter(self.__class__.__name__, MetricNames.LLM_ERRORS).inc()
-            return []
+            return [], error_message
 
     def process(self, element: Dict[str, Any]):
         user_id = element.get('user_id')
@@ -531,7 +539,10 @@ class Layer3CandidateDoFn(beam.DoFn):
                 return
 
             # 3. Call LLM for Analysis & Candidate Generation (Pass original matches list)
-            layer3_candidates = self._call_llm_for_analysis_and_candidates(user_id, user_qas, match_qas, matches)
+            layer3_candidates, layer3_error_message = self._call_llm_for_analysis_and_candidates(user_id, user_qas, match_qas, matches)
+            if layer3_error_message:
+                Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': layer3_error_message, 'user_id': user_id, 'element': element, 'partial_candidate_generation_failure': True})
 
             # 4. Format and Yield Output
             output_candidates = [
