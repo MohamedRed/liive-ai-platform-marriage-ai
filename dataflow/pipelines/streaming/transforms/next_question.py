@@ -1272,6 +1272,7 @@ class Layer4CandidateDoFn(beam.DoFn):
         self.logger = logging.getLogger(__name__)
         self.db = None
         self.setup_error_message = None
+        self.partial_setup_error_message = None
         # Store templates loaded during setup, keyed by framework name
         self._assessment_templates: Dict[str, List[Dict]] = {}
         self.framework_collections = COLLECTIONS.get('ASSESSMENTS', {})
@@ -1289,6 +1290,7 @@ class Layer4CandidateDoFn(beam.DoFn):
         try:
             self.db = firestore.Client(project=self.project_id)
             self.setup_error_message = None
+            self.partial_setup_error_message = None
             if not self.framework_collections:
                 self.logger.warning("Layer 4: Skipping template loading as no frameworks are defined.")
                 return
@@ -1331,18 +1333,21 @@ class Layer4CandidateDoFn(beam.DoFn):
                 except Exception as e:
                     setup_errors.append(f"{framework_name}/{collection_name}: {e}")
                     self.logger.error(f"Layer 4: Failed to load templates for framework '{framework_name}' from '{collection_name}': {e}", exc_info=True)
-                    # Continue loading other frameworks, but preserve failures for per-element DLQ if no usable templates load.
+                    # Continue loading other frameworks, but preserve failures for per-element DLQ.
 
             # Log final loaded state
             loaded_summary = {fw: len(tpls) for fw, tpls in self._assessment_templates.items()}
             self.logger.info(f"Layer 4: Finished template loading. Summary: {loaded_summary}")
-            if setup_errors and not any(loaded_summary.values()):
-                self.setup_error_message = f"Layer4CandidateDoFn setup failed: {'; '.join(setup_errors)}"
+            if setup_errors:
+                self.partial_setup_error_message = f"Layer4CandidateDoFn setup failed: {'; '.join(setup_errors)}"
+                if not any(loaded_summary.values()):
+                    self.setup_error_message = self.partial_setup_error_message
 
             # TODO: Consider adding a caching layer if Firestore reads are too frequent/slow.
 
         except Exception as e:
             self.setup_error_message = f"Layer4CandidateDoFn setup failed: {e}"
+            self.partial_setup_error_message = self.setup_error_message
             self.logger.error(self.setup_error_message, exc_info=True)
             # Allow pipeline to continue; process will emit the failed element to the error tag.
 
@@ -1394,6 +1399,16 @@ class Layer4CandidateDoFn(beam.DoFn):
             self.logger.debug(f"Layer 4 ({user_id}): No assessment templates loaded. Cannot generate candidates.")
             yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, (user_id, []))
             return
+
+        if self.partial_setup_error_message:
+            self.logger.error("Layer 4 (%s): %s. Continuing with loaded templates.", user_id, self.partial_setup_error_message)
+            Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                'error': self.partial_setup_error_message,
+                'user_id': user_id,
+                'element': element,
+                'partial_setup_failure': True,
+            })
 
         next_candidates = []
         try:
