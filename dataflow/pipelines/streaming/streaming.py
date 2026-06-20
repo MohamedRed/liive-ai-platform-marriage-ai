@@ -74,6 +74,7 @@ from .transforms.next_question import (
     UpdateNextQuestionDoFn
 )
 from .transforms.firestore_io import WriteMatchesToFirestore
+from .transforms.final_eligibility import ApplyFinalMatchEligibilityGate
 from .transforms.scheduling import ScheduleDelayedMatching, HandleMatchActions
 from .transforms.profile_summarization import GenerateAndStoreProfileSummary
 from .transforms.answer_parsing import ParseAnswerIntoStatements
@@ -602,6 +603,15 @@ def run_streaming_pipeline(argv=None):
         # OLD reranking_errors is now handled by reranked_matches_data_results.error
         # OLD: # reranking_errors | "DLQ_RerankingErrors" >> dlq_sink("RerankingErrors") # Old line
 
+        final_match_eligibility_results = (
+            reranked_matches_data
+            | "ApplyFinalMatchEligibilityGate" >> ApplyFinalMatchEligibilityGate(
+                project_id=known_args.project
+            )
+        )
+        final_match_eligibility_results.error | "DLQ_FinalMatchEligibilityErrors" >> dlq_sink("FinalMatchEligibilityErrors")
+        final_eligible_matches_data = final_match_eligibility_results.main
+
         # Expected output of RerankAndScoreMatches (now RerankMatchesDoFn internally):
         # e.g., {
         #   'user_id': 'user123',
@@ -656,7 +666,7 @@ def run_streaming_pipeline(argv=None):
             return element
 
         matches_with_percentage = (
-            reranked_matches_data # This PCollection now contains the list under 'matches' key
+            final_eligible_matches_data # Authoritatively filtered before percentage calculation and side effects
             | "CalculateAdjustedTopMatchPercentage" >> beam.Map(calculate_adjusted_top_match_percentage)
         )
 

@@ -269,6 +269,36 @@ class BackendProductionReadinessTests(unittest.TestCase):
             streaming_source.index('| "FetchTopCandidatesFromScoreboard"'),
         )
 
+    def test_final_match_write_and_actions_are_authoritatively_eligibility_gated(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        final_gate_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/final_eligibility.py"
+        self.assertTrue(final_gate_path.exists(), "final eligibility gate module must exist")
+        final_gate_source = final_gate_path.read_text()
+
+        self.assertIn("ApplyFinalMatchEligibilityGate", streaming_source)
+        self.assertLess(
+            streaming_source.index('| "ApplyFinalMatchEligibilityGate"'),
+            streaming_source.index('| "CalculateAdjustedTopMatchPercentage"'),
+        )
+        self.assertLess(
+            streaming_source.index('| "ApplyFinalMatchEligibilityGate"'),
+            streaming_source.index('| "WriteMatchesToFirestore"'),
+        )
+        self.assertLess(
+            streaming_source.index('| "ApplyFinalMatchEligibilityGate"'),
+            streaming_source.index('| "ScheduleDelayedMatching"'),
+        )
+        self.assertLess(
+            streaming_source.index('| "ApplyFinalMatchEligibilityGate"'),
+            streaming_source.index('| "HandleMatchActions"'),
+        )
+        self.assertIn("class FinalMatchEligibilityGateDoFn", final_gate_source)
+        self.assertIn("is_candidate_hard_eligible", final_gate_source)
+        self.assertIn("candidate_identity_verification_coll", final_gate_source)
+        self.assertIn("candidate_wali_verification_coll", final_gate_source)
+        self.assertIn("match.get('id')", final_gate_source)
+        self.assertIn("filtered_matches", final_gate_source)
+
 
 if __name__ == "__main__":
     unittest.main()
