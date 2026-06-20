@@ -85,6 +85,27 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("update_lying_score_errors | \"DLQ_UpdateLyingScoreErrors\" >> dlq_sink(\"UpdateLyingScoreErrors\")", source)
         self.assertNotIn("raise # Propagate error for DLQ", reranking_source)
 
+    def test_streaming_pinecone_embedding_store_errors_are_tagged_and_written_to_dlq(self):
+        source = read("dataflow/pipelines/streaming/streaming.py")
+        pinecone_source = read("dataflow/pipelines/streaming/transforms/pinecone_ops.py")
+        pinecone_tree = ast.parse(pinecone_source)
+        class_error_tags = {
+            node.name: any(
+                isinstance(stmt, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "OUTPUT_ERROR_TAG" for target in stmt.targets)
+                for stmt in node.body
+            )
+            for node in pinecone_tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+
+        self.assertTrue(class_error_tags.get("StoreIndividualEmbeddingsDoFn"))
+        self.assertIn("StoreIndividualEmbeddingsDoFn.OUTPUT_ERROR_TAG", pinecone_source)
+        self.assertIn(").with_outputs(StoreIndividualEmbeddingsDoFn.OUTPUT_ERROR_TAG, main='main')", pinecone_source)
+        self.assertIn("store_statement_embeddings_results =", source)
+        self.assertIn("store_statement_embeddings_results.error | \"DLQ_StoreStatementEmbeddingsErrors\" >> dlq_sink(\"StoreStatementEmbeddingsErrors\")", source)
+        self.assertNotIn("raise\n        finally:\n            self.batch = []", pinecone_source)
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod

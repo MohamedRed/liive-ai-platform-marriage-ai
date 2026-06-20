@@ -116,8 +116,10 @@ def DeleteStaleQuestionVectors(pcoll: beam.PCollection[Dict[str, Any]],
     )
 
 class StoreIndividualEmbeddingsDoFn(beam.DoFn): # Renamed class
-    """Stores individual Q&A embeddings in Pinecone with batching."""
-    def __init__(self, project_id, pinecone_region, pinecone_index, batch_size=100): # Added batch_size
+    """Stores individual Q&A embeddings in Pinecone with per-element DLQ visibility."""
+    OUTPUT_ERROR_TAG = 'error'
+
+    def __init__(self, project_id, pinecone_region, pinecone_index, batch_size=100): # batch_size kept for API compatibility
         self.project_id = project_id
         self.pinecone_region = pinecone_region
         self.pinecone_index_name = pinecone_index
@@ -128,12 +130,10 @@ class StoreIndividualEmbeddingsDoFn(beam.DoFn): # Renamed class
         self.upsert_batch_counter = Metrics.counter('StoreIndividualEmbeddingsDoFn', 'pinecone_upsert_batches')
         self.index = None
         self.pc = None
-        self.batch = [] # Initialize batch
 
     def setup(self):
         """Initialize Pinecone client and get index."""
         from pinecone.grpc import PineconeGRPC # Import moved to setup
-        # import time # time is already imported at module level
         self.logger.info(f"Setting up Pinecone client for storing embeddings in region {self.pinecone_region}")
         try:
             self.pc = PineconeGRPC(
@@ -154,52 +154,53 @@ class StoreIndividualEmbeddingsDoFn(beam.DoFn): # Renamed class
             self.logger.error(f"Failed to setup Pinecone client or connect to index: {e}", exc_info=True)
             raise
 
-    def _flush_batch(self):
-        """Upserts the current batch of vectors to Pinecone."""
-        if not self.batch:
+    def process(self, element: Tuple[str, List[float], Dict[str, Any]]): # Updated input type
+        if not self.index:
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Pinecone index not initialized in embedding store",
+                "element": element,
+            })
             return
 
-        if not self.index:
-             self.logger.error("Pinecone index not initialized. Cannot flush batch.")
-             self.error_counter.inc(len(self.batch)) # Increment by number of items not flushed
-             # Decide if we should clear the batch or attempt later; for now, clear to avoid reprocessing same error
-             self.batch = []
-             # This situation should ideally be caught by setup failing.
-             # If setup succeeded but index is None, it's a critical state.
-             raise RuntimeError("Pinecone index became uninitialized after setup. Cannot flush batch.")
+        try:
+            vector_id, embedding_vector, metadata = element
+        except Exception as e:
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Invalid Pinecone embedding-store element shape: {str(e)}",
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
+            return
+
+        if not vector_id or not isinstance(embedding_vector, list) or not isinstance(metadata, dict):
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Invalid Pinecone embedding-store element fields",
+                "element": element,
+            })
+            return
 
         try:
-            # self.logger.info(f"Upserting batch of {len(self.batch)} vectors to Pinecone index {self.index.name}")
-            upsert_response = self.index.upsert(
-                vectors=self.batch 
-                # vectors is a list of tuples: (id, vector, metadata)
-                # namespace="your_namespace" # Consider if namespace is needed
-            )
-            self.upsert_counter.inc(len(self.batch))
+            self.index.upsert(vectors=[(vector_id, embedding_vector, metadata)])
+            self.upsert_counter.inc()
             self.upsert_batch_counter.inc()
-            # self.logger.info(f"Batch upsert response: {upsert_response}")
+            yield element
         except Exception as e:
-            self.error_counter.inc(len(self.batch)) # Count each item in failed batch as an error
-            self.logger.error(f"Failed to upsert batch of {len(self.batch)} vectors: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
-            # Depending on retry strategy, you might not clear the batch here,
-            # or re-raise to let Beam's retry mechanism handle it.
-            # For now, re-raise to indicate failure for this bundle.
-            raise
-        finally:
-            self.batch = [] # Always clear batch after attempt
-
-    def process(self, element: Tuple[str, List[float], Dict[str, Any]]): # Updated input type
-        # element is (vector_id, embedding_vector, metadata)
-        self.batch.append(element)
-        if len(self.batch) >= self.batch_size:
-            self._flush_batch()
-
-    def finish_bundle(self):
-        """Process any remaining elements in the batch at the end of a bundle."""
-        self._flush_batch()
+            self.error_counter.inc()
+            self.logger.error(
+                f"Failed to upsert Pinecone vector {vector_id}: {str(e)}\nTraceback: {traceback.format_exc()}",
+                exc_info=True,
+            )
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Pinecone embedding upsert failed: {str(e)}",
+                "vector_id": vector_id,
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
 
     def teardown(self):
-         self._flush_batch() # Ensure any final data is flushed
          if self.pc:
               self.logger.info("Pinecone client teardown (placeholder - check library for specific methods if explicit closing is needed)")
 
@@ -483,12 +484,12 @@ def QueryMatchesFromPinecone(pcoll: beam.PCollection[Tuple[str, List[float], Dic
 
 @beam.ptransform_fn
 def StoreIndividualEmbeddingsInPinecone(
-    pcoll: beam.PCollection[Tuple[str, List[float], Dict[str, Any]]], 
-    project_id: str, 
-    pinecone_region: str, 
+    pcoll: beam.PCollection[Tuple[str, List[float], Dict[str, Any]]],
+    project_id: str,
+    pinecone_region: str,
     pinecone_index: str,
     batch_size: int = 100
-) -> beam.pvalue.PDone: # Indicates a sink
+) -> beam.PCollectionTuple:
     """Composite PTransform to store individual Q&A embeddings in Pinecone.
 
     Args:
@@ -496,19 +497,21 @@ def StoreIndividualEmbeddingsInPinecone(
         project_id: GCP Project ID for accessing secrets.
         pinecone_region: Pinecone region (e.g., 'us-west1-gcp').
         pinecone_index: Name of the Pinecone index.
-        batch_size: Number of vectors to batch for upsert.
+        batch_size: Kept for call-site compatibility. Writes are currently
+            per-element so each failed vector can be emitted to the DLQ branch.
 
     Returns:
-        beam.pvalue.PDone after writing to Pinecone.
+        PCollectionTuple with 'main' containing successfully upserted elements
+        and 'error' containing failed elements for DLQ persistence.
     """
     return (
-        pcoll 
+        pcoll
         | 'StoreIndividualEmbeddings' >> beam.ParDo(
             StoreIndividualEmbeddingsDoFn(
-                project_id=project_id, 
-                pinecone_region=pinecone_region, 
+                project_id=project_id,
+                pinecone_region=pinecone_region,
                 pinecone_index=pinecone_index,
                 batch_size=batch_size
             )
-        )
-    ) 
+        ).with_outputs(StoreIndividualEmbeddingsDoFn.OUTPUT_ERROR_TAG, main='main')
+    )

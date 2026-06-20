@@ -352,7 +352,7 @@ def run_streaming_pipeline(argv=None):
         statement_embeddings | "DebugLogStatementEmbeddings" >> DebugLogDoFn(label="StatementEmbeddingsGenerated")
 
         # 4. Store Statement Embeddings (Sink)
-        _ = ( 
+        store_statement_embeddings_results = (
             statement_embeddings
             | "StoreStatementEmbeddings" >> StoreIndividualEmbeddingsInPinecone(
                 project_id=known_args.project,
@@ -360,6 +360,8 @@ def run_streaming_pipeline(argv=None):
                 pinecone_index=known_args.pinecone_index
             )
         )
+        store_statement_embeddings_results.error | "DLQ_StoreStatementEmbeddingsErrors" >> dlq_sink("StoreStatementEmbeddingsErrors")
+        store_statement_embeddings_results.main | "DebugLogStoredStatementEmbeddings" >> DebugLogDoFn("StoredStatementEmbeddings")
 
         # 5. Query Pinecone for Matches per Statement
         statement_match_hits_results = (
