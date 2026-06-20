@@ -953,6 +953,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("error_message = self.setup_error_message or \"DeleteStaleScoreboardEvidenceDoFn setup failed\"", scoreboard_source)
         self.assertIn("error_message = self.setup_error_message or \"UpdateScoreboardDoFn setup failed\"", scoreboard_source)
         self.assertIn("error_message = self.setup_error_message or \"FetchTopCandidatesDoFn setup failed\"", scoreboard_source)
+        self.assertIn("raise RuntimeError(error_message)", scoreboard_source)
         self.assertIn(".with_outputs(DeleteStaleScoreboardEvidenceDoFn.OUTPUT_ERROR_TAG, main='main')", scoreboard_source)
         self.assertIn(".with_outputs(UpdateScoreboardDoFn.OUTPUT_ERROR_TAG, main='main')", scoreboard_source)
         self.assertIn(".with_outputs(FetchTopCandidatesDoFn.OUTPUT_ERROR_TAG, main='main')", scoreboard_source)
@@ -962,6 +963,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Failed to initialize Firestore client in setup", scoreboard_source)
         self.assertNotIn("Firestore client failed to initialize", scoreboard_source)
         self.assertNotIn("Firestore client not initialized in process", scoreboard_source)
+        self.assertNotIn("Firestore client not initialized in scoreboard cleanup", scoreboard_source)
 
     def test_candidate_fetch_waits_for_successful_scoreboard_updates(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")

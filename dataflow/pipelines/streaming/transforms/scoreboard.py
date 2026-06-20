@@ -76,7 +76,10 @@ class DeleteStaleScoreboardEvidenceDoFn(beam.DoFn):
 
     def _cleanup_candidate_for_question(self, candidate_doc_ref: Any, question_id: str) -> int:
         if not self.db:
-            raise RuntimeError("Firestore client not initialized in scoreboard cleanup")
+            error_message = self.setup_error_message or "DeleteStaleScoreboardEvidenceDoFn setup failed"
+            if not self.setup_error_message:
+                self.setup_error_message = error_message
+            raise RuntimeError(error_message)
         evidence_collection_ref = candidate_doc_ref.collection('evidence')
         transaction = self.db.transaction()
 
