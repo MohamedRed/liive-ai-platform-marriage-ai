@@ -937,6 +937,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("setup_error_message", embedding_source)
         self.assertIn("GenerateStatementEmbeddingsDoFn setup failed", embedding_source)
         self.assertIn("error_message = self.setup_error_message or \"GenerateStatementEmbeddingsDoFn setup failed\"", embedding_source)
+        self.assertIn("raise RuntimeError(error_message)", embedding_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", embedding_source)
         self.assertIn(".with_outputs(GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG, main='main')", embedding_source)
         self.assertIn("return SimpleNamespace(main=embedding_results.main, error=embedding_results[GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG])", embedding_source)

@@ -47,7 +47,8 @@ class GenerateStatementEmbeddingsDoFn(beam.DoFn): # Renamed class
     def _get_embedding(self, text: str) -> List[float]:
         """Get embedding for a single text using the initialized client."""
         if not self.client:
-            raise RuntimeError("GenerateStatementEmbeddingsDoFn setup failed")
+            error_message = self.setup_error_message or "GenerateStatementEmbeddingsDoFn setup failed"
+            raise RuntimeError(error_message)
         try:
             response = self.client.embeddings.create(
                 model="text-embedding-3-large", # Consider making model configurable via config.py
