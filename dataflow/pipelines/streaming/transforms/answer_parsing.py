@@ -94,7 +94,8 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
     def _get_statements_from_llm(self, question_text: str, answer_text: str) -> List[Dict[str, str]]:
         """Calls an LLM to segment the answer and classify facets for each segment."""
         if not self.client:
-            raise RuntimeError("ParseAnswerStatementsDoFn setup failed")
+            error_message = self.setup_error_message or "ParseAnswerStatementsDoFn setup failed"
+            raise RuntimeError(error_message)
 
         prompt = (
             f"Analyze the following answer provided by a user to the question: '{question_text}'\n"

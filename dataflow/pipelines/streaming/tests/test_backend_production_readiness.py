@@ -920,6 +920,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("setup_error_message", answer_parsing_source)
         self.assertIn("ParseAnswerStatementsDoFn setup failed", answer_parsing_source)
         self.assertIn("error_message = self.setup_error_message or \"ParseAnswerStatementsDoFn setup failed\"", answer_parsing_source)
+        self.assertIn("if not self.client:\n            error_message = self.setup_error_message or \"ParseAnswerStatementsDoFn setup failed\"\n            raise RuntimeError(error_message)", answer_parsing_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", answer_parsing_source)
         self.assertIn("raise RuntimeError(f\"LLM call failed for answer parsing", answer_parsing_source)
         self.assertIn("parsed_statements_results.error | \"DLQ_ParseStatementsErrors\" >> dlq_sink(\"ParseStatementsErrors\")", streaming_source)
