@@ -570,6 +570,7 @@ class SelectBestQuestionDoFn(beam.DoFn):
         self.logger = logging.getLogger(__name__)
         self.prediction_client = None
         self.selector_model_endpoint = None
+        self.setup_error_message = None
         # Counters
         self.llm_selection_calls = Metrics.counter(self.__class__.__name__, 'llm_selection_calls')
         self.llm_selection_errors = Metrics.counter(self.__class__.__name__, 'llm_selection_errors')
@@ -586,11 +587,14 @@ class SelectBestQuestionDoFn(beam.DoFn):
                 self.selector_model_endpoint = (
                     f"projects/{self.project_id}/locations/{self.location}/"f"publishers/google/models/{self.selector_model_name}"
                 )
+                self.setup_error_message = None
                 self.logger.info(f"SelectBestQuestionDoFn: Prediction client initialized. Selector Endpoint: {self.selector_model_endpoint}")
             else:
-                 self.logger.error("SelectBestQuestionDoFn: PredictionServiceClient not available. Cannot initialize.")
+                 self.setup_error_message = "SelectBestQuestionDoFn setup failed: PredictionServiceClient not available"
+                 self.logger.error(self.setup_error_message)
         except Exception as e:
-             self.logger.error(f"SelectBestQuestionDoFn: Failed to initialize Prediction client in setup: {e}", exc_info=True)
+             self.setup_error_message = f"SelectBestQuestionDoFn setup failed: {e}"
+             self.logger.error(self.setup_error_message, exc_info=True)
 
     def _format_candidates_for_prompt(self, candidates: List[Dict]) -> str:
         "Formats the candidate list with priorities for the LLM prompt."""
@@ -825,11 +829,23 @@ class SelectBestQuestionDoFn(beam.DoFn):
                              self.logger.info(f"User {user_id}: LLM selected question (Layer {selected_question_dict.get('layer')}):")
                              break
                     if not selected_question_dict: # Fallback if LLM text doesn't match
-                        self.logger.error(f"User {user_id}: LLM selected text '{selected_text}' but couldn't match candidate. Falling back to highest priority.")
+                        error_message = f"Selector LLM selected unmatched text: {selected_text}"
+                        self.logger.error("User %s: %s. Falling back to highest priority.", user_id, error_message)
+                        yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                            'error': error_message,
+                            'user_id': user_id,
+                            'element': element,
+                        })
                         selected_question_dict = all_candidates[0]
                         self.llm_selection_errors.inc()
                 else: # Fallback if LLM fails
-                    self.logger.error(f"User {user_id}: Selector LLM failed. Falling back to highest priority.")
+                    error_message = self.setup_error_message or "SelectBestQuestionDoFn selector LLM failed"
+                    self.logger.error("User %s: %s. Falling back to highest priority.", user_id, error_message)
+                    yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                        'error': error_message,
+                        'user_id': user_id,
+                        'element': element,
+                    })
                     selected_question_dict = all_candidates[0]
                     self.llm_selection_errors.inc()
 
@@ -840,8 +856,15 @@ class SelectBestQuestionDoFn(beam.DoFn):
                 'candidate_count': candidate_count
             }
         except Exception as e:
-            # ... (error handling as before) ...
-            pass # Ensure it yields fallback
+            error_message = f"SelectBestQuestionDoFn process failed: {e}"
+            self.logger.error(error_message, exc_info=True)
+            Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                'error': error_message,
+                'user_id': user_id,
+                'element': element,
+                'trace': traceback.format_exc(),
+            })
             yield {
                 'user_id': user_id,
                 'selected_question': None,

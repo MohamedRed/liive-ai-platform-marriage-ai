@@ -162,6 +162,22 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Failed Layer3CandidateDoFn setup: {e}", next_question_source)
         self.assertNotIn("# Propagate exception to potentially fail the pipeline startup", next_question_source)
 
+    def test_select_best_question_setup_failures_are_tagged_not_silent_fallbacks(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        next_question_source = read("dataflow/pipelines/streaming/transforms/next_question.py")
+
+        self.assertIn("class SelectBestQuestionDoFn", next_question_source)
+        self.assertIn("SelectBestQuestionDoFn.OUTPUT_ERROR_TAG", streaming_source)
+        self.assertIn("setup_error_message", next_question_source)
+        self.assertIn("SelectBestQuestionDoFn setup failed", next_question_source)
+        self.assertIn("error_message = self.setup_error_message or \"SelectBestQuestionDoFn selector LLM failed\"", next_question_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", next_question_source)
+        self.assertIn("selection_errors_first_pass | \"DLQ_SelectionErrorsFirstPass\" >> dlq_sink(\"SelectionErrorsFirstPass\")", streaming_source)
+        self.assertIn("selection_errors_final | \"DLQ_SelectionErrorsFinalPass\" >> dlq_sink(\"SelectionErrorsFinalPass\")", streaming_source)
+        self.assertNotIn("SelectBestQuestionDoFn: Failed to initialize Prediction client in setup: {e}", next_question_source)
+        self.assertNotIn("Selector LLM failed. Falling back to highest priority", next_question_source)
+        self.assertNotIn("pass # Ensure it yields fallback", next_question_source)
+
     def test_update_next_question_setup_failures_are_tagged_not_raised(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         next_question_source = read("dataflow/pipelines/streaming/transforms/next_question.py")
