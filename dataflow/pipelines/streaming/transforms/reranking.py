@@ -319,9 +319,10 @@ class CrossEncodeDoFn(beam.DoFn):
             self.setup_error_message = f"CrossEncodeDoFn setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
-    def _fetch_profile_text_for_cross_encoder(self, user_id: str) -> str | None:
-        """Fetches profile text, prioritizing dedicated summary, then fallback to Q&A concatenation."""
+    def _fetch_profile_text_for_cross_encoder(self, user_id: str) -> Tuple[str | None, str | None]:
+        """Fetches profile text and reports summary-fetch fallback visibility."""
         summary_text = None
+        partial_profile_fetch_error_message = None
         try:
             # 1. Attempt to fetch from dedicated summaries collection
             summary_doc_ref = self.db.collection(self.profile_summaries_collection).document(user_id)
@@ -333,15 +334,15 @@ class CrossEncodeDoFn(beam.DoFn):
                     self.logger.info(f"Using dedicated summary for user {user_id} for cross-encoder.")
                     # Optional: Implement staleness check here using qasVersionHash if needed in the future.
                     # For now, if summary exists, we use it.
-                    return summary_text.strip()
+                    return summary_text.strip(), None
                 else:
                     self.logger.info(f"Dedicated summary document for {user_id} found but no profileSummaryText or empty.")
             else:
                 self.logger.info(f"No dedicated summary found for user {user_id} in {self.profile_summaries_collection}. Attempting fallback.")
 
         except Exception as e_summary_fetch:
-            self.logger.error(f"Error fetching dedicated summary for user {user_id}: {e_summary_fetch}. Attempting fallback.", exc_info=True)
-            # Do not increment profile_fetch_error_counter here yet, as fallback might succeed.
+            partial_profile_fetch_error_message = f"CrossEncodeDoFn summary fetch failed for user {user_id}: {e_summary_fetch}"
+            self.logger.error("%s. Attempting main-profile fallback.", partial_profile_fetch_error_message, exc_info=True)
 
         # 2. Fallback: Fetch full profile and use Q&As (or profileSummary field from main profile)
         self.logger.info(f"Fallback: Fetching full profile for {user_id} from {self.profiles_collection} to generate text for cross-encoder.")
@@ -351,7 +352,7 @@ class CrossEncodeDoFn(beam.DoFn):
             if not main_profile_doc.exists:
                 self.logger.warning(f"Fallback: Main profile not found for cross-encoder: {user_id} in {self.profiles_collection}")
                 self.profile_fetch_error_counter.inc() # Increment here as this is the final attempt for this user_id
-                return None
+                return None, partial_profile_fetch_error_message
             
             profile_data = main_profile_doc.to_dict()
             text_parts = []
@@ -382,17 +383,17 @@ class CrossEncodeDoFn(beam.DoFn):
             if not text_parts:
                 self.logger.warning(f"Fallback: Could not generate meaningful text for profile {user_id} from Q&As or summary in main profile.")
                 self.profile_fetch_error_counter.inc() # Increment as fallback also failed
-                return None
+                return None, partial_profile_fetch_error_message
             
             full_text = " \n ".join(text_parts)
             if len(full_text) > 3000: 
                 self.logger.warning(f"Fallback: Generated profile text for user {user_id} is very long ({len(full_text)} chars). May be truncated.")
-            return full_text
+            return full_text, partial_profile_fetch_error_message
 
         except Exception as e_main_fetch:
             self.logger.error(f"Fallback: Error fetching/formatting main profile text for {user_id}: {e_main_fetch}", exc_info=True)
             self.profile_fetch_error_counter.inc() # Increment as fallback also failed
-            return None
+            return None, partial_profile_fetch_error_message
 
     def process(self, element: Tuple[str, List[Dict[str, Any]]]):
         # Input: (triggering_user_id, list_of_top_candidate_dicts from scoreboard)
@@ -408,10 +409,23 @@ class CrossEncodeDoFn(beam.DoFn):
         triggering_user_id, candidates_list = element
         
         try:
-            triggering_user_profile_text = self._fetch_profile_text_for_cross_encoder(triggering_user_id)
+            partial_profile_fetch_errors = []
+            triggering_user_profile_text, triggering_profile_fetch_error = self._fetch_profile_text_for_cross_encoder(triggering_user_id)
+            if triggering_profile_fetch_error:
+                partial_profile_fetch_errors.append({
+                    'error_message': triggering_profile_fetch_error,
+                    'triggering_user_id': triggering_user_id,
+                    'user_id': triggering_user_id,
+                    'candidates_list': candidates_list,
+                    'element': element,
+                    'profile_role': 'triggering_user',
+                    'partial_profile_fetch_failure': True,
+                })
             if not triggering_user_profile_text:
                 self.logger.warning(f"Could not get profile text for triggering user {triggering_user_id}. Skipping cross-encoding for this user.")
                 self.error_counter.inc()
+                for partial_profile_fetch_error in partial_profile_fetch_errors:
+                    yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, partial_profile_fetch_error)
                 yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
                     "error_message": f"Failed to get profile text for triggering_user_id {triggering_user_id}", 
                     "triggering_user_id": triggering_user_id,
@@ -429,7 +443,17 @@ class CrossEncodeDoFn(beam.DoFn):
                     self.logger.warning(f"Skipping candidate with missing matched_user_id: {candidate_info}")
                     continue
 
-                candidate_profile_text = self._fetch_profile_text_for_cross_encoder(matched_user_id)
+                candidate_profile_text, candidate_profile_fetch_error = self._fetch_profile_text_for_cross_encoder(matched_user_id)
+                if candidate_profile_fetch_error:
+                    partial_profile_fetch_errors.append({
+                        'error_message': candidate_profile_fetch_error,
+                        'triggering_user_id': triggering_user_id,
+                        'user_id': matched_user_id,
+                        'candidate_info': candidate_info,
+                        'element': element,
+                        'profile_role': 'candidate',
+                        'partial_profile_fetch_failure': True,
+                    })
                 if candidate_profile_text:
                     sentence_pairs_to_score.append([triggering_user_profile_text, candidate_profile_text])
                     original_candidate_info_map.append(candidate_info)
@@ -449,6 +473,8 @@ class CrossEncodeDoFn(beam.DoFn):
             enriched_candidates.sort(key=lambda x: x.get('cross_encoder_score', -1.0), reverse=True)
             
             self.success_counter.inc()
+            for partial_profile_fetch_error in partial_profile_fetch_errors:
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, partial_profile_fetch_error)
             yield (triggering_user_id, enriched_candidates)
 
         except Exception as e:
