@@ -53,6 +53,7 @@ def read_pdf_from_firebase(project_id: str, bucket_name: str, file_path: str) ->
 # --- DoFn for Lying Score Calculation --- #
 
 class CalculateLyingScoreDoFn(beam.DoFn):
+    OUTPUT_ERROR_TAG = 'error'
     # Note: This DoFn assumes input related to QA changes, which might differ
     # from the main flow's `matches` PCollection. Adapt pipeline graph accordingly.
     def __init__(self, project_id: str):
@@ -78,13 +79,21 @@ class CalculateLyingScoreDoFn(beam.DoFn):
         if not self.db or not self.openai_client:
              self.logger.error("Clients not initialized in CalculateLyingScoreDoFn. Skipping.")
              self.error_counter.inc()
-             raise RuntimeError("Setup failed for CalculateLyingScoreDoFn")
+             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                 "error_message": "Setup failed for CalculateLyingScoreDoFn",
+                 "element": element,
+             })
+             return
 
         # Expecting element like: {'profile_id': ..., 'qa_id': ..., 'qa_data': ...}
         # This structure needs to be produced by an upstream transform.
         if not isinstance(element, dict) or 'profile_id' not in element or 'qa_id' not in element or 'qa_data' not in element:
             self.logger.error(f"Invalid input element format for CalculateLyingScoreDoFn: {element}")
             self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Invalid input element format for CalculateLyingScoreDoFn",
+                "element": element,
+            })
             return
 
         profile_id = element['profile_id']
@@ -95,6 +104,13 @@ class CalculateLyingScoreDoFn(beam.DoFn):
 
         if not question or not current_answer:
              self.logger.warning(f"Missing question or answer in qa_data for {profile_id}/{qa_id}. Skipping lying score.")
+             self.error_counter.inc()
+             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                 "error_message": "Missing question or answer for lying score calculation",
+                 "profile_id": profile_id,
+                 "qa_id": qa_id,
+                 "element": element,
+             })
              return
 
         try:
@@ -164,7 +180,14 @@ class CalculateLyingScoreDoFn(beam.DoFn):
                 except ValueError:
                      self.logger.error(f"Failed to parse lying score from OpenAI response for {profile_id}/{qa_id}. Response: '{response_content}'")
                      self.error_counter.inc()
-                     return # Don't yield if score parsing failed
+                     yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                         "error_message": "Failed to parse lying score from OpenAI response",
+                         "profile_id": profile_id,
+                         "qa_id": qa_id,
+                         "response_content": response_content,
+                         "element": element,
+                     })
+                     return
 
             yield {
                 'profile_id': profile_id,
@@ -175,9 +198,16 @@ class CalculateLyingScoreDoFn(beam.DoFn):
         except Exception as e:
             self.error_counter.inc()
             self.logger.error(f"Error calculating lying score for {profile_id}/{qa_id}: {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
-            raise
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Error calculating lying score for {profile_id}/{qa_id}: {str(e)}",
+                "profile_id": profile_id,
+                "qa_id": qa_id,
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
 
 class UpdateLyingScoreDoFn(beam.DoFn):
+    OUTPUT_ERROR_TAG = 'error'
     # Updates the calculated lying score back to the main user profile Q&A section
     def __init__(self, project_id: str):
         self.project_id = project_id
@@ -198,12 +228,20 @@ class UpdateLyingScoreDoFn(beam.DoFn):
         if not self.db:
              self.logger.error("Firestore client not initialized in UpdateLyingScoreDoFn. Skipping.")
              self.error_counter.inc()
-             raise RuntimeError("Setup failed for UpdateLyingScoreDoFn")
+             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                 "error_message": "Setup failed for UpdateLyingScoreDoFn",
+                 "element": element,
+             })
+             return
 
         # Expecting {'profile_id': ..., 'qa_id': ..., 'lying_score': ...}
         if not isinstance(element, dict) or 'profile_id' not in element or 'qa_id' not in element or 'lying_score' not in element:
             self.logger.error(f"Invalid input element format for UpdateLyingScoreDoFn: {element}")
             self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Invalid input element format for UpdateLyingScoreDoFn",
+                "element": element,
+            })
             return
 
         profile_id = element['profile_id']
@@ -228,7 +266,13 @@ class UpdateLyingScoreDoFn(beam.DoFn):
         except Exception as e:
             self.error_counter.inc()
             self.logger.error(f"Firestore update failed for lying score ({profile_id}/{qa_id}): {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
-            raise # Propagate error for DLQ
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"Firestore update failed for lying score ({profile_id}/{qa_id}): {str(e)}",
+                "profile_id": profile_id,
+                "qa_id": qa_id,
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
 
 
 # --- Metrics for CrossEncoder --- #

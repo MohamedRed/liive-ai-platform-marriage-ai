@@ -288,16 +288,23 @@ def run_streaming_pipeline(argv=None):
         )
         lying_score_input | "DebugLogLyingScoreInput" >> DebugLogDoFn(label="LyingScoreInput")
 
-        calculated_lying_scores = (
+        calculated_lying_scores_results = (
             lying_score_input
             | "CalculateLyingScores" >> beam.ParDo(CalculateLyingScoreDoFn(project_id=known_args.project))
+              .with_outputs(CalculateLyingScoreDoFn.OUTPUT_ERROR_TAG, main='main')
         )
+        lying_score_errors = calculated_lying_scores_results[CalculateLyingScoreDoFn.OUTPUT_ERROR_TAG]
+        lying_score_errors | "DLQ_LyingScoreErrors" >> dlq_sink("LyingScoreErrors")
+        calculated_lying_scores = calculated_lying_scores_results.main
         calculated_lying_scores | "DebugLogCalculatedLyingScores" >> DebugLogDoFn(label="CalculatedLyingScores")
         
-        _ = ( # Sink operation
+        update_lying_score_results = ( # Sink operation
             calculated_lying_scores
             | "UpdateLyingScoresInProfile" >> beam.ParDo(UpdateLyingScoreDoFn(project_id=known_args.project))
+              .with_outputs(UpdateLyingScoreDoFn.OUTPUT_ERROR_TAG, main='main')
         )
+        update_lying_score_errors = update_lying_score_results[UpdateLyingScoreDoFn.OUTPUT_ERROR_TAG]
+        update_lying_score_errors | "DLQ_UpdateLyingScoreErrors" >> dlq_sink("UpdateLyingScoreErrors")
 
         # --- New Granular Embedding, Scoreboard, and Candidate Fetching Flow ---
         # 1. Parse Answer into Statements

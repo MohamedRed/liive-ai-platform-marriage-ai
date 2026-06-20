@@ -59,6 +59,32 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn(".with_outputs(ScheduleDelayedMatching", source)
         self.assertNotIn(".with_outputs(HandleMatchActions", source)
 
+    def test_streaming_lying_score_errors_are_tagged_and_written_to_dlq(self):
+        source = read("dataflow/pipelines/streaming/streaming.py")
+        reranking_source = read("dataflow/pipelines/streaming/transforms/reranking.py")
+
+        reranking_tree = ast.parse(reranking_source)
+        class_error_tags = {
+            node.name: any(
+                isinstance(stmt, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "OUTPUT_ERROR_TAG" for target in stmt.targets)
+                for stmt in node.body
+            )
+            for node in reranking_tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+
+        self.assertTrue(class_error_tags.get("CalculateLyingScoreDoFn"))
+        self.assertTrue(class_error_tags.get("UpdateLyingScoreDoFn"))
+        self.assertIn("calculated_lying_scores_results =", source)
+        self.assertIn(".with_outputs(CalculateLyingScoreDoFn.OUTPUT_ERROR_TAG, main='main')", source)
+        self.assertIn("lying_score_errors | \"DLQ_LyingScoreErrors\" >> dlq_sink(\"LyingScoreErrors\")", source)
+        self.assertIn("calculated_lying_scores = calculated_lying_scores_results.main", source)
+        self.assertIn("update_lying_score_results =", source)
+        self.assertIn(".with_outputs(UpdateLyingScoreDoFn.OUTPUT_ERROR_TAG, main='main')", source)
+        self.assertIn("update_lying_score_errors | \"DLQ_UpdateLyingScoreErrors\" >> dlq_sink(\"UpdateLyingScoreErrors\")", source)
+        self.assertNotIn("raise # Propagate error for DLQ", reranking_source)
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod
