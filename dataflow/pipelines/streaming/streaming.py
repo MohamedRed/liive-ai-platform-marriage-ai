@@ -78,7 +78,6 @@ from .transforms.scheduling import ScheduleDelayedMatching, HandleMatchActions
 from .transforms.profile_summarization import GenerateAndStoreProfileSummary
 from .transforms.answer_parsing import ParseAnswerIntoStatements
 from .transforms.scoring import normalize_ai_score_to_unit
-from .transforms.scoreboard import WriteToScoreboard
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -380,11 +379,13 @@ def run_streaming_pipeline(argv=None):
         scoreboard_update_results.error | "DLQ_ScoreboardUpdateErrors" >> dlq_sink("ScoreboardUpdateErrors")
         scoreboard_update_results.main | "DebugLogScoreboardUpdates" >> DebugLogDoFn(label="ScoreboardUpdatePColl") # Debug the pass-through elements
         
-        # 7. Prepare for Fetching Top Candidates: Get Distinct Triggering User IDs
+        # 7. Prepare for Fetching Top Candidates only after successful
+        # scoreboard writes. This prevents reranking from reading candidate
+        # scores before the fresh evidence for this event has been committed.
         distinct_triggering_users = (
-            processed_profile_data
-            | "ExtractTriggeringUserIdForScoreboardFetch" >> beam.Map(lambda x: x['user_id'])
-            | "DistinctTriggeringUsersForScoreboard" >> beam.Distinct()
+            scoreboard_update_results.main
+            | "ExtractTriggeringUserIdAfterScoreboardUpdate" >> beam.Map(lambda x: x['triggering_user_id'])
+            | "DistinctTriggeringUsersAfterScoreboardUpdate" >> beam.Distinct()
         )
         distinct_triggering_users | "DebugLogDistinctUsersForRerank" >> DebugLogDoFn(label="DistinctTriggeringUsersForRerank")
 

@@ -250,6 +250,25 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("transaction.delete(candidate_doc_ref", scoreboard_source)
         self.assertIn("_score_from_remaining_evidence_docs", scoreboard_source)
 
+    def test_candidate_fetch_waits_for_successful_scoreboard_updates(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+
+        self.assertIn("scoreboard_update_results.main", streaming_source)
+        self.assertIn("'triggering_user_id'", streaming_source)
+        self.assertIn("DistinctTriggeringUsersAfterScoreboardUpdate", streaming_source)
+        self.assertNotIn(
+            "processed_profile_data\n            | \"ExtractTriggeringUserIdForScoreboardFetch\"",
+            streaming_source,
+        )
+        self.assertLess(
+            streaming_source.index('| "UpdateMatchScoreboard"'),
+            streaming_source.index('| "ExtractTriggeringUserIdAfterScoreboardUpdate"'),
+        )
+        self.assertLess(
+            streaming_source.index('| "ExtractTriggeringUserIdAfterScoreboardUpdate"'),
+            streaming_source.index('| "FetchTopCandidatesFromScoreboard"'),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
