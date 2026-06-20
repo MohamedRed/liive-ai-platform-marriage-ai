@@ -868,6 +868,32 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("transaction.delete(candidate_doc_ref", scoreboard_source)
         self.assertIn("_score_from_remaining_evidence_docs", scoreboard_source)
 
+    def test_scoreboard_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        scoreboard_source = read("dataflow/pipelines/streaming/transforms/scoreboard.py")
+
+        for class_name in (
+            "DeleteStaleScoreboardEvidenceDoFn",
+            "UpdateScoreboardDoFn",
+            "FetchTopCandidatesDoFn",
+        ):
+            self.assertIn(f"class {class_name}", scoreboard_source)
+            self.assertIn(f"{class_name} setup failed", scoreboard_source)
+
+        self.assertIn("setup_error_message", scoreboard_source)
+        self.assertIn("error_message = self.setup_error_message or \"DeleteStaleScoreboardEvidenceDoFn setup failed\"", scoreboard_source)
+        self.assertIn("error_message = self.setup_error_message or \"UpdateScoreboardDoFn setup failed\"", scoreboard_source)
+        self.assertIn("error_message = self.setup_error_message or \"FetchTopCandidatesDoFn setup failed\"", scoreboard_source)
+        self.assertIn(".with_outputs(DeleteStaleScoreboardEvidenceDoFn.OUTPUT_ERROR_TAG, main='main')", scoreboard_source)
+        self.assertIn(".with_outputs(UpdateScoreboardDoFn.OUTPUT_ERROR_TAG, main='main')", scoreboard_source)
+        self.assertIn(".with_outputs(FetchTopCandidatesDoFn.OUTPUT_ERROR_TAG, main='main')", scoreboard_source)
+        self.assertIn("stale_scoreboard_cleanup_results.error | \"DLQ_StaleScoreboardCleanupErrors\" >> dlq_sink(\"StaleScoreboardCleanupErrors\")", streaming_source)
+        self.assertIn("scoreboard_update_results.error | \"DLQ_ScoreboardUpdateErrors\" >> dlq_sink(\"ScoreboardUpdateErrors\")", streaming_source)
+        self.assertIn("top_candidates_for_reranking_results.error | \"DLQ_FetchTopCandidatesErrors\" >> dlq_sink(\"FetchCandidatesErrors\")", streaming_source)
+        self.assertNotIn("Failed to initialize Firestore client in setup", scoreboard_source)
+        self.assertNotIn("Firestore client failed to initialize", scoreboard_source)
+        self.assertNotIn("Firestore client not initialized in process", scoreboard_source)
+
     def test_candidate_fetch_waits_for_successful_scoreboard_updates(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
 

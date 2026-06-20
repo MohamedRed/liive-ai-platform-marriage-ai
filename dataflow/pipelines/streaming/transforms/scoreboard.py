@@ -47,14 +47,16 @@ class DeleteStaleScoreboardEvidenceDoFn(beam.DoFn):
         self.cleanup_counter = Metrics.counter('DeleteStaleScoreboardEvidenceDoFn', 'stale_scoreboard_evidence_deleted')
         self.candidate_deleted_counter = Metrics.counter('DeleteStaleScoreboardEvidenceDoFn', 'empty_scoreboard_candidates_deleted')
         self.error_counter = Metrics.counter('DeleteStaleScoreboardEvidenceDoFn', SCOREBOARD_UPDATE_ERRORS)
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info(f"DeleteStaleScoreboardEvidenceDoFn: Firestore client initialized for project {self.project_id}.")
         except Exception as e:
-            self.logger.error(f"DeleteStaleScoreboardEvidenceDoFn: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
-            raise RuntimeError(f"DeleteStaleScoreboardEvidenceDoFn: Firestore client failed to initialize: {e}")
+            self.setup_error_message = f"DeleteStaleScoreboardEvidenceDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     @staticmethod
     def _score_from_remaining_evidence_docs(evidence_docs: Iterable[Any]) -> tuple[float, int]:
@@ -112,9 +114,11 @@ class DeleteStaleScoreboardEvidenceDoFn(beam.DoFn):
 
     def process(self, element: Dict[str, Any]):
         if not self.db:
+            error_message = self.setup_error_message or "DeleteStaleScoreboardEvidenceDoFn setup failed"
+            self.logger.error("%s. Skipping.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                "error_message": "Firestore client not initialized in scoreboard cleanup",
+                "error_message": error_message,
                 "element": element,
             })
             return
@@ -213,14 +217,16 @@ class UpdateScoreboardDoFn(beam.DoFn):
         self.error_counter = Metrics.counter('UpdateScoreboardDoFn', SCOREBOARD_UPDATE_ERRORS)
         self.weighted_score_sum = Metrics.counter(self.__class__.__name__, 'weighted_score_sum')
         self.evidence_count = Metrics.counter(self.__class__.__name__, 'scoreboard_evidence_written')
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info(f"UpdateScoreboardDoFn: Firestore client initialized for project {self.project_id}.")
         except Exception as e:
-            self.logger.error(f"UpdateScoreboardDoFn: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
-            raise RuntimeError(f"UpdateScoreboardDoFn: Firestore client failed to initialize: {e}")
+            self.setup_error_message = f"UpdateScoreboardDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _candidate_doc_ref(self, triggering_user_id: str, matched_user_id: str):
         return (self.db.collection(self.collection_name)
@@ -299,9 +305,10 @@ class UpdateScoreboardDoFn(beam.DoFn):
         triggering/matched statement ids, pinecone_score, and match_type.
         """
         if not self.db:
-            self.logger.error("UpdateScoreboardDoFn: Firestore client not initialized. Skipping update.")
+            error_message = self.setup_error_message or "UpdateScoreboardDoFn setup failed"
+            self.logger.error("%s. Skipping update.", error_message)
             self.error_counter.inc()
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "Firestore client not initialized in process", "element": element})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
             return
 
         try:
@@ -398,14 +405,16 @@ class FetchTopCandidatesDoFn(beam.DoFn):
         self.profiles_collection = COLLECTIONS['USERS']['USER_INFO']
         self.candidate_identity_verification_coll = COLLECTIONS['MARRIAGE']['IDENTITY_VERIFICATIONS']
         self.candidate_wali_verification_coll = COLLECTIONS['MARRIAGE']['USER_WALI_RELATION_VERIFICATIONS']
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info(f"FetchTopCandidatesDoFn: Firestore client initialized for project {self.project_id}.")
         except Exception as e:
-            self.logger.error(f"FetchTopCandidatesDoFn: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
-            raise RuntimeError(f"FetchTopCandidatesDoFn: Firestore client failed to initialize: {e}")
+            self.setup_error_message = f"FetchTopCandidatesDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _fetch_doc_data(self, collection_name: str, document_id: str) -> Dict[str, Any] | None:
         if not self.db:
@@ -435,10 +444,11 @@ class FetchTopCandidatesDoFn(beam.DoFn):
         Output: (triggering_user_id, list_of_top_candidates_details_dicts)
         """
         if not self.db:
-            self.logger.error("FetchTopCandidatesDoFn: Firestore client not initialized. Skipping fetch.")
+            error_message = self.setup_error_message or "FetchTopCandidatesDoFn setup failed"
+            self.logger.error("%s. Skipping fetch.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                "error_message": "Firestore client not initialized in process",
+                "error_message": error_message,
                 "triggering_user_id": triggering_user_id
             })
             return
