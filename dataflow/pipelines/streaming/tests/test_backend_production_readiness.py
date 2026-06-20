@@ -103,6 +103,48 @@ class BackendProductionReadinessTests(unittest.TestCase):
                 self.assertNotIn(" #", line, f"Dockerfile instruction has inline shell-style comment: {line}")
         self.assertIn("Dockerfile runs `python scripts/runtime_smoke.py`", readme)
 
+    def test_streaming_deploy_preflight_checks_required_runtime_resources(self):
+        preflight_path = REPO_ROOT / "dataflow/pipelines/streaming/scripts/preflight_deploy.py"
+        self.assertTrue(preflight_path.exists(), "streaming deploy preflight script must exist")
+        preflight_source = preflight_path.read_text()
+        deploy_script = read("dataflow/pipelines/streaming/deploy_flex_templates.sh")
+        readme = read("dataflow/README.md")
+
+        self.assertIn("REQUIRED_SECRET_NAMES", preflight_source)
+        for secret_name in ("OPENAI_API_KEY", "PINECONE_API_KEY"):
+            self.assertIn(secret_name, preflight_source)
+        for resource_check in (
+            "gcloud secrets describe",
+            "gcloud pubsub topics describe",
+            "gcloud tasks queues describe",
+            "gcloud iam service-accounts describe",
+            "gsutil ls",
+            "urlparse",
+            "PLACEHOLDER_TOKENS",
+        ):
+            self.assertIn(resource_check, preflight_source)
+        self.assertNotIn("access_secret_version", preflight_source)
+        self.assertIn("preflight_deploy.py", deploy_script)
+        self.assertLess(deploy_script.index("preflight_deploy.py"), deploy_script.index("gcloud dataflow flex-template build"))
+        for shell_variable in (
+            "PROJECT_ID",
+            "REGION",
+            "DATAFLOW_WORKER_SA",
+            "IMMEDIATE_TOPIC",
+            "DELAYED_TOPIC",
+            "TASKS_LOCATION",
+            "DELAYED_MATCHING_QUEUE",
+            "NOTIFICATION_QUEUE",
+            "VOICE_AGENT_QUEUE",
+            "PDF_BUCKET",
+            "PDF_INSTRUCTIONS_PATH",
+            "NOTIFICATION_FUNCTION_URL",
+            "VOICE_AGENT_FUNCTION_URL",
+        ):
+            self.assertIn(f"${{{shell_variable}}}", deploy_script)
+        self.assertIn("preflight_deploy.py", readme)
+        self.assertIn("does not read or print secret values", readme)
+
     def test_streaming_flex_template_metadata_matches_required_parser_args(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         tree = ast.parse(streaming_source)

@@ -116,7 +116,29 @@ create_folder "dataflow/streaming/dlq"
 echo "Folder structures created."
 
 # ============================
-# Step 5: Build and Deploy Template (Corrected Build Command)
+# Step 5: Preflight Runtime Resources
+# ============================
+
+echo "Running streaming deployment preflight checks..."
+python3 scripts/preflight_deploy.py \
+    --project "${PROJECT_ID}" \
+    --region "${REGION}" \
+    --service-account-email "${DATAFLOW_WORKER_SA}" \
+    --immediate-topic "${IMMEDIATE_TOPIC}" \
+    --delayed-topic "${DELAYED_TOPIC}" \
+    --tasks-location "${TASKS_LOCATION}" \
+    --delayed-matching-queue "${DELAYED_MATCHING_QUEUE}" \
+    --notification-queue "${NOTIFICATION_QUEUE}" \
+    --voice-agent-queue "${VOICE_AGENT_QUEUE}" \
+    --pdf-bucket "${PDF_BUCKET}" \
+    --pdf-instructions-path "${PDF_INSTRUCTIONS_PATH}" \
+    --notification-function-url "${NOTIFICATION_FUNCTION_URL}" \
+    --voice-agent-function-url "${VOICE_AGENT_FUNCTION_URL}" \
+    --pinecone-index "${PINECONE_INDEX}" \
+    --pinecone-region "${PINECONE_REGION}"
+
+# ============================
+# Step 6: Build and Deploy Template (Corrected Build Command)
 # ============================
 
 echo "Building Streaming Flex Template..."
@@ -131,7 +153,7 @@ gcloud dataflow flex-template build ${TEMPLATE_SPEC_GCS_PATH} \
 echo "Streaming Flex Template built and uploaded to ${TEMPLATE_SPEC_GCS_PATH}."
 
 # ============================
-# Step 6: Run Template (Corrected Run Command with All Parameters)
+# Step 7: Run Template (Corrected Run Command with All Parameters)
 # ============================
 
 echo "Running Streaming Flex Template..."
@@ -169,7 +191,7 @@ gcloud dataflow flex-template run "streaming-job-$(date +%Y%m%d-%H%M%S)" \
 echo "Streaming job started."
 
 # ============================
-# Step 7: Deployment Confirmation
+# Step 8: Deployment Confirmation
 # ============================
 
 echo "Deployment script completed! Check the GCP console for job status."

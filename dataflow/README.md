@@ -119,7 +119,35 @@ This will:
 - Create Dataflow flex templates
 - Configure the templates with default parameters
 
-### 3. Run the Pipelines
+### 3. Streaming deployment preflight
+
+Before the streaming deploy script builds or launches the Flex Template, it runs:
+
+```bash
+python3 dataflow/pipelines/streaming/scripts/preflight_deploy.py \
+  --project "your-project-id" \
+  --region "your-region" \
+  --service-account-email "dataflow-worker@your-project-id.iam.gserviceaccount.com" \
+  --immediate-topic "user-profile-updated" \
+  --delayed-topic "delayed-matching" \
+  --tasks-location "your-region" \
+  --delayed-matching-queue "delayed-matching" \
+  --notification-queue "match-notifications" \
+  --voice-agent-queue "voice-agent-calls" \
+  --pdf-bucket "your-instructions-bucket" \
+  --pdf-instructions-path "agent-instructions-1.0.pdf" \
+  --notification-function-url "https://example.com/notify" \
+  --voice-agent-function-url "https://example.com/voice" \
+  --pinecone-index "user-embeddings" \
+  --pinecone-region "us-west1-gcp"
+```
+
+The preflight checks required commands, placeholder values, Secret Manager secret
+metadata (`OPENAI_API_KEY`, `PINECONE_API_KEY`), Pub/Sub topics, Cloud Tasks
+queues, the Dataflow worker service account, and the reranker instructions PDF in
+GCS. It does not read or print secret values.
+
+### 4. Run the Pipelines
 
 #### Streaming Pipeline
 
