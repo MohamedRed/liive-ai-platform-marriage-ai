@@ -512,6 +512,7 @@ class RerankMatchesDoFn(beam.DoFn):
         self.openai_client = None
         self.db = None
         self.ai_instructions = None
+        self.setup_error_message = None
 
     def setup(self):
         self.logger.info("Setting up RerankMatchesDoFn (OpenAI client, Firestore, PDF instructions)")
@@ -526,11 +527,12 @@ class RerankMatchesDoFn(beam.DoFn):
                 bucket_name=self.pdf_bucket,
                 file_path=self.pdf_instructions_path
             )
+            self.setup_error_message = None
             self.logger.info("RerankMatchesDoFn setup complete.")
 
         except Exception as e:
-            self.logger.error(f"Failed RerankMatchesDoFn setup: {e}", exc_info=True)
-            raise
+            self.setup_error_message = f"RerankMatchesDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _fetch_profile(self, user_id):
         # Helper to fetch a single profile, returns None on error.
@@ -670,9 +672,15 @@ class RerankMatchesDoFn(beam.DoFn):
         # Aggregate lying/consistency score might need to be fetched or computed if still used.
 
         if not self.db or not self.openai_client or not self.ai_instructions:
-             self.logger.error("Clients or instructions not initialized in RerankMatchesDoFn. Skipping.")
+             error_message = self.setup_error_message or "RerankMatchesDoFn setup failed"
+             self.logger.error("%s. Skipping.", error_message)
              self.error_counter.inc()
-             raise RuntimeError("Setup failed for RerankMatchesDoFn")
+             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                 'user_id': triggering_user_id,
+                 'error_message': error_message,
+                 'element': element,
+             })
+             return
 
         if not triggering_user_id or not isinstance(candidates_list, list):
             self.logger.error(f"Invalid input element format for RerankMatchesDoFn: triggering_user_id or candidates_list missing/malformed. Element: {element}")

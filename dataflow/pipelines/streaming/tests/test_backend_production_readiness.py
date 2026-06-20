@@ -800,6 +800,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("raise # Critical setup failure", reranking_source)
         self.assertNotIn("\"error_message\": \"DoFn not initialized\"", reranking_source)
 
+    def test_llm_reranker_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        reranking_source = read("dataflow/pipelines/streaming/transforms/reranking.py")
+
+        self.assertIn("class RerankMatchesDoFn", reranking_source)
+        self.assertIn("RerankMatchesDoFn.OUTPUT_ERROR_TAG", reranking_source)
+        self.assertIn("RerankMatchesDoFn setup failed", reranking_source)
+        self.assertIn("error_message = self.setup_error_message or \"RerankMatchesDoFn setup failed\"", reranking_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", reranking_source)
+        self.assertIn(".with_outputs(RerankMatchesDoFn.OUTPUT_ERROR_TAG, main='main')", reranking_source)
+        self.assertIn("reranked_matches_data_results.error | \"DLQ_LLMRerankingErrors\" >> dlq_sink(\"LLMRerankingErrors\")", streaming_source)
+        self.assertNotIn("Failed RerankMatchesDoFn setup: {e}", reranking_source)
+        self.assertNotIn("raise RuntimeError(\"Setup failed for RerankMatchesDoFn\")", reranking_source)
+        self.assertNotIn("raise\n\n    def _fetch_profile", reranking_source)
+
     def test_answer_parsing_setup_and_llm_failures_are_tagged_not_silently_main(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         answer_parsing_source = read("dataflow/pipelines/streaming/transforms/answer_parsing.py")
