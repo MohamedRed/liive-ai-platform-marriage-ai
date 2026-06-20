@@ -62,6 +62,7 @@ class CalculateLyingScoreDoFn(beam.DoFn):
         self.error_counter = Metrics.counter('CalculateLyingScoreDoFn', MetricNames.ERRORS)
         self.openai_client = None
         self.db = None
+        self.setup_error_message = None
 
     def setup(self):
         # Initialize OpenAI and Firestore clients
@@ -69,18 +70,20 @@ class CalculateLyingScoreDoFn(beam.DoFn):
             self.db = firestore.Client(project=self.project_id)
             api_key = access_secret(self.project_id, "OPENAI_API_KEY")
             self.openai_client = openai.OpenAI(api_key=api_key)
+            self.setup_error_message = None
             self.logger.info("CalculateLyingScoreDoFn setup complete (Firestore & OpenAI)")
         except Exception as e:
-             self.logger.error(f"Failed CalculateLyingScoreDoFn setup: {e}", exc_info=True)
-             raise
+             self.setup_error_message = f"CalculateLyingScoreDoFn setup failed: {e}"
+             self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element):
         """Calculate lying score for modified QAs"""
         if not self.db or not self.openai_client:
-             self.logger.error("Clients not initialized in CalculateLyingScoreDoFn. Skipping.")
+             error_message = self.setup_error_message or "CalculateLyingScoreDoFn setup failed"
+             self.logger.error("%s. Skipping.", error_message)
              self.error_counter.inc()
              yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                 "error_message": "Setup failed for CalculateLyingScoreDoFn",
+                 "error_message": error_message,
                  "element": element,
              })
              return
@@ -215,21 +218,24 @@ class UpdateLyingScoreDoFn(beam.DoFn):
         self.error_counter = Metrics.counter('UpdateLyingScoreDoFn', MetricNames.ERRORS)
         self.update_counter = Metrics.counter('UpdateLyingScoreDoFn', 'lying_scores_updated')
         self.db = None
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info("UpdateLyingScoreDoFn setup complete (Firestore)")
         except Exception as e:
-             self.logger.error(f"Failed UpdateLyingScoreDoFn setup: {e}", exc_info=True)
-             raise
+             self.setup_error_message = f"UpdateLyingScoreDoFn setup failed: {e}"
+             self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element):
         if not self.db:
-             self.logger.error("Firestore client not initialized in UpdateLyingScoreDoFn. Skipping.")
+             error_message = self.setup_error_message or "UpdateLyingScoreDoFn setup failed"
+             self.logger.error("%s. Skipping.", error_message)
              self.error_counter.inc()
              yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                 "error_message": "Setup failed for UpdateLyingScoreDoFn",
+                 "error_message": error_message,
                  "element": element,
              })
              return

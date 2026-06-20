@@ -762,6 +762,29 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("candidate_identity_verification_coll", scoreboard_source)
         self.assertIn("candidate_wali_verification_coll", scoreboard_source)
 
+    def test_lying_score_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        reranking_source = read("dataflow/pipelines/streaming/transforms/reranking.py")
+
+        self.assertIn("class CalculateLyingScoreDoFn", reranking_source)
+        self.assertIn("class UpdateLyingScoreDoFn", reranking_source)
+        self.assertGreaterEqual(reranking_source.count("OUTPUT_ERROR_TAG = 'error'"), 2)
+        self.assertIn("setup_error_message", reranking_source)
+        self.assertIn("CalculateLyingScoreDoFn setup failed", reranking_source)
+        self.assertIn("UpdateLyingScoreDoFn setup failed", reranking_source)
+        self.assertIn("error_message = self.setup_error_message or \"CalculateLyingScoreDoFn setup failed\"", reranking_source)
+        self.assertIn("error_message = self.setup_error_message or \"UpdateLyingScoreDoFn setup failed\"", reranking_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", reranking_source)
+        self.assertIn(".with_outputs(CalculateLyingScoreDoFn.OUTPUT_ERROR_TAG, main='main')", streaming_source)
+        self.assertIn(".with_outputs(UpdateLyingScoreDoFn.OUTPUT_ERROR_TAG, main='main')", streaming_source)
+        self.assertIn("lying_score_errors | \"DLQ_LyingScoreErrors\" >> dlq_sink(\"LyingScoreErrors\")", streaming_source)
+        self.assertIn("update_lying_score_errors | \"DLQ_UpdateLyingScoreErrors\" >> dlq_sink(\"UpdateLyingScoreErrors\")", streaming_source)
+        self.assertNotIn("Failed CalculateLyingScoreDoFn setup: {e}", reranking_source)
+        self.assertNotIn("Failed UpdateLyingScoreDoFn setup: {e}", reranking_source)
+        self.assertNotIn("raise\n\n    def process(self, element):", reranking_source)
+        self.assertNotIn("Setup failed for CalculateLyingScoreDoFn", reranking_source)
+        self.assertNotIn("Setup failed for UpdateLyingScoreDoFn", reranking_source)
+
     def test_answer_parsing_setup_and_llm_failures_are_tagged_not_silently_main(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         answer_parsing_source = read("dataflow/pipelines/streaming/transforms/answer_parsing.py")
