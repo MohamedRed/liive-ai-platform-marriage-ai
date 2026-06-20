@@ -1088,7 +1088,7 @@ class Layer1CandidateDoFn(beam.DoFn):
             self.setup_error_message = f"Layer1CandidateDoFn setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
-    def _call_llm_for_clarification(self, user_id: str, qa_sequence: List[Dict]) -> List[Dict]:
+    def _call_llm_for_clarification(self, user_id: str, qa_sequence: List[Dict]) -> Tuple[List[Dict], Optional[str]]:
         """
         Calls an LLM with the sequence of Q&As for a specific tag,
         asking if the *latest* answer needs clarification.
@@ -1099,10 +1099,11 @@ class Layer1CandidateDoFn(beam.DoFn):
                 self.setup_error_message = error_message
             self.logger.error("%s. Cannot run clarification check for user %s.", error_message, user_id)
             Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-            return []
+            return [], error_message
         if not qa_sequence: # Should not happen if called correctly, but check
-             self.logger.warning(f"Layer 1: _call_llm_for_clarification called with empty sequence for user {user_id}.")
-             return []
+             error_message = f"Layer1CandidateDoFn clarification sequence missing for user {user_id}"
+             self.logger.warning(error_message)
+             return [], error_message
 
         # Format the sequence for the prompt (e.g., numbered turns)
         prompt_context = "Here is the conversation history for the initial relationship goals topic:\n\n"
@@ -1152,9 +1153,10 @@ class Layer1CandidateDoFn(beam.DoFn):
 
             # Process response (same parsing logic as before)
             if not response.predictions:
-                self.logger.warning(f"Layer 1 LLM call for user {user_id} (sequence) returned no predictions.")
+                error_message = f"Layer1CandidateDoFn LLM returned no predictions for user {user_id}"
+                self.logger.warning(error_message)
                 Metrics.counter(self.__class__.__name__, MetricNames.LLM_ERRORS).inc()
-                return []
+                return [], error_message
 
             prediction_result = json_format.MessageToDict(response.predictions[0])
             candidates_list = prediction_result.get('candidates', [])
@@ -1168,9 +1170,10 @@ class Layer1CandidateDoFn(beam.DoFn):
                  raw_output = prediction_result.get('content', '')
 
             if not raw_output:
-                self.logger.warning(f"Layer 1 LLM call for user {user_id} (sequence) returned empty content: {prediction_result}")
+                error_message = f"Layer1CandidateDoFn LLM returned empty content for user {user_id}"
+                self.logger.warning("%s. Prediction structure: %s", error_message, prediction_result)
                 Metrics.counter(self.__class__.__name__, MetricNames.LLM_ERRORS).inc()
-                return []
+                return [], error_message
 
             clarification_questions_text = parse_llm_json_output(raw_output, self.logger, f"Layer 1 LLM (user {user_id}, seq_len={len(qa_sequence)})")
 
@@ -1190,15 +1193,19 @@ class Layer1CandidateDoFn(beam.DoFn):
                 if not valid_candidates:
                      self.logger.info(f"Layer 1 LLM determined no further clarification needed for user {user_id} on sequence {self.clarification_tag} (Turn {len(qa_sequence)}).")
             else:
-                self.logger.warning(f"Layer 1 LLM output for user {user_id} was not a list after parsing: {type(clarification_questions_text)}")
+                error_message = f"Layer1CandidateDoFn LLM output parse failed for user {user_id}: expected list, got {type(clarification_questions_text)}"
+                self.logger.warning(error_message)
+                Metrics.counter(self.__class__.__name__, MetricNames.LLM_ERRORS).inc()
+                return [], error_message
 
             Metrics.counter(self.__class__.__name__, 'layer1_candidates_generated').inc(len(valid_candidates))
-            return valid_candidates
+            return valid_candidates, None
 
         except Exception as e:
-            self.logger.error(f"Error calling/parsing Layer 1 LLM for user {user_id} (sequence): {e}", exc_info=True)
+            error_message = f"Layer1CandidateDoFn LLM call failed for user {user_id}: {e}"
+            self.logger.error(error_message, exc_info=True)
             Metrics.counter(self.__class__.__name__, MetricNames.LLM_ERRORS).inc()
-            return []
+            return [], error_message
 
     def process(self, element: Dict[str, Any]):
         # Expects element containing triggering QA details, including the tag.
@@ -1243,7 +1250,10 @@ class Layer1CandidateDoFn(beam.DoFn):
             current_depth = len(qa_sequence)
 
             # --- Call LLM with the sequence context --- #
-            clarification_candidates = self._call_llm_for_clarification(user_id, qa_sequence)
+            clarification_candidates, layer1_error_message = self._call_llm_for_clarification(user_id, qa_sequence)
+            if layer1_error_message:
+                Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': layer1_error_message, 'user_id': user_id, 'element': element, 'partial_candidate_generation_failure': True})
 
             self.logger.info(f"Layer 1: Generated {len(clarification_candidates)} clarification candidates for user {user_id} (Sequence Turn {current_depth+1}).")
             yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, (user_id, clarification_candidates))
