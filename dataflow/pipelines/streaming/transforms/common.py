@@ -364,14 +364,16 @@ class FetchFullQAsDoFn(beam.DoFn):
         self.success_counter = Metrics.counter('FetchFullQAsDoFn', FETCH_FULL_QAS_SUCCESS)
         self.error_counter = Metrics.counter('FetchFullQAsDoFn', FETCH_FULL_QAS_ERRORS)
         self.not_found_counter = Metrics.counter('FetchFullQAsDoFn', FETCH_FULL_QAS_NOT_FOUND)
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info(f"FetchFullQAsDoFn: Firestore client initialized for project {self.project_id}.")
         except Exception as e:
-            self.logger.error(f"FetchFullQAsDoFn: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
-            raise
+            self.setup_error_message = f"FetchFullQAsDoFn setup failed: {str(e)}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Tuple[str, Dict[str, Any]]):
         # Input element: (user_id, passthrough_data_dict)
@@ -380,9 +382,10 @@ class FetchFullQAsDoFn(beam.DoFn):
         user_id, passthrough_data = element
 
         if not self.db:
-            self.logger.error("FetchFullQAsDoFn: Firestore client not initialized. Skipping Q&A fetch.")
+            error_message = self.setup_error_message or "Firestore client not initialized"
+            self.logger.error("FetchFullQAsDoFn: %s. Skipping Q&A fetch.", error_message)
             self.error_counter.inc()
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "Firestore client not initialized", "element": element})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
             return
         
         if not user_id:

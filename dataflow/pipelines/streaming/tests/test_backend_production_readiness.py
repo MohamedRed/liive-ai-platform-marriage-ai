@@ -131,6 +131,19 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Failed ScheduleDelayedMatchingDoFn setup: {e}", scheduling_source)
         self.assertNotIn("Failed HandleMatchActionsDoFn setup: {e}", scheduling_source)
 
+    def test_fetch_full_qas_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        common_source = read("dataflow/pipelines/streaming/transforms/common.py")
+
+        self.assertIn("FetchFullQAsDoFn.OUTPUT_ERROR_TAG", common_source)
+        self.assertIn("setup_error_message", common_source)
+        self.assertIn("FetchFullQAsDoFn setup failed", common_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", common_source)
+        self.assertIn(").with_outputs(FetchFullQAsDoFn.OUTPUT_ERROR_TAG, main='main')", common_source)
+        self.assertIn("fetch_qas_errors | \"DLQ_FetchQAsErrors\" >> dlq_sink(\"FetchQAsErrors\")", streaming_source)
+        self.assertNotIn("FetchFullQAsDoFn: Failed to initialize Firestore client in setup: {str(e)}", common_source)
+        self.assertNotIn("raise\n\n    def process(self, element: Tuple[str, Dict[str, Any]]):", common_source)
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod
