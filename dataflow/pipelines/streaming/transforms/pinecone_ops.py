@@ -37,31 +37,32 @@ class DeleteStaleQuestionVectorsDoFn(beam.DoFn):
         self.delete_counter = Metrics.counter('DeleteStaleQuestionVectorsDoFn', 'pinecone_question_vector_deletes')
         self.index = None
         self.pc = None
+        self.setup_error_message = None
 
     def setup(self):
-        from pinecone.grpc import PineconeGRPC
-
         self.logger.info(f"Setting up Pinecone client for stale-vector cleanup in region {self.pinecone_region}")
         try:
+            from pinecone.grpc import PineconeGRPC
+
             self.pc = PineconeGRPC(
                 api_key=access_secret(self.project_id, "PINECONE_API_KEY"),
                 environment=self.pinecone_region,
             )
             index_name_formatted = self.pinecone_index_name.lower().replace('_', '-')
             if index_name_formatted not in self.pc.list_indexes().names:
-                self.logger.error(f"Pinecone index '{index_name_formatted}' does not exist. Cannot delete stale vectors.")
                 raise ValueError(f"Pinecone index '{index_name_formatted}' not found.")
             self.index = self.pc.Index(index_name_formatted)
+            self.setup_error_message = None
             self.logger.info(f"Successfully connected to Pinecone index '{index_name_formatted}' for stale-vector cleanup.")
         except Exception as e:
-            self.logger.error(f"Failed to setup Pinecone cleanup client or connect to index: {e}", exc_info=True)
-            raise
+            self.setup_error_message = f"Pinecone stale-vector cleanup setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Dict[str, Any]):
         if not self.index:
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                "error_message": "Pinecone index not initialized in stale-vector cleanup",
+                "error_message": self.setup_error_message or "Pinecone index not initialized in stale-vector cleanup",
                 "element": element,
             })
             return
@@ -130,12 +131,14 @@ class StoreIndividualEmbeddingsDoFn(beam.DoFn): # Renamed class
         self.upsert_batch_counter = Metrics.counter('StoreIndividualEmbeddingsDoFn', 'pinecone_upsert_batches')
         self.index = None
         self.pc = None
+        self.setup_error_message = None
 
     def setup(self):
         """Initialize Pinecone client and get index."""
-        from pinecone.grpc import PineconeGRPC # Import moved to setup
         self.logger.info(f"Setting up Pinecone client for storing embeddings in region {self.pinecone_region}")
         try:
+            from pinecone.grpc import PineconeGRPC # Import moved to setup
+
             self.pc = PineconeGRPC(
                 api_key=access_secret(self.project_id, "PINECONE_API_KEY"),
                 environment=self.pinecone_region
@@ -144,21 +147,21 @@ class StoreIndividualEmbeddingsDoFn(beam.DoFn): # Renamed class
             index_name_formatted = self.pinecone_index_name.lower().replace('_', '-')
 
             if index_name_formatted not in self.pc.list_indexes().names:
-                 self.logger.error(f"Pinecone index '{index_name_formatted}' does not exist. Cannot store embeddings.")
                  raise ValueError(f"Pinecone index '{index_name_formatted}' not found.")
             else:
                  self.index = self.pc.Index(index_name_formatted)
+                 self.setup_error_message = None
                  self.logger.info(f"Successfully connected to Pinecone index '{index_name_formatted}' for storing.")
 
         except Exception as e:
-            self.logger.error(f"Failed to setup Pinecone client or connect to index: {e}", exc_info=True)
-            raise
+            self.setup_error_message = f"Pinecone embedding store setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Tuple[str, List[float], Dict[str, Any]]): # Updated input type
         if not self.index:
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                "error_message": "Pinecone index not initialized in embedding store",
+                "error_message": self.setup_error_message or "Pinecone index not initialized in embedding store",
                 "element": element,
             })
             return
@@ -218,6 +221,7 @@ class QueryPinecone(beam.DoFn):
         self.rate_limit_waits = Metrics.counter('QueryPinecone', 'rate_limit_waits')
         self.index = None
         self.pc = None
+        self.setup_error_message = None
 
         # Rate limiting parameters (consider making them configurable)
         self.total_qru_limit = 2000 # Query Read Units per second limit
@@ -229,10 +233,10 @@ class QueryPinecone(beam.DoFn):
 
     def setup(self):
         """Initializes the Pinecone client and index connection."""
-        from pinecone.grpc import PineconeGRPC # Import moved to setup
-        import time
         self.logger.info(f"Setting up Pinecone client for querying in region {self.pinecone_region}")
         try:
+            from pinecone.grpc import PineconeGRPC # Import moved to setup
+
             self.pc = PineconeGRPC(
                 api_key=access_secret(self.project_id, "PINECONE_API_KEY"),
                 environment=self.pinecone_region
@@ -246,39 +250,7 @@ class QueryPinecone(beam.DoFn):
             available_indexes = self.pc.list_indexes().names
             self.logger.info(f"Available Pinecone indexes: {available_indexes}")
             if index_name_formatted not in available_indexes:
-                # Original code created the index, but this might be risky in a query DoFn.
-                # Consider creating the index separately as part of infrastructure setup.
-                # If creation is desired here, uncomment and refine the logic below.
-                self.logger.error(f"Pinecone index '{index_name_formatted}' not found. Cannot query.")
                 raise ValueError(f"Pinecone index '{index_name_formatted}' not found.")
-                # --- Index Creation Logic (Optional - Use with caution) ---
-                # self.logger.info(f"Index {index_name_formatted} not found, creating new index...")
-                # EMBEDDING_DIMENSION = 3072 # Example for text-embedding-3-large
-                # self.pc.create_index(
-                #     name=index_name_formatted,
-                #     dimension=EMBEDDING_DIMENSION, # Make dimension configurable or detect from embedding
-                #     metric='cosine', # Make metric configurable
-                #     spec={
-                #         'serverless': {
-                #             'cloud': 'gcp', # Make cloud configurable
-                #             'region': self.pinecone_region
-                #         }
-                #     }
-                # )
-                # # Wait for index to be ready (add timeout and better error handling)
-                # while True:
-                #     try:
-                #         status = self.pc.describe_index(index_name_formatted).status
-                #         if status and status.get('ready'):
-                #              self.logger.info(f"Index {index_name_formatted} created and ready.")
-                #              break
-                #         self.logger.info(f"Waiting for index {index_name_formatted} to be ready...")
-                #         time.sleep(5)
-                #     except Exception as wait_e:
-                #         self.logger.warning(f"Error checking index status while waiting: {str(wait_e)}")
-                #         time.sleep(5)
-                # self.index = self.pc.Index(index_name_formatted)
-                # --- End Index Creation Logic ---
             else:
                 # Index exists, connect to it
                 self.index = self.pc.Index(index_name_formatted)
@@ -289,17 +261,17 @@ class QueryPinecone(beam.DoFn):
 
             # Initialize rate limiting window
             self.window_start_time = time.time()
+            self.setup_error_message = None
 
         except Exception as e:
-            self.logger.error(f"Failed to setup Pinecone client or connect to index '{self.pinecone_index_name}': {e}", exc_info=True)
-            # Yield to error tag? Setup errors are usually critical and might fail the worker.
-            raise
+            self.setup_error_message = f"Pinecone query setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, item: Tuple[str, List[float], Dict[str, Any]]): # Updated item type
         if not self.index:
             self.logger.error("Pinecone index not initialized. Skipping query.")
             self.error_counter.inc()
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "Pinecone index not initialized in process", "element": item})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": self.setup_error_message or "Pinecone index not initialized in process", "element": item})
             return
 
         triggering_vector_id, embedding_vector, triggering_metadata = item

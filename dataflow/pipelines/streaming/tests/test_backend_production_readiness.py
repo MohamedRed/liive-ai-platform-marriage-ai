@@ -106,6 +106,35 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("store_statement_embeddings_results.error | \"DLQ_StoreStatementEmbeddingsErrors\" >> dlq_sink(\"StoreStatementEmbeddingsErrors\")", source)
         self.assertNotIn("raise\n        finally:\n            self.batch = []", pinecone_source)
 
+    def test_active_pinecone_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        pinecone_source = read("dataflow/pipelines/streaming/transforms/pinecone_ops.py")
+
+        for class_name in (
+            "DeleteStaleQuestionVectorsDoFn",
+            "StoreIndividualEmbeddingsDoFn",
+            "QueryPinecone",
+        ):
+            self.assertIn(f"{class_name}.OUTPUT_ERROR_TAG", pinecone_source)
+
+        self.assertIn("setup_error_message", pinecone_source)
+        self.assertIn("Pinecone stale-vector cleanup setup failed", pinecone_source)
+        self.assertIn("Pinecone embedding store setup failed", pinecone_source)
+        self.assertIn("Pinecone query setup failed", pinecone_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", pinecone_source)
+        self.assertIn(").with_outputs(DeleteStaleQuestionVectorsDoFn.OUTPUT_ERROR_TAG, main='main')", pinecone_source)
+        self.assertIn(").with_outputs(StoreIndividualEmbeddingsDoFn.OUTPUT_ERROR_TAG, main='main')", pinecone_source)
+        self.assertIn(").with_outputs(QueryPinecone.OUTPUT_ERROR_TAG, main='main')", pinecone_source)
+        self.assertIn("stale_vector_cleanup_results.error | \"DLQ_StaleVectorCleanupErrors\" >> dlq_sink(\"StaleVectorCleanupErrors\")", streaming_source)
+        self.assertIn("store_statement_embeddings_results.error | \"DLQ_StoreStatementEmbeddingsErrors\" >> dlq_sink(\"StoreStatementEmbeddingsErrors\")", streaming_source)
+        self.assertIn("statement_match_hits_results.error | \"DLQ_StatementQueryErrors\" >> dlq_sink(\"StatementQueryErrors\")", streaming_source)
+        self.assertNotIn("Failed to setup Pinecone cleanup client or connect to index: {e}", pinecone_source)
+        self.assertNotIn("Failed to setup Pinecone client or connect to index: {e}", pinecone_source)
+        self.assertNotIn("Failed to setup Pinecone client or connect to index '{self.pinecone_index_name}': {e}", pinecone_source)
+        self.assertNotIn("raise\n\n    def process(self, element: Dict[str, Any]):", pinecone_source)
+        self.assertNotIn("raise\n\n    def process(self, element: Tuple[str, List[float], Dict[str, Any]]):", pinecone_source)
+        self.assertNotIn("raise\n\n    def process(self, item: Tuple[str, List[float], Dict[str, Any]]):", pinecone_source)
+
     def test_firestore_match_writer_client_initialization_failures_are_tagged_not_raised(self):
         firestore_source = read("dataflow/pipelines/streaming/transforms/firestore_io.py")
 
