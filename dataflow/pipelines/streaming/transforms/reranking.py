@@ -648,6 +648,7 @@ class RerankMatchesDoFn(beam.DoFn):
         """
         # ... (Rest of the LLM call and JSON parsing logic remains largely the same)
         # Ensure error handling and default return values are robust.
+        result_str = '[unavailable]'
         try:
             response = self.openai_client.chat.completions.create(
                 model="o1-mini", # Consider making model configurable via config.py or pipeline args
@@ -676,15 +677,17 @@ class RerankMatchesDoFn(beam.DoFn):
                            self.logger.warning(f"Malformed suggested question item: {q}")
             else:
                  self.logger.warning(f"Unexpected format for suggested_questions: {raw_questions}")
-            return min(max(score, 0), 100), questions
+            return min(max(score, 0), 100), questions, None
         except (ValueError, KeyError, json.JSONDecodeError) as e:
-            self.logger.error(f"Failed to call or parse AI response for compatibility: {str(e)}\nResponse string: '{result_str if 'result_str' in locals() else '[unavailable]'}'", exc_info=True)
+            error_message = f"RerankMatchesDoFn compatibility LLM response parse failed: {str(e)}"
+            self.logger.error(f"{error_message}\nResponse string: '{result_str if 'result_str' in locals() else '[unavailable]'}'", exc_info=True)
             self.error_counter.inc()
-            return 0, [] 
+            return 0, [], error_message
         except Exception as e:
-             self.logger.error(f"Unexpected error during AI call for compatibility: {str(e)}", exc_info=True)
+             error_message = f"RerankMatchesDoFn compatibility LLM call failed: {str(e)}"
+             self.logger.error(error_message, exc_info=True)
              self.error_counter.inc()
-             return 0, []
+             return 0, [], error_message
 
     def process(self, element: Tuple[str, Dict[str, Any]]):
         # Expected input: (triggering_user_id, data_dict)
@@ -740,6 +743,7 @@ class RerankMatchesDoFn(beam.DoFn):
 
             reranked_matches = []
             partial_rerank_profile_fetch_errors = []
+            partial_rerank_llm_errors = []
             for candidate_info in candidates_list:
                 matched_user_id = candidate_info.get('matched_user_id')
                 if not matched_user_id:
@@ -776,13 +780,25 @@ class RerankMatchesDoFn(beam.DoFn):
                 # Format matched profile (currently without its own lying scores in the prompt)
                 matched_profile_fmt = self._format_profile_for_prompt(matched_profile_data)
 
-                ai_score, suggested_questions = self._get_compatibility_score_and_questions(
+                ai_score, suggested_questions, llm_error_message = self._get_compatibility_score_and_questions(
                     source_profile_fmt,
                     matched_profile_fmt,
                     cross_encoder_score=candidate_info.get('cross_encoder_score'),
                     scoreboard_score=candidate_info.get('aggregated_score'),
                     source_user_consistency_score=source_user_consistency_score
                 )
+                if llm_error_message:
+                    partial_rerank_llm_errors.append({
+                        'error_message': llm_error_message,
+                        'user_id': triggering_user_id,
+                        'triggering_user_id': triggering_user_id,
+                        'matched_user_id': matched_user_id,
+                        'candidate_info': candidate_info,
+                        'element': element,
+                        'partial_llm_rerank_failure': True,
+                        'fallback_ai_score': ai_score,
+                        'fallback_suggested_questions': suggested_questions,
+                    })
 
                 reranked_matches.append({
                     'id': matched_user_id,
@@ -799,6 +815,8 @@ class RerankMatchesDoFn(beam.DoFn):
 
             for partial_rerank_profile_fetch_error in partial_rerank_profile_fetch_errors:
                 yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, partial_rerank_profile_fetch_error)
+            for partial_rerank_llm_error in partial_rerank_llm_errors:
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, partial_rerank_llm_error)
 
             yield {
                 'user_id': triggering_user_id,
