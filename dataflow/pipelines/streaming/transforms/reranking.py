@@ -739,6 +739,7 @@ class RerankMatchesDoFn(beam.DoFn):
             source_user_consistency_score = source_profile_data.get('aggregateLyingScore') # Example, adapt to actual field name
 
             reranked_matches = []
+            partial_rerank_profile_fetch_errors = []
             for candidate_info in candidates_list:
                 matched_user_id = candidate_info.get('matched_user_id')
                 if not matched_user_id:
@@ -748,6 +749,17 @@ class RerankMatchesDoFn(beam.DoFn):
                 matched_profile_data = self._fetch_profile(matched_user_id)
                 if not matched_profile_data:
                     self.logger.warning(f"Could not fetch profile for match {matched_user_id}. Skipping LLM rerank for this candidate.")
+                    partial_rerank_profile_fetch_errors.append({
+                        'error_message': f"RerankMatchesDoFn candidate profile fetch failed for {matched_user_id}",
+                        'user_id': triggering_user_id,
+                        'triggering_user_id': triggering_user_id,
+                        'matched_user_id': matched_user_id,
+                        'candidate_info': candidate_info,
+                        'element': element,
+                        'profile_role': 'candidate',
+                        'partial_profile_fetch_failure': True,
+                        'fallback_ai_score': 0,
+                    })
                     # Add to reranked_matches with existing scores but no new AI score, or skip entirely
                     # For now, let's add with a default low AI score to keep it in the list if needed downstream
                     reranked_matches.append({
@@ -784,6 +796,9 @@ class RerankMatchesDoFn(beam.DoFn):
 
             reranked_matches.sort(key=lambda x: x['ai_score'], reverse=True)
             self.rerank_success_counter.inc(len(reranked_matches))
+
+            for partial_rerank_profile_fetch_error in partial_rerank_profile_fetch_errors:
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, partial_rerank_profile_fetch_error)
 
             yield {
                 'user_id': triggering_user_id,
