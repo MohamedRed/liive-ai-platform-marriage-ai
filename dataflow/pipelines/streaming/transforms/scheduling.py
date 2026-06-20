@@ -34,22 +34,29 @@ class ScheduleDelayedMatchingDoFn(beam.DoFn):
         self.tasks_created_counter = Metrics.counter('ScheduleDelayedMatchingDoFn', 'tasks_created')
         self.tasks_client = None
         self.db = None
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.tasks_client = tasks_v2.CloudTasksClient()
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info("ScheduleDelayedMatchingDoFn setup complete (Cloud Tasks & Firestore)")
         except Exception as e:
-             self.logger.error(f"Failed ScheduleDelayedMatchingDoFn setup: {e}", exc_info=True)
-             raise
+            self.setup_error_message = f"ScheduleDelayedMatchingDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element):
         # Expecting element like {'user_id': ..., 'matches': [...], 'query_time': ...} from QueryPinecone
         if not self.tasks_client or not self.db:
-             self.logger.error("Clients not initialized in ScheduleDelayedMatchingDoFn. Skipping.")
-             self.error_counter.inc()
-             raise RuntimeError("Setup failed for ScheduleDelayedMatchingDoFn")
+            error_message = self.setup_error_message or "Clients not initialized in ScheduleDelayedMatchingDoFn"
+            self.logger.error("%s. Skipping delayed matching schedule.", error_message)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": error_message,
+                "element": element,
+            })
+            return
 
         if not isinstance(element, dict) or 'user_id' not in element:
             self.logger.error(f"Invalid input element format for ScheduleDelayedMatchingDoFn: {element}")
@@ -176,15 +183,17 @@ class HandleMatchActionsDoFn(beam.DoFn):
         self.settings_not_found = Metrics.counter('HandleMatchActionsDoFn', 'settings_not_found')
         self.db = None
         self.tasks_client = None
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
             self.tasks_client = tasks_v2.CloudTasksClient()
+            self.setup_error_message = None
             self.logger.info("HandleMatchActionsDoFn setup complete (Firestore & Cloud Tasks)")
         except Exception as e:
-             self.logger.error(f"Failed HandleMatchActionsDoFn setup: {e}", exc_info=True)
-             raise
+            self.setup_error_message = f"HandleMatchActionsDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _check_notification_availability(self, prefs):
         """Checks notification availability based on user preferences. Matches TypeScript logic."""
@@ -282,9 +291,14 @@ class HandleMatchActionsDoFn(beam.DoFn):
     def process(self, element):
         # Expecting element like {'user_id': ..., 'matches': [...]} from RerankMatchesDoFn
         if not self.db or not self.tasks_client:
-             self.logger.error("Clients not initialized in HandleMatchActionsDoFn. Skipping.")
-             self.error_counter.inc()
-             raise RuntimeError("Setup failed for HandleMatchActionsDoFn")
+            error_message = self.setup_error_message or "Clients not initialized in HandleMatchActionsDoFn"
+            self.logger.error("%s. Skipping match actions.", error_message)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": error_message,
+                "element": element,
+            })
+            return
 
         if not isinstance(element, dict) or 'user_id' not in element or 'matches' not in element:
             self.logger.error(f"Invalid input element format for HandleMatchActionsDoFn: {element}")

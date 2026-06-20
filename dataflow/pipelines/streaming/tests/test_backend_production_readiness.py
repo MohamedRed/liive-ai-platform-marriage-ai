@@ -117,6 +117,20 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("raise RuntimeError(\"Setup failed for UpdateFirestoreDoFn\")", firestore_source)
         self.assertNotIn("Failed to initialize Firestore client in UpdateFirestoreDoFn setup: {str(e)}", firestore_source)
 
+    def test_cloud_tasks_side_effect_setup_failures_are_tagged_not_raised(self):
+        scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+
+        self.assertIn("ScheduleDelayedMatchingDoFn.ERROR_TAG", scheduling_source)
+        self.assertIn("HandleMatchActionsDoFn.ERROR_TAG", scheduling_source)
+        self.assertIn(".with_outputs(ScheduleDelayedMatchingDoFn.ERROR_TAG, main=ScheduleDelayedMatchingDoFn.OUTPUT_TAG)", scheduling_source)
+        self.assertIn(".with_outputs(HandleMatchActionsDoFn.ERROR_TAG, main=HandleMatchActionsDoFn.OUTPUT_TAG)", scheduling_source)
+        self.assertIn("setup_error_message", scheduling_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG", scheduling_source)
+        self.assertNotIn("raise RuntimeError(\"Setup failed for ScheduleDelayedMatchingDoFn\")", scheduling_source)
+        self.assertNotIn("raise RuntimeError(\"Setup failed for HandleMatchActionsDoFn\")", scheduling_source)
+        self.assertNotIn("Failed ScheduleDelayedMatchingDoFn setup: {e}", scheduling_source)
+        self.assertNotIn("Failed HandleMatchActionsDoFn setup: {e}", scheduling_source)
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod
