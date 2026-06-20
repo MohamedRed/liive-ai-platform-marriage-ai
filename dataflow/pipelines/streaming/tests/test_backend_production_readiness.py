@@ -11,6 +11,9 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+import sys
+import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -55,6 +58,79 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn(".with_outputs(WriteMatchesToFirestore", source)
         self.assertNotIn(".with_outputs(ScheduleDelayedMatching", source)
         self.assertNotIn(".with_outputs(HandleMatchActions", source)
+
+    def test_streaming_dlq_writer_persists_structured_error_record(self):
+        class _FakeMetrics:
+            @staticmethod
+            def counter(*_args, **_kwargs):
+                return types.SimpleNamespace(inc=lambda *_args, **_kwargs: None)
+
+        class _FakeFileSystems:
+            @staticmethod
+            def join(*parts):
+                return str(Path(parts[0]).joinpath(*parts[1:]))
+
+            @staticmethod
+            def create(path):
+                Path(path).parent.mkdir(parents=True, exist_ok=True)
+                return open(path, "wb")
+
+        class _FakePCollection:
+            def __class_getitem__(cls, _item):
+                return cls
+
+        fake_beam = types.ModuleType("apache_beam")
+        fake_beam.DoFn = object
+        fake_beam.Row = type("Row", (), {})
+        fake_beam.PCollection = _FakePCollection
+        fake_beam.PCollectionTuple = _FakePCollection
+        fake_beam.ptransform_fn = lambda fn: fn
+        fake_beam.pvalue = types.SimpleNamespace(TaggedOutput=lambda tag, value: (tag, value))
+        fake_metrics = types.ModuleType("apache_beam.metrics")
+        fake_metrics.Metrics = _FakeMetrics
+        fake_filesystems = types.ModuleType("apache_beam.io.filesystems")
+        fake_filesystems.FileSystems = _FakeFileSystems
+        fake_io = types.ModuleType("apache_beam.io")
+        fake_io.filesystems = fake_filesystems
+        setattr(fake_io, "ReadFromPubSub", types.SimpleNamespace(PubsubMessage=type("PubsubMessage", (), {})))
+        fake_beam.io = fake_io
+        fake_firestore = types.ModuleType("google.cloud.firestore")
+        setattr(fake_firestore, "Client", object)
+
+        stubbed_modules = {
+            "apache_beam": fake_beam,
+            "apache_beam.metrics": fake_metrics,
+            "apache_beam.io": fake_io,
+            "apache_beam.io.filesystems": fake_filesystems,
+            "google.cloud.firestore": fake_firestore,
+        }
+        original_modules = {name: sys.modules.get(name) for name in stubbed_modules}
+        sys.modules.update(stubbed_modules)
+        sys.modules.pop("dataflow.pipelines.streaming.transforms.common", None)
+        try:
+            common = importlib.import_module("dataflow.pipelines.streaming.transforms.common")
+            with tempfile.TemporaryDirectory() as temp_dir:
+                dlq_writer = common.WriteToDLQFn(temp_dir)
+                maybe_output = dlq_writer.process(({"user_id": "user-1", "payload": b"bad"}, RuntimeError("boom")))
+                if maybe_output is not None:
+                    list(maybe_output)
+
+                dlq_files = sorted(Path(temp_dir).glob("dlq-*.json"))
+                self.assertEqual(len(dlq_files), 1)
+                record = json.loads(dlq_files[0].read_text())
+        finally:
+            sys.modules.pop("dataflow.pipelines.streaming.transforms.common", None)
+            for name, original in original_modules.items():
+                if original is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = original
+
+        self.assertEqual(record["failed_element"]["user_id"], "user-1")
+        self.assertEqual(record["failed_element"]["payload"], "bad")
+        self.assertIn("RuntimeError: boom", record["error_message"])
+        self.assertIn("timestamp_utc", record)
+        self.assertIn("error_traceback", record)
 
     def test_streaming_runtime_smoke_covers_dataflow_import_dependencies(self):
         requirements = read("dataflow/pipelines/streaming/requirements.txt")

@@ -249,6 +249,14 @@ backend production readiness GitHub Action runs the repository-level smoke after
 installing `dataflow/pipelines/streaming/requirements.txt`, so missing runtime
 packages fail before deployment.
 
+### DLQ persistence contract
+
+Tagged streaming error branches are wired to `WriteToDLQFn`, which writes a
+structured JSON record under `--dlq_gcs_path`. The backend production-readiness
+suite includes a lightweight regression that exercises `WriteToDLQFn` directly
+and verifies failed elements, error messages, tracebacks, and UTC timestamps are
+persisted, so serialization regressions cannot silently drop DLQ records.
+
 ### Generate Test Profiles
 
 Generate test profile data:

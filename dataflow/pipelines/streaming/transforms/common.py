@@ -237,7 +237,7 @@ class WriteToDLQFn(beam.DoFn):
                 'failed_element': failed_element,
                 'error_message': serialized_error,
                 'error_traceback': trace,
-                'timestamp_utc': self.default(ts) # Use encoder for consistency
+                'timestamp_utc': ts.isoformat() + 'Z'
             }
 
             # Write the record to GCS using custom encoder
