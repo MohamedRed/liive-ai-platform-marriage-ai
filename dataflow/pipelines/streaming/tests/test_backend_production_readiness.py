@@ -106,6 +106,17 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("store_statement_embeddings_results.error | \"DLQ_StoreStatementEmbeddingsErrors\" >> dlq_sink(\"StoreStatementEmbeddingsErrors\")", source)
         self.assertNotIn("raise\n        finally:\n            self.batch = []", pinecone_source)
 
+    def test_firestore_match_writer_client_initialization_failures_are_tagged_not_raised(self):
+        firestore_source = read("dataflow/pipelines/streaming/transforms/firestore_io.py")
+
+        self.assertIn("UpdateFirestoreDoFn.ERROR_TAG", firestore_source)
+        self.assertIn("WriteMatchesToFirestore", firestore_source)
+        self.assertIn(".with_outputs(UpdateFirestoreDoFn.ERROR_TAG, main=UpdateFirestoreDoFn.OUTPUT_TAG)", firestore_source)
+        self.assertIn("Firestore client not initialized in UpdateFirestoreDoFn", firestore_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG", firestore_source)
+        self.assertNotIn("raise RuntimeError(\"Setup failed for UpdateFirestoreDoFn\")", firestore_source)
+        self.assertNotIn("Failed to initialize Firestore client in UpdateFirestoreDoFn setup: {str(e)}", firestore_source)
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod

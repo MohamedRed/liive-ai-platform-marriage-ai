@@ -29,14 +29,16 @@ class UpdateFirestoreDoFn(beam.DoFn):
         self.skipped_write_counter = Metrics.counter('UpdateFirestoreDoFn', 'stale_or_duplicate_match_writes_skipped')
         self.missing_user_id_counter = Metrics.counter('UpdateFirestoreDoFn', 'missing_user_id')
         self.db = None
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info(f"UpdateFirestoreDoFn setup complete for project {self.project_id}")
         except Exception as e:
-            self.logger.error(f"Failed to initialize Firestore client in UpdateFirestoreDoFn setup: {str(e)}", exc_info=True)
-            raise
+            self.setup_error_message = f"Firestore client initialization failed in UpdateFirestoreDoFn setup: {str(e)}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element):
         # Expecting element like {
@@ -50,9 +52,14 @@ class UpdateFirestoreDoFn(beam.DoFn):
         #   'minConfidenceWeightUsed': ...
         # }
         if not self.db:
-            self.logger.error("Firestore client not initialized in UpdateFirestoreDoFn. Skipping.")
+            error_message = self.setup_error_message or "Firestore client not initialized in UpdateFirestoreDoFn"
+            self.logger.error("%s. Skipping match write.", error_message)
             self.error_counter.inc()
-            raise RuntimeError("Setup failed for UpdateFirestoreDoFn")
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": error_message,
+                "element": element,
+            })
+            return
 
         if not isinstance(element, dict) or 'user_id' not in element or 'matches' not in element:
             self.logger.error(f"Invalid input element format for UpdateFirestoreDoFn (missing user_id or matches): {element}")
