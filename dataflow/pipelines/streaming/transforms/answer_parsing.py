@@ -46,7 +46,7 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
             self.setup_error_message = None
             self.logger.info("OpenAI client setup complete for answer parsing.")
         except Exception as e:
-            self.setup_error_message = f"Answer parsing OpenAI client setup failed: {e}"
+            self.setup_error_message = f"ParseAnswerStatementsDoFn setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
     def _parse_llm_response_for_statements(self, llm_response_content: str, question_text: str, original_answer: str) -> List[Dict[str, str]]:
@@ -94,7 +94,7 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
     def _get_statements_from_llm(self, question_text: str, answer_text: str) -> List[Dict[str, str]]:
         """Calls an LLM to segment the answer and classify facets for each segment."""
         if not self.client:
-            raise RuntimeError("OpenAI client for answer parsing is not initialized.")
+            raise RuntimeError("ParseAnswerStatementsDoFn setup failed")
 
         prompt = (
             f"Analyze the following answer provided by a user to the question: '{question_text}'\n"
@@ -156,7 +156,7 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
         }
         """
         if not self.client:
-            error_message = self.setup_error_message or "OpenAI client not initialized for answer parsing"
+            error_message = self.setup_error_message or "ParseAnswerStatementsDoFn setup failed"
             self.logger.error("%s. Skipping answer parsing.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
