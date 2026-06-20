@@ -84,6 +84,7 @@ google-cloud-pubsub>=2.28.0
 google-cloud-secret-manager>=2.16.0
 pinecone[grpc]>=5.4.2
 openai>=1.3.0
+sentence-transformers>=2.7.0
 ```
 
 ## Setup and Deployment
@@ -145,6 +146,22 @@ gcloud dataflow flex-template run "user-matching-batch-$(date +%Y%m%d-%H%M%S)" \
 ```
 
 ## Testing the Pipelines
+
+### Runtime import smoke
+
+Before building or deploying the streaming Flex Template, install the streaming
+requirements in the same Python environment that will build the template and run:
+
+```bash
+python3 dataflow/pipelines/streaming/scripts/runtime_smoke.py
+```
+
+This checks import-time dependencies such as `apache_beam`, Google Cloud SDK
+clients, Pinecone, OpenAI, `sentence_transformers`, and `PyPDF2` without
+initializing cloud clients or downloading model weights. The backend production
+readiness GitHub Action runs this after installing
+`dataflow/pipelines/streaming/requirements.txt` so missing runtime packages fail
+before deployment.
 
 ### Generate Test Profiles
 

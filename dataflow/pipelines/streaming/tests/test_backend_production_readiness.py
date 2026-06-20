@@ -55,6 +55,32 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn(".with_outputs(ScheduleDelayedMatching", source)
         self.assertNotIn(".with_outputs(HandleMatchActions", source)
 
+    def test_streaming_runtime_smoke_covers_dataflow_import_dependencies(self):
+        requirements = read("dataflow/pipelines/streaming/requirements.txt")
+        smoke_path = REPO_ROOT / "dataflow/pipelines/streaming/scripts/runtime_smoke.py"
+        self.assertTrue(smoke_path.exists(), "streaming runtime smoke script must exist")
+        smoke_source = smoke_path.read_text()
+        workflow = read(".github/workflows/backend-production-readiness.yml")
+        readme = read("dataflow/README.md")
+
+        self.assertIn("sentence-transformers", requirements)
+        self.assertIn("REQUIRED_RUNTIME_MODULES", smoke_source)
+        for module_name in (
+            "apache_beam",
+            "google.cloud.firestore",
+            "google.cloud.tasks_v2",
+            "google.cloud.storage",
+            "google.cloud.secretmanager",
+            "pinecone",
+            "openai",
+            "sentence_transformers",
+            "PyPDF2",
+        ):
+            self.assertIn(module_name, smoke_source)
+        self.assertIn("Run Dataflow streaming runtime smoke", workflow)
+        self.assertIn("python3 dataflow/pipelines/streaming/scripts/runtime_smoke.py", workflow)
+        self.assertIn("runtime_smoke.py", readme)
+
     def test_pinecone_store_transform_uses_existing_store_class(self):
         source = read("dataflow/pipelines/streaming/transforms/pinecone_ops.py")
 
