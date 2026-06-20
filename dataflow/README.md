@@ -151,8 +151,24 @@ python3 dataflow/pipelines/streaming/scripts/preflight_deploy.py \
 
 The preflight checks required commands, placeholder values, Secret Manager secret
 metadata (`OPENAI_API_KEY`, `PINECONE_API_KEY`), Pub/Sub topics, Cloud Tasks
-queues, the Dataflow worker service account, and the reranker instructions PDF in
-GCS. It does not read or print secret values.
+queues, the Dataflow worker service account, the worker's project-level IAM permissions,
+and the reranker instructions PDF in GCS. It does not read or print secret values.
+
+The IAM permissions check expects the configured Dataflow worker service account
+to have these project-level roles before the job launches:
+
+- `roles/dataflow.worker`
+- `roles/datastore.user`
+- `roles/pubsub.subscriber`
+- `roles/pubsub.publisher`
+- `roles/cloudtasks.enqueuer`
+- `roles/secretmanager.secretAccessor`
+- `roles/storage.objectAdmin`
+- `roles/artifactregistry.reader`
+
+If production uses narrower resource-level IAM bindings instead of project-level
+roles, verify those bindings separately and pass `--skip-iam-checks` to the
+preflight command.
 
 ### 4. Run the Pipelines
 

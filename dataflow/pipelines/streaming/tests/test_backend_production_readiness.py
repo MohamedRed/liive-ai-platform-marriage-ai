@@ -147,6 +147,29 @@ class BackendProductionReadinessTests(unittest.TestCase):
             self.assertIn(f"{var_name}=", example)
         self.assertIn("deploy_flex_templates.env.example", read("dataflow/README.md"))
 
+    def test_streaming_deploy_preflight_checks_worker_iam_permissions(self):
+        preflight_source = read("dataflow/pipelines/streaming/scripts/preflight_deploy.py")
+        readme = read("dataflow/README.md")
+
+        self.assertIn("REQUIRED_WORKER_PROJECT_ROLES", preflight_source)
+        for role_name in (
+            "roles/dataflow.worker",
+            "roles/datastore.user",
+            "roles/pubsub.subscriber",
+            "roles/pubsub.publisher",
+            "roles/cloudtasks.enqueuer",
+            "roles/secretmanager.secretAccessor",
+            "roles/storage.objectAdmin",
+            "roles/artifactregistry.reader",
+        ):
+            self.assertIn(role_name, preflight_source)
+            self.assertIn(role_name, readme)
+        self.assertIn("gcloud projects get-iam-policy", preflight_source)
+        self.assertIn("worker-iam", preflight_source)
+        self.assertIn("--skip-iam-checks", preflight_source)
+        self.assertIn("IAM permissions", readme)
+        self.assertIn("Dataflow worker service account", readme)
+
     def test_streaming_deploy_preflight_checks_required_runtime_resources(self):
         preflight_path = REPO_ROOT / "dataflow/pipelines/streaming/scripts/preflight_deploy.py"
         self.assertTrue(preflight_path.exists(), "streaming deploy preflight script must exist")

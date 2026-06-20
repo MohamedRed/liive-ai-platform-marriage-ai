@@ -18,6 +18,16 @@ from urllib.parse import urlparse
 
 REQUIRED_SECRET_NAMES: tuple[str, ...] = ("OPENAI_API_KEY", "PINECONE_API_KEY")
 REQUIRED_COMMANDS: tuple[str, ...] = ("gcloud", "gsutil")
+REQUIRED_WORKER_PROJECT_ROLES: tuple[str, ...] = (
+    "roles/dataflow.worker",
+    "roles/datastore.user",
+    "roles/pubsub.subscriber",
+    "roles/pubsub.publisher",
+    "roles/cloudtasks.enqueuer",
+    "roles/secretmanager.secretAccessor",
+    "roles/storage.objectAdmin",
+    "roles/artifactregistry.reader",
+)
 PLACEHOLDER_TOKENS: tuple[str, ...] = (
     "YOUR_",
     "your-",
@@ -57,6 +67,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--skip-cloud-checks",
         action="store_true",
         help="Only validate local command availability and placeholder/config shape.",
+    )
+    parser.add_argument(
+        "--skip-iam-checks",
+        action="store_true",
+        help=(
+            "Skip project-level Dataflow worker IAM role checks. Use only when "
+            "least-privilege/resource-level IAM is verified separately."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -106,6 +124,45 @@ def run_cloud_check(name: str, command: list[str], *, command_hint: str) -> Chec
     stderr = (completed.stderr or completed.stdout or "").strip().splitlines()
     detail = stderr[-1] if stderr else f"{command_hint} failed with exit {completed.returncode}"
     return CheckResult(name, False, detail)
+
+
+def worker_iam_checks(project: str, service_account_email: str) -> list[CheckResult]:
+    """Verify project-level roles expected by the streaming Dataflow worker.
+
+    This intentionally checks project IAM policy only. Deployments that grant
+    equivalent least-privilege resource-level roles can use --skip-iam-checks and
+    verify those bindings separately.
+    """
+    command = [
+        "gcloud",
+        "projects",
+        "get-iam-policy",
+        project,
+        "--flatten=bindings[].members",
+        f"--filter=bindings.members:serviceAccount:{service_account_email}",
+        "--format=value(bindings.role)",
+    ]
+    completed = subprocess.run(command, text=True, capture_output=True, check=False)
+    if completed.returncode != 0:
+        stderr = (completed.stderr or completed.stdout or "").strip().splitlines()
+        detail = stderr[-1] if stderr else "gcloud projects get-iam-policy failed"
+        return [CheckResult("worker-iam:policy", False, detail)]
+
+    granted_roles = {
+        line.strip()
+        for line in completed.stdout.splitlines()
+        if line.strip().startswith("roles/")
+    }
+    checks: list[CheckResult] = []
+    for role_name in REQUIRED_WORKER_PROJECT_ROLES:
+        checks.append(
+            CheckResult(
+                f"worker-iam:{role_name}",
+                role_name in granted_roles,
+                "granted" if role_name in granted_roles else "missing project-level binding",
+            )
+        )
+    return checks
 
 
 def local_config_checks(args: argparse.Namespace) -> list[CheckResult]:
@@ -224,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
     results = local_config_checks(args)
     if not args.skip_cloud_checks and all(result.ok for result in results):
         results.extend(cloud_resource_checks(args))
+        if not args.skip_iam_checks:
+            results.extend(worker_iam_checks(args.project, args.service_account_email))
 
     print_results(results)
     failures = [result for result in results if not result.ok]
