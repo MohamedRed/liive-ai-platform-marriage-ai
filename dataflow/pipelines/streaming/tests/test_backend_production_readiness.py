@@ -135,6 +135,33 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("raise\n\n    def process(self, element: Tuple[str, List[float], Dict[str, Any]]):", pinecone_source)
         self.assertNotIn("raise\n\n    def process(self, item: Tuple[str, List[float], Dict[str, Any]]):", pinecone_source)
 
+    def test_next_question_candidate_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        next_question_source = read("dataflow/pipelines/streaming/transforms/next_question.py")
+
+        for class_name in (
+            "Layer1CandidateDoFn",
+            "Layer2CandidateDoFn",
+            "Layer3CandidateDoFn",
+        ):
+            self.assertIn(f"class {class_name}", next_question_source)
+
+        self.assertGreaterEqual(next_question_source.count("OUTPUT_ERROR_TAG = 'errors'"), 3)
+        self.assertIn("setup_error_message", next_question_source)
+        self.assertIn("Layer1CandidateDoFn setup failed", next_question_source)
+        self.assertIn("Layer2CandidateDoFn setup failed", next_question_source)
+        self.assertIn("Layer3CandidateDoFn setup failed", next_question_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", next_question_source)
+        self.assertIn("layer1_errors | \"DLQ_Layer1Errors\" >> dlq_sink(\"Layer1Errors\")", streaming_source)
+        self.assertIn("layer2_errors | \"DLQ_Layer2Errors\" >> dlq_sink(\"Layer2Errors\")", streaming_source)
+        self.assertIn("layer3_errors | \"DLQ_Layer3Errors\" >> dlq_sink(\"Layer3Errors\")", streaming_source)
+        self.assertNotIn("Failed Layer1CandidateDoFn setup due to missing library: {e}", next_question_source)
+        self.assertNotIn("Failed Layer1CandidateDoFn setup: {e}", next_question_source)
+        self.assertNotIn("Failed Layer2CandidateDoFn setup: {e}", next_question_source)
+        self.assertNotIn("Failed Layer3CandidateDoFn setup due to missing aiplatform v1beta1 library: {e}", next_question_source)
+        self.assertNotIn("Failed Layer3CandidateDoFn setup: {e}", next_question_source)
+        self.assertNotIn("# Propagate exception to potentially fail the pipeline startup", next_question_source)
+
     def test_firestore_match_writer_client_initialization_failures_are_tagged_not_raised(self):
         firestore_source = read("dataflow/pipelines/streaming/transforms/firestore_io.py")
 

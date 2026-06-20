@@ -166,6 +166,7 @@ class Layer2CandidateDoFn(beam.DoFn):
         self.profiles_collection = profiles_collection # Used by helper
         self._layer2_templates = None
         self._db = None
+        self.setup_error_message = None
 
     def setup(self):
         logger.info("Setting up Layer2CandidateDoFn...")
@@ -175,18 +176,19 @@ class Layer2CandidateDoFn(beam.DoFn):
             self._layer2_templates = load_layer2_question_templates(self.project_id)
             if not self._layer2_templates:
                 raise RuntimeError("Layer 2 templates are empty or failed to load during setup.")
+            self.setup_error_message = None
             logger.info("Layer2CandidateDoFn setup complete.")
         except Exception as e:
-            logger.error(f"Failed Layer2CandidateDoFn setup: {e}", exc_info=True)
-            # Propagate exception to potentially fail the pipeline startup
-            raise
+            self.setup_error_message = f"Layer2CandidateDoFn setup failed: {e}"
+            logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Dict[str, Any]):
         # Expects element containing at least 'user_id'
         if not self._db or not self._layer2_templates:
-             logger.error("DoFn not setup correctly. Skipping element.")
+             error_message = self.setup_error_message or "Layer2CandidateDoFn setup failed"
+             logger.error("%s. Skipping element.", error_message)
              Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'DoFn setup failed', 'element': element})
+             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': error_message, 'element': element})
              return
 
         user_id = element.get('user_id')
@@ -253,6 +255,7 @@ class Layer3CandidateDoFn(beam.DoFn):
         self.db = None
         self.prediction_client = None
         self.model_endpoint = None
+        self.setup_error_message = None
 
     def setup(self):
         try:
@@ -266,13 +269,14 @@ class Layer3CandidateDoFn(beam.DoFn):
             self.model_endpoint = (
                 f"projects/{self.project_id}/locations/{self.location}/"f"publishers/google/models/{self.model_name}"
             )
+            self.setup_error_message = None
             self.logger.info(f"Layer3CandidateDoFn setup complete (Firestore, Vertex AI Endpoint: {self.model_endpoint})")
         except ImportError as e:
-            self.logger.error(f"Failed Layer3CandidateDoFn setup due to missing aiplatform v1beta1 library: {e}. Please install google-cloud-aiplatform[rapid_evaluation]>=1.49.0", exc_info=True)
-            raise
+            self.setup_error_message = f"Layer3CandidateDoFn setup failed: missing aiplatform v1beta1 library: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
         except Exception as e:
-            self.logger.error(f"Failed Layer3CandidateDoFn setup: {e}", exc_info=True)
-            raise
+            self.setup_error_message = f"Layer3CandidateDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _prepare_analysis_context(self,
                                   user_id: str,
@@ -488,9 +492,10 @@ class Layer3CandidateDoFn(beam.DoFn):
             return
 
         if not self.db or not self.prediction_client: # Also check prediction client
-             self.logger.error("Firestore or Vertex client not initialized in Layer3CandidateDoFn. Skipping.")
+             error_message = self.setup_error_message or "Layer3CandidateDoFn setup failed"
+             self.logger.error("%s. Skipping.", error_message)
              Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
-             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': 'Client not initialized', 'user_id': user_id})
+             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': error_message, 'user_id': user_id})
              return
 
         try:
@@ -997,6 +1002,7 @@ class Layer1CandidateDoFn(beam.DoFn):
         self.db = None # Firestore client
         self.prediction_client = None
         self.model_endpoint = None
+        self.setup_error_message = None
 
     def setup(self):
         # Setup PredictionServiceClient and Firestore client
@@ -1011,13 +1017,14 @@ class Layer1CandidateDoFn(beam.DoFn):
             self.model_endpoint = (
                 f"projects/{self.project_id}/locations/{self.location}/"f"publishers/google/models/{self.model_name}"
             )
+            self.setup_error_message = None
             self.logger.info(f"Layer1CandidateDoFn setup complete (Firestore, Vertex AI Endpoint: {self.model_endpoint})")
         except ImportError as e:
-            self.logger.error(f"Failed Layer1CandidateDoFn setup due to missing library: {e}", exc_info=True)
-            raise
+            self.setup_error_message = f"Layer1CandidateDoFn setup failed: missing library: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
         except Exception as e:
-            self.logger.error(f"Failed Layer1CandidateDoFn setup: {e}", exc_info=True)
-            raise
+            self.setup_error_message = f"Layer1CandidateDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _call_llm_for_clarification(self, user_id: str, qa_sequence: List[Dict]) -> List[Dict]:
         """
@@ -1148,8 +1155,10 @@ class Layer1CandidateDoFn(beam.DoFn):
 
         # --- Fetch the sequence using the helper --- #
         if not self.db:
-             self.logger.error("Layer 1: Firestore client not initialized. Cannot fetch sequence.")
+             error_message = self.setup_error_message or "Layer1CandidateDoFn setup failed"
+             self.logger.error("%s. Cannot fetch sequence.", error_message)
              Metrics.counter(self.__class__.__name__, MetricNames.ERRORS).inc()
+             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': error_message, 'user_id': user_id, 'tag': self.clarification_tag})
              yield beam.pvalue.TaggedOutput(self.OUTPUT_CANDIDATES_TAG, (user_id, []))
              return
 
