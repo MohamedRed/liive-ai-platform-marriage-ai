@@ -144,6 +144,24 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("FetchFullQAsDoFn: Failed to initialize Firestore client in setup: {str(e)}", common_source)
         self.assertNotIn("raise\n\n    def process(self, element: Tuple[str, Dict[str, Any]]):", common_source)
 
+    def test_profile_summary_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        summary_source = read("dataflow/pipelines/streaming/transforms/profile_summarization.py")
+
+        self.assertIn("GenerateProfileSummaryDoFn.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn("UpdateProfileSummaryInDedicatedCollectionDoFn.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn("setup_error_message", summary_source)
+        self.assertIn("GenerateProfileSummaryDoFn setup failed", summary_source)
+        self.assertIn("UpdateProfileSummaryInDedicatedCollectionDoFn setup failed", summary_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn(").with_outputs(GenerateProfileSummaryDoFn.OUTPUT_ERROR_TAG, main='main')", summary_source)
+        self.assertIn(").with_outputs(UpdateProfileSummaryInDedicatedCollectionDoFn.OUTPUT_ERROR_TAG, main='main')", summary_source)
+        self.assertIn("summary_results_tuple.generation_errors | \"DLQ_SummaryGenerationErrors\" >> dlq_sink(\"SummaryGenerationErrors\")", streaming_source)
+        self.assertIn("summary_results_tuple.storage_errors | \"DLQ_SummaryStorageErrors\" >> dlq_sink(\"SummaryStorageErrors\")", streaming_source)
+        self.assertNotIn("Failed GenerateProfileSummaryDoFn setup: {e}", summary_source)
+        self.assertNotIn("Failed UpdateProfileSummaryInDedicatedCollectionDoFn setup: {e}", summary_source)
+        self.assertNotIn("raise # Critical setup failure", summary_source)
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod

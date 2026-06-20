@@ -61,16 +61,18 @@ class GenerateProfileSummaryDoFn(beam.DoFn):
         self.success_counter = Metrics.counter('GenerateProfileSummaryDoFn', SUMMARY_GENERATION_SUCCESS)
         self.error_counter = Metrics.counter('GenerateProfileSummaryDoFn', SUMMARY_GENERATION_ERRORS)
         self.empty_profile_counter = Metrics.counter('GenerateProfileSummaryDoFn', EMPTY_PROFILE_FOR_SUMMARY)
+        self.setup_error_message = None
         
     def setup(self):
         self.logger.info(f"Setting up GenerateProfileSummaryDoFn. Initializing OpenAI client for model: {self.model_name}")
         try:
             api_key = access_secret(self.project_id, "OPENAI_API_KEY")
             self.openai_client = openai.OpenAI(api_key=api_key)
+            self.setup_error_message = None
             self.logger.info("GenerateProfileSummaryDoFn setup complete (OpenAI client).")
         except Exception as e:
-            self.logger.error(f"Failed GenerateProfileSummaryDoFn setup: {e}", exc_info=True)
-            raise # Critical setup failure
+            self.setup_error_message = f"GenerateProfileSummaryDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _prepare_qas_for_prompt(self, questions_answers: dict | list) -> str:
         text_parts = []
@@ -93,9 +95,10 @@ class GenerateProfileSummaryDoFn(beam.DoFn):
         # Input: (user_id, profile_data_dict)
         # profile_data_dict is expected to contain 'questions_answers'
         if not self.openai_client:
-            self.logger.error("GenerateProfileSummaryDoFn not properly initialized. Skipping.")
+            error_message = self.setup_error_message or "GenerateProfileSummaryDoFn not initialized"
+            self.logger.error("%s. Skipping summary generation.", error_message)
             self.error_counter.inc()
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "DoFn not initialized", "element": element})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
             return
 
         user_id, profile_data = element
@@ -172,22 +175,25 @@ class UpdateProfileSummaryInDedicatedCollectionDoFn(beam.DoFn):
         self.logger = logging.getLogger(__name__)
         self.success_counter = Metrics.counter('UpdateProfileSummaryInDedicatedCollectionDoFn', SUMMARY_STORE_SUCCESS)
         self.error_counter = Metrics.counter('UpdateProfileSummaryInDedicatedCollectionDoFn', SUMMARY_STORE_ERRORS)
+        self.setup_error_message = None
 
     def setup(self):
         self.logger.info(f"Setting up UpdateProfileSummaryInDedicatedCollectionDoFn for collection: {self.collection_name}")
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info("UpdateProfileSummaryInDedicatedCollectionDoFn setup complete (Firestore client).")
         except Exception as e:
-            self.logger.error(f"Failed UpdateProfileSummaryInDedicatedCollectionDoFn setup: {e}", exc_info=True)
-            raise # Critical setup failure
+            self.setup_error_message = f"UpdateProfileSummaryInDedicatedCollectionDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Tuple[str, str, str]):
         # Input: (user_id, summary_text, qas_version_hash)
         if not self.db:
-            self.logger.error("UpdateProfileSummaryInDedicatedCollectionDoFn not properly initialized. Skipping.")
+            error_message = self.setup_error_message or "UpdateProfileSummaryInDedicatedCollectionDoFn not initialized"
+            self.logger.error("%s. Skipping summary storage.", error_message)
             self.error_counter.inc()
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "DoFn not initialized", "element": element})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
             return
         
         user_id, summary_text, qas_version_hash = element
