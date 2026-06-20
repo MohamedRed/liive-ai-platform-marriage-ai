@@ -785,6 +785,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Setup failed for CalculateLyingScoreDoFn", reranking_source)
         self.assertNotIn("Setup failed for UpdateLyingScoreDoFn", reranking_source)
 
+    def test_cross_encoder_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        reranking_source = read("dataflow/pipelines/streaming/transforms/reranking.py")
+
+        self.assertIn("class CrossEncodeDoFn", reranking_source)
+        self.assertIn("CrossEncodeDoFn.OUTPUT_ERROR_TAG", reranking_source)
+        self.assertIn("CrossEncodeDoFn setup failed", reranking_source)
+        self.assertIn("error_message = self.setup_error_message or \"CrossEncodeDoFn setup failed\"", reranking_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", reranking_source)
+        self.assertIn(".with_outputs(CrossEncodeDoFn.OUTPUT_ERROR_TAG, main='main')", reranking_source)
+        self.assertIn("cross_encoded_candidates_results.error | \"DLQ_CrossEncodeErrors\" >> dlq_sink(\"CrossEncodeErrors\")", streaming_source)
+        self.assertNotIn("Failed CrossEncodeDoFn setup: {e}", reranking_source)
+        self.assertNotIn("raise # Critical setup failure", reranking_source)
+        self.assertNotIn("\"error_message\": \"DoFn not initialized\"", reranking_source)
+
     def test_answer_parsing_setup_and_llm_failures_are_tagged_not_silently_main(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         answer_parsing_source = read("dataflow/pipelines/streaming/transforms/answer_parsing.py")

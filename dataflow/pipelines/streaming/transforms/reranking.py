@@ -301,6 +301,7 @@ class CrossEncodeDoFn(beam.DoFn):
         self.logger = logging.getLogger(__name__)
         self.db = None
         self.cross_encoder_model = None
+        self.setup_error_message = None
         
         self.success_counter = Metrics.counter('CrossEncodeDoFn', CROSS_ENCODE_SUCCESS)
         self.error_counter = Metrics.counter('CrossEncodeDoFn', CROSS_ENCODE_ERRORS)
@@ -311,10 +312,11 @@ class CrossEncodeDoFn(beam.DoFn):
         try:
             self.db = firestore.Client(project=self.project_id)
             self.cross_encoder_model = CrossEncoder(self.model_name)
+            self.setup_error_message = None
             self.logger.info("CrossEncodeDoFn setup complete.")
         except Exception as e:
-            self.logger.error(f"Failed CrossEncodeDoFn setup: {e}", exc_info=True)
-            raise # Critical setup failure
+            self.setup_error_message = f"CrossEncodeDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _fetch_profile_text_for_cross_encoder(self, user_id: str) -> str | None:
         """Fetches profile text, prioritizing dedicated summary, then fallback to Q&A concatenation."""
@@ -395,10 +397,11 @@ class CrossEncodeDoFn(beam.DoFn):
         # Input: (triggering_user_id, list_of_top_candidate_dicts from scoreboard)
         # list_of_top_candidate_dicts: [{'matched_user_id': ..., 'aggregated_score': ...}, ...]
         if not self.db or not self.cross_encoder_model:
-            self.logger.error("CrossEncodeDoFn not properly initialized in process. Skipping.")
+            error_message = self.setup_error_message or "CrossEncodeDoFn setup failed"
+            self.logger.error("%s. Skipping.", error_message)
             self.error_counter.inc()
             # Yield to error tag because this element cannot be processed
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "DoFn not initialized", "element": element})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
             return
 
         triggering_user_id, candidates_list = element
