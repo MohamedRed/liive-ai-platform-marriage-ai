@@ -43,7 +43,7 @@ from .transforms.common import (
     FetchUserHistoryDoFn,
     FetchFullQAsForUser
 )
-from .transforms.profile_processing import ProcessAndValidateProfile, ExtractChangedQA
+from .transforms.profile_processing import ProcessAndValidateProfile
 from .transforms.embedding import GenerateEmbeddingsForStatements
 from .transforms.pinecone_ops import DeleteStaleQuestionVectors, QueryMatchesFromPinecone, StoreIndividualEmbeddingsInPinecone
 from .transforms.reranking import (
@@ -301,7 +301,7 @@ def run_streaming_pipeline(argv=None):
         # --- New Granular Embedding, Scoreboard, and Candidate Fetching Flow ---
         # 1. Parse Answer into Statements
         parsed_statements_results = (
-            parsed_event_data  # Use parsed_event_data directly. Input: {'user_id', 'question_id', 'question_text', 'answer_text', ...}
+            processed_profile_data  # verified profiles only; preserves user_id/question_id/question_text/answer_text
             | "ParseAnswerToStatements" >> ParseAnswerIntoStatements(
                   project_id=known_args.project
               )
@@ -371,7 +371,7 @@ def run_streaming_pipeline(argv=None):
         
         # 7. Prepare for Fetching Top Candidates: Get Distinct Triggering User IDs
         distinct_triggering_users = (
-            parsed_event_data 
+            processed_profile_data
             | "ExtractTriggeringUserIdForScoreboardFetch" >> beam.Map(lambda x: x['user_id'])
             | "DistinctTriggeringUsersForScoreboard" >> beam.Distinct()
         )

@@ -10,6 +10,7 @@ from typing import Dict, Any, Tuple, List
 # Import constants and metrics from common
 # from .common import MetricNames # Assuming MetricNames might be defined elsewhere if needed globally
 from ..utils import access_secret
+from .eligibility import build_match_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class GenerateStatementEmbeddingsDoFn(beam.DoFn): # Renamed class
             return
 
         parsed_statements = element.get('parsed_statements', [])
+        profile_match_metadata = build_match_metadata(element.get('profile_data'))
         # user_id_from_element = element.get('user_id') # The top-level user_id from the element
 
         if not parsed_statements:
@@ -103,6 +105,7 @@ class GenerateStatementEmbeddingsDoFn(beam.DoFn): # Renamed class
                     'statement_text': statement_text, # The actual text of the statement
                     'facet': facet, # The determined facet for THIS statement
                     'statement_index': stmt_index, # Useful for ordering/debugging
+                    **profile_match_metadata,
                     # 'is_critical': False, # Placeholder, or derive from original question properties if available
                     # 'section': original_question_data.get('section', 'default') # If section is tied to original question
                 }

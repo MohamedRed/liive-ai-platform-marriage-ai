@@ -10,6 +10,7 @@ from typing import Tuple, List, Dict, Any # Added for type hints
 from .common import MetricNames
 # Import utility functions
 from ..utils import access_secret
+from .eligibility import build_pinecone_hard_filter
 
 logger = logging.getLogger(__name__)
 
@@ -340,10 +341,7 @@ class QueryPinecone(beam.DoFn):
                 # Do not proceed to AA query if primary facet is invalid
                 return
 
-            pinecone_filter_ap_pa = {
-                'user_id': {'$ne': str(triggering_user_id)},
-                'facet': primary_target_facet
-            }
+            pinecone_filter_ap_pa = build_pinecone_hard_filter(triggering_metadata, primary_target_facet)
 
             self._wait_for_rate_limit() # Apply rate limiting before each query
             
@@ -380,10 +378,7 @@ class QueryPinecone(beam.DoFn):
             
             # --- Perform Attribute-Attribute (AA) Query if triggering facet is 'attribute' ---
             if triggering_statement_facet == 'attribute':
-                pinecone_filter_aa = {
-                    'user_id': {'$ne': str(triggering_user_id)},
-                    'facet': 'attribute'  # Target is also 'attribute'
-                }
+                pinecone_filter_aa = build_pinecone_hard_filter(triggering_metadata, 'attribute')
                 
                 aa_query_start_time = time.time()
                 self._wait_for_rate_limit() # Apply rate limiting

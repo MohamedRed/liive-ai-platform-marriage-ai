@@ -174,6 +174,67 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("with_outputs(ScheduleDelayedMatchingDoFn.ERROR_TAG", source)
         self.assertIn("with_outputs(HandleMatchActionsDoFn.ERROR_TAG", source)
 
+    def test_matching_branch_only_embeds_verified_processed_profiles(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        profile_processing_source = read("dataflow/pipelines/streaming/transforms/profile_processing.py")
+
+        self.assertIn("ParseAnswerToStatements", streaming_source)
+        self.assertIn("processed_profile_data  # verified profiles only", streaming_source)
+        self.assertNotIn("parsed_event_data  # Use parsed_event_data directly. Input: {'user_id', 'question_id', 'question_text', 'answer_text', ...}", streaming_source)
+        self.assertIn("'question_id': event_dict.get('question_id')", profile_processing_source)
+        self.assertIn("'answer_text': event_dict.get('answer_text')", profile_processing_source)
+        self.assertIn("'question_text': event_dict.get('question_text')", profile_processing_source)
+
+    def test_match_hard_filters_reject_ineligible_candidates_even_with_high_score(self):
+        eligibility = importlib.import_module("dataflow.pipelines.streaming.transforms.eligibility")
+
+        triggering_profile = {
+            "id": "u1",
+            "gender": "female",
+            "lookingFor": ["male"],
+            "age": 30,
+            "preferences": {"ageRange": {"min": 28, "max": 38}},
+            "blockedUserIds": [],
+            "userMetadata": {"acceptedTerms": True},
+        }
+        valid_candidate = {
+            "id": "u2",
+            "gender": "male",
+            "lookingFor": ["female"],
+            "age": 33,
+            "userMetadata": {"acceptedTerms": True},
+        }
+        wrong_gender_candidate = {**valid_candidate, "id": "u3", "gender": "female"}
+        blocked_candidate = {**valid_candidate, "id": "u4", "blockedUserIds": ["u1"]}
+        unverified_identity = {"status": "pending"}
+        verified = {"status": "verified"}
+
+        self.assertTrue(eligibility.is_candidate_hard_eligible(triggering_profile, valid_candidate, verified, verified))
+        self.assertFalse(eligibility.is_candidate_hard_eligible(triggering_profile, wrong_gender_candidate, verified, verified))
+        self.assertFalse(eligibility.is_candidate_hard_eligible(triggering_profile, blocked_candidate, verified, verified))
+        self.assertFalse(eligibility.is_candidate_hard_eligible(triggering_profile, valid_candidate, unverified_identity, verified))
+
+    def test_embedding_and_pinecone_query_carry_hard_filter_metadata(self):
+        embedding_source = read("dataflow/pipelines/streaming/transforms/embedding.py")
+        pinecone_source = read("dataflow/pipelines/streaming/transforms/pinecone_ops.py")
+        scoreboard_source = read("dataflow/pipelines/streaming/transforms/scoreboard.py")
+
+        self.assertIn("build_match_metadata", embedding_source)
+        self.assertIn("build_pinecone_hard_filter", pinecone_source)
+        self.assertIn("is_candidate_hard_eligible", scoreboard_source)
+        self.assertIn("candidate_identity_verification_coll", scoreboard_source)
+        self.assertIn("candidate_wali_verification_coll", scoreboard_source)
+
+    def test_firestore_indexes_include_matching_production_queries(self):
+        indexes = read("firestore.indexes.json")
+
+        self.assertIn('"collectionGroup": "QA_EDIT_LOGS"', indexes)
+        self.assertIn('"fieldPath": "userId"', indexes)
+        self.assertIn('"fieldPath": "questionId"', indexes)
+        self.assertIn('"fieldPath": "createdAt"', indexes)
+        self.assertIn('"collectionGroup": "MATCHING_EVENT_OUTBOX"', indexes)
+        self.assertIn('"fieldPath": "status"', indexes)
+
 
 if __name__ == "__main__":
     unittest.main()

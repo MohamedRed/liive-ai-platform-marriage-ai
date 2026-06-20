@@ -188,11 +188,16 @@ class ValidateProfileDoFn(beam.DoFn):
                 output_dict = {
                     'user_id': user_id,
                     'profile_data': profile, # Include the full fetched profile
-                    # Add trigger-specific fields needed downstream (e.g., for Layer 1)
-                    'qa_id': event_dict.get('qa_id'),
-                    'answer': event_dict.get('answer'),
+                    # Preserve the parsed-event contract used by answer parsing,
+                    # embedding, lying-score, and question-generation branches.
+                    'question_id': event_dict.get('question_id'),
+                    'answer_text': event_dict.get('answer_text'),
+                    'question_text': event_dict.get('question_text'),
                     'clarificationTag': event_dict.get('clarificationTag'),
-                    'question': event_dict.get('question') # Optional original question text
+                    # Backward-compatible aliases for older next-question code.
+                    'qa_id': event_dict.get('question_id'),
+                    'answer': event_dict.get('answer_text'),
+                    'question': event_dict.get('question_text')
                 }
                 yield output_dict # Pass merged dictionary downstream
             else:

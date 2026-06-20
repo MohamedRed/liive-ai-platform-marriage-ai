@@ -14,6 +14,8 @@ from .scoring import (
     calculate_weighted_match_score,
     stable_match_evidence_id,
 )
+from .eligibility import is_candidate_hard_eligible
+from ..common.definitions import COLLECTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +233,10 @@ class FetchTopCandidatesDoFn(beam.DoFn):
         self.success_counter = Metrics.counter('FetchTopCandidatesDoFn', FETCH_CANDIDATES_SUCCESS)
         self.error_counter = Metrics.counter('FetchTopCandidatesDoFn', FETCH_CANDIDATES_ERRORS)
         self.no_candidates_counter = Metrics.counter('FetchTopCandidatesDoFn', NO_CANDIDATES_FOUND)
+        self.filtered_out_counter = Metrics.counter('FetchTopCandidatesDoFn', 'hard_filter_rejections')
+        self.profiles_collection = COLLECTIONS['USERS']['USER_INFO']
+        self.candidate_identity_verification_coll = COLLECTIONS['MARRIAGE']['IDENTITY_VERIFICATIONS']
+        self.candidate_wali_verification_coll = COLLECTIONS['MARRIAGE']['USER_WALI_RELATION_VERIFICATIONS']
 
     def setup(self):
         try:
@@ -239,6 +245,27 @@ class FetchTopCandidatesDoFn(beam.DoFn):
         except Exception as e:
             self.logger.error(f"FetchTopCandidatesDoFn: Failed to initialize Firestore client in setup: {str(e)}", exc_info=True)
             raise RuntimeError(f"FetchTopCandidatesDoFn: Firestore client failed to initialize: {e}")
+
+    def _fetch_doc_data(self, collection_name: str, document_id: str) -> Dict[str, Any] | None:
+        if not self.db:
+            return None
+        doc = self.db.collection(collection_name).document(str(document_id)).get()
+        if not doc.exists:
+            return None
+        data = doc.to_dict() or {}
+        data.setdefault('id', str(document_id))
+        return data
+
+    def _candidate_passes_hard_filters(self, triggering_profile: Dict[str, Any], matched_user_id: str) -> bool:
+        candidate_profile = self._fetch_doc_data(self.profiles_collection, matched_user_id)
+        candidate_identity_verification = self._fetch_doc_data(self.candidate_identity_verification_coll, matched_user_id)
+        candidate_wali_verification = self._fetch_doc_data(self.candidate_wali_verification_coll, matched_user_id)
+        return is_candidate_hard_eligible(
+            triggering_profile=triggering_profile,
+            candidate_profile=candidate_profile,
+            candidate_identity_verification=candidate_identity_verification,
+            candidate_wali_verification=candidate_wali_verification,
+        )
 
     def process(self, triggering_user_id: str):
         """
@@ -256,6 +283,15 @@ class FetchTopCandidatesDoFn(beam.DoFn):
             return
 
         try:
+            triggering_profile = self._fetch_doc_data(self.profiles_collection, triggering_user_id)
+            if not triggering_profile:
+                self.logger.warning(
+                    f"FetchTopCandidatesDoFn: triggering profile {triggering_user_id} not found or unavailable; skipping candidates."
+                )
+                self.no_candidates_counter.inc()
+                yield (triggering_user_id, [])
+                return
+
             self.logger.info(f"Fetching top {self.top_n} candidates for user {triggering_user_id} from scoreboard: {self.collection_name}")
             candidate_scores_ref = self.db.collection(self.collection_name)\
                                           .document(triggering_user_id)\
@@ -268,6 +304,12 @@ class FetchTopCandidatesDoFn(beam.DoFn):
             for doc in top_candidate_docs:
                 if doc.exists:
                     data = doc.to_dict()
+                    if not self._candidate_passes_hard_filters(triggering_profile, doc.id):
+                        self.filtered_out_counter.inc()
+                        self.logger.info(
+                            f"Candidate {doc.id} for user {triggering_user_id} rejected by hard eligibility filters."
+                        )
+                        continue
                     top_candidates_list.append({
                         'matched_user_id': doc.id,
                         'aggregated_score': data.get('score'),
