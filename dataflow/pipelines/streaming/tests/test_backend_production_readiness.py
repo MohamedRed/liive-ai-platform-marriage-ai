@@ -81,6 +81,27 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("python3 dataflow/pipelines/streaming/scripts/runtime_smoke.py", workflow)
         self.assertIn("runtime_smoke.py", readme)
 
+    def test_streaming_flex_template_dockerfile_installs_and_smokes_runtime_explicitly(self):
+        dockerfile = read("dataflow/pipelines/streaming/Dockerfile")
+        readme = read("dataflow/README.md")
+
+        self.assertIn('ENV FLEX_TEMPLATE_PYTHON_REQUIREMENTS_FILE="${WORKDIR}/requirements.txt"', dockerfile)
+        self.assertIn("pip install --no-cache-dir -r ${WORKDIR}/requirements.txt", dockerfile)
+        self.assertLess(
+            dockerfile.index('ENV FLEX_TEMPLATE_PYTHON_REQUIREMENTS_FILE="${WORKDIR}/requirements.txt"'),
+            dockerfile.index("pip install --no-cache-dir -r ${WORKDIR}/requirements.txt"),
+        )
+        self.assertNotIn("-r $FLEX_TEMPLATE_PYTHON_REQUIREMENTS_FILE", dockerfile)
+        self.assertIn("COPY ./common ./common", dockerfile)
+        self.assertIn("COPY ./utils ./utils", dockerfile)
+        self.assertIn("COPY ./scripts ./scripts", dockerfile)
+        self.assertIn("python scripts/runtime_smoke.py", dockerfile)
+        self.assertIn("pip download --no-cache-dir --dest /tmp/dataflow-requirements-cache -r ${WORKDIR}/requirements.txt", dockerfile)
+        for line in dockerfile.splitlines():
+            if line.lstrip().startswith(("COPY ", "RUN ")):
+                self.assertNotIn(" #", line, f"Dockerfile instruction has inline shell-style comment: {line}")
+        self.assertIn("Dockerfile runs `python scripts/runtime_smoke.py`", readme)
+
     def test_pinecone_store_transform_uses_existing_store_class(self):
         source = read("dataflow/pipelines/streaming/transforms/pinecone_ops.py")
 

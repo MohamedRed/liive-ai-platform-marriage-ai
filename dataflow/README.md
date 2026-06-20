@@ -158,10 +158,11 @@ python3 dataflow/pipelines/streaming/scripts/runtime_smoke.py
 
 This checks import-time dependencies such as `apache_beam`, Google Cloud SDK
 clients, Pinecone, OpenAI, `sentence_transformers`, and `PyPDF2` without
-initializing cloud clients or downloading model weights. The backend production
-readiness GitHub Action runs this after installing
-`dataflow/pipelines/streaming/requirements.txt` so missing runtime packages fail
-before deployment.
+initializing cloud clients or downloading model weights. The streaming pipeline
+Dockerfile runs `python scripts/runtime_smoke.py` during image build, and the
+backend production readiness GitHub Action runs the repository-level smoke after
+installing `dataflow/pipelines/streaming/requirements.txt`, so missing runtime
+packages fail before deployment.
 
 ### Generate Test Profiles
 
