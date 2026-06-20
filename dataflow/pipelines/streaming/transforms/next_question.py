@@ -112,9 +112,9 @@ def load_layer2_question_templates(project_id: str) -> Dict[str, Dict[str, Any]]
         return templates
     except Exception as e:
         logger.error(f"Failed to load Layer 2 question templates: {e}", exc_info=True)
-        # Decide on error handling: raise, return empty, etc.
-        # Raising prevents pipeline progress if templates are essential.
-        raise RuntimeError("Could not load Layer 2 question templates") from e
+        # Surface setup-time template load failures with the owning DoFn name
+        # so DLQ rows identify the active candidate-generation boundary.
+        raise RuntimeError("Layer2CandidateDoFn setup failed") from e
 
 def get_user_profile_and_answers(db: firestore.Client, user_id: str, profiles_collection: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
     """Fetches user profile and their answered questions from the QAS collection.
@@ -175,11 +175,16 @@ class Layer2CandidateDoFn(beam.DoFn):
             # Load templates once per worker
             self._layer2_templates = load_layer2_question_templates(self.project_id)
             if not self._layer2_templates:
-                raise RuntimeError("Layer 2 templates are empty or failed to load during setup.")
+                raise RuntimeError("Layer2CandidateDoFn setup failed")
             self.setup_error_message = None
             logger.info("Layer2CandidateDoFn setup complete.")
         except Exception as e:
-            self.setup_error_message = f"Layer2CandidateDoFn setup failed: {e}"
+            error_message = str(e)
+            self.setup_error_message = (
+                error_message
+                if error_message.startswith("Layer2CandidateDoFn setup failed")
+                else f"Layer2CandidateDoFn setup failed: {e}"
+            )
             logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Dict[str, Any]):
