@@ -36,16 +36,18 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
         self.statements_extracted_counter = Metrics.counter('ParseAnswerStatementsDoFn', STATEMENTS_EXTRACTED_COUNT)
         self.llm_parse_failure_counter = Metrics.counter('ParseAnswerStatementsDoFn', LLM_RESPONSE_PARSE_FAILURES)
         self.empty_answer_counter = Metrics.counter('ParseAnswerStatementsDoFn', EMPTY_ANSWER_SKIPPED)
+        self.setup_error_message = None
 
     def setup(self):
         self.logger.info(f"Setting up OpenAI client for answer parsing using model {self.model_name}")
         try:
             api_key = access_secret(self.project_id, "OPENAI_API_KEY")
             self.client = openai.OpenAI(api_key=api_key)
+            self.setup_error_message = None
             self.logger.info("OpenAI client setup complete for answer parsing.")
         except Exception as e:
-            self.logger.error(f"Failed to setup OpenAI client for answer parsing: {e}", exc_info=True)
-            raise
+            self.setup_error_message = f"Answer parsing OpenAI client setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _parse_llm_response_for_statements(self, llm_response_content: str, question_text: str, original_answer: str) -> List[Dict[str, str]]:
         """Parses the LLM's JSON response to extract statement objects."""
@@ -122,13 +124,14 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
                 content = response.choices[0].message.content
                 return self._parse_llm_response_for_statements(content, question_text, answer_text)
             else:
-                self.logger.warning(f"LLM returned no valid choice for answer parsing. Q: '{question_text}'. Response: {response}")
+                error_message = f"LLM returned no valid choice for answer parsing. Q: '{question_text}'. Response: {response}"
+                self.logger.warning(error_message)
                 self.error_counter.inc()
-                return []
+                raise RuntimeError(error_message)
         except Exception as e:
             self.logger.error(f"LLM call failed for answer parsing. Q: '{question_text}', A: '{answer_text}': {str(e)}\nTraceback: {traceback.format_exc()}", exc_info=True)
             self.error_counter.inc()
-            return []
+            raise RuntimeError(f"LLM call failed for answer parsing: {str(e)}") from e
 
     def process(self, element: Dict[str, Any]):
         """
@@ -153,11 +156,11 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
         }
         """
         if not self.client:
-             self.logger.error("OpenAI client not initialized in process. Skipping answer parsing.")
-             self.error_counter.inc()
-             # This is a setup/critical error, yield to error tag
-             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": "OpenAI client not initialized", "element": element})
-             return
+            error_message = self.setup_error_message or "OpenAI client not initialized for answer parsing"
+            self.logger.error("%s. Skipping answer parsing.", error_message)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
+            return
 
         user_id = element.get('user_id')
         question_id = element.get('question_id')

@@ -625,6 +625,19 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("candidate_identity_verification_coll", scoreboard_source)
         self.assertIn("candidate_wali_verification_coll", scoreboard_source)
 
+    def test_answer_parsing_setup_and_llm_failures_are_tagged_not_silently_main(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        answer_parsing_source = read("dataflow/pipelines/streaming/transforms/answer_parsing.py")
+
+        self.assertIn("ParseAnswerStatementsDoFn.OUTPUT_ERROR_TAG", answer_parsing_source)
+        self.assertIn("setup_error_message", answer_parsing_source)
+        self.assertIn("Answer parsing OpenAI client setup failed", answer_parsing_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", answer_parsing_source)
+        self.assertIn("raise RuntimeError(f\"LLM call failed for answer parsing", answer_parsing_source)
+        self.assertIn("parsed_statements_results.error | \"DLQ_ParseStatementsErrors\" >> dlq_sink(\"ParseStatementsErrors\")", streaming_source)
+        self.assertNotIn("Failed to setup OpenAI client for answer parsing: {e}", answer_parsing_source)
+        self.assertNotIn("return []\n        except Exception as e:\n            self.logger.error(f\"LLM call failed for answer parsing", answer_parsing_source)
+
     def test_statement_embedding_errors_are_tagged_and_written_to_dlq(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         embedding_source = read("dataflow/pipelines/streaming/transforms/embedding.py")
