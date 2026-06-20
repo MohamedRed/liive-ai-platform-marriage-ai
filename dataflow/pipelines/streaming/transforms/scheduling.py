@@ -49,7 +49,7 @@ class ScheduleDelayedMatchingDoFn(beam.DoFn):
     def process(self, element):
         # Expecting element like {'user_id': ..., 'matches': [...], 'query_time': ...} from QueryPinecone
         if not self.tasks_client or not self.db:
-            error_message = self.setup_error_message or "Clients not initialized in ScheduleDelayedMatchingDoFn"
+            error_message = self.setup_error_message or "ScheduleDelayedMatchingDoFn setup failed"
             self.logger.error("%s. Skipping delayed matching schedule.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
@@ -291,7 +291,7 @@ class HandleMatchActionsDoFn(beam.DoFn):
     def process(self, element):
         # Expecting element like {'user_id': ..., 'matches': [...]} from RerankMatchesDoFn
         if not self.db or not self.tasks_client:
-            error_message = self.setup_error_message or "Clients not initialized in HandleMatchActionsDoFn"
+            error_message = self.setup_error_message or "HandleMatchActionsDoFn setup failed"
             self.logger.error("%s. Skipping match actions.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {

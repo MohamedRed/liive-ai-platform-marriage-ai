@@ -215,6 +215,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Firestore client not initialized in UpdateFirestoreDoFn", firestore_source)
 
     def test_cloud_tasks_side_effect_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
 
         self.assertIn("ScheduleDelayedMatchingDoFn.ERROR_TAG", scheduling_source)
@@ -222,11 +223,19 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn(".with_outputs(ScheduleDelayedMatchingDoFn.ERROR_TAG, main=ScheduleDelayedMatchingDoFn.OUTPUT_TAG)", scheduling_source)
         self.assertIn(".with_outputs(HandleMatchActionsDoFn.ERROR_TAG, main=HandleMatchActionsDoFn.OUTPUT_TAG)", scheduling_source)
         self.assertIn("setup_error_message", scheduling_source)
+        self.assertIn("ScheduleDelayedMatchingDoFn setup failed", scheduling_source)
+        self.assertIn("HandleMatchActionsDoFn setup failed", scheduling_source)
+        self.assertIn("error_message = self.setup_error_message or \"ScheduleDelayedMatchingDoFn setup failed\"", scheduling_source)
+        self.assertIn("error_message = self.setup_error_message or \"HandleMatchActionsDoFn setup failed\"", scheduling_source)
+        self.assertIn("schedule_errors | \"DLQ_ScheduleErrors\" >> dlq_sink(\"ScheduleErrors\")", streaming_source)
+        self.assertIn("action_errors | \"DLQ_ActionErrors\" >> dlq_sink(\"ActionErrors\")", streaming_source)
         self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG", scheduling_source)
         self.assertNotIn("raise RuntimeError(\"Setup failed for ScheduleDelayedMatchingDoFn\")", scheduling_source)
         self.assertNotIn("raise RuntimeError(\"Setup failed for HandleMatchActionsDoFn\")", scheduling_source)
         self.assertNotIn("Failed ScheduleDelayedMatchingDoFn setup: {e}", scheduling_source)
         self.assertNotIn("Failed HandleMatchActionsDoFn setup: {e}", scheduling_source)
+        self.assertNotIn("Clients not initialized in ScheduleDelayedMatchingDoFn", scheduling_source)
+        self.assertNotIn("Clients not initialized in HandleMatchActionsDoFn", scheduling_source)
 
     def test_fetch_user_history_setup_failures_are_tagged_not_generic(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
