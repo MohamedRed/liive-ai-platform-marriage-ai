@@ -144,11 +144,12 @@ gcloud dataflow flex-template run "streaming-job-$(date +%Y%m%d-%H%M%S)" \
     --parameters project="${PROJECT_ID}" \
     --parameters region="${REGION}" \
     --parameters runner="DataflowRunner" \
-    --parameters requirements_file="ignored-runtime" \
+    --parameters temp_location="${TEMP_LOCATION}" \
+    --parameters staging_location="${STAGING_LOCATION}" \
+    --parameters service_account_email="${DATAFLOW_WORKER_SA}" \
+    --parameters requirements_file="/template/requirements.txt" \
     --parameters user_profile_updated_pubsub_topic="${IMMEDIATE_PUBSUB_TOPIC}" \
     --parameters delayed_matching_pubsub_topic="${DELAYED_PUBSUB_TOPIC}" \
-    --parameters profiles_collection="${PROFILES_COLLECTION}" \
-    --parameters matches_collection="${MATCHES_COLLECTION}" \
     --parameters pinecone_index="${PINECONE_INDEX}" \
     --parameters pinecone_region="${PINECONE_REGION}" \
     --parameters top_k="${TOP_K}" \
@@ -161,9 +162,9 @@ gcloud dataflow flex-template run "streaming-job-$(date +%Y%m%d-%H%M%S)" \
     --parameters notification_function_url="${NOTIFICATION_FUNCTION_URL}" \
     --parameters voice_agent_function_url="${VOICE_AGENT_FUNCTION_URL}" \
     --parameters delayed_task_delay_seconds="${DELAYED_TASK_DELAY_SECONDS}" \
-    --parameters dlq_gcs_path="${DLQ_GCS_PATH}" \
-    --parameters service_account_email="${DATAFLOW_WORKER_SA}" # Pass SA email as pipeline option too
-    # Add other Dataflow options like --max-workers, --machine-type if needed
+    --parameters dlq_gcs_path="${DLQ_GCS_PATH}"
+
+# Add other Dataflow options like --max-workers, --machine-type if needed.
 
 echo "Streaming job started."
 

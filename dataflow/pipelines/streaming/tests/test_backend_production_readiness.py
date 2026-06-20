@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import json
 import unittest
 from pathlib import Path
 
@@ -101,6 +102,67 @@ class BackendProductionReadinessTests(unittest.TestCase):
             if line.lstrip().startswith(("COPY ", "RUN ")):
                 self.assertNotIn(" #", line, f"Dockerfile instruction has inline shell-style comment: {line}")
         self.assertIn("Dockerfile runs `python scripts/runtime_smoke.py`", readme)
+
+    def test_streaming_flex_template_metadata_matches_required_parser_args(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        tree = ast.parse(streaming_source)
+        required_args = set()
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_argument"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+                and node.args[0].value.startswith("--")
+            ):
+                continue
+            required = any(
+                keyword.arg == "required"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is True
+                for keyword in node.keywords
+            )
+            if required:
+                required_args.add(node.args[0].value.removeprefix("--"))
+
+        template_spec = json.loads(read("dataflow/pipelines/streaming/template_spec.json"))
+        template_parameter_names = {parameter["name"] for parameter in template_spec["parameters"]}
+        deploy_script = read("dataflow/pipelines/streaming/deploy_flex_templates.sh")
+
+        self.assertSetEqual(
+            required_args,
+            {
+                "project",
+                "region",
+                "runner",
+                "temp_location",
+                "staging_location",
+                "service_account_email",
+                "requirements_file",
+                "user_profile_updated_pubsub_topic",
+                "delayed_matching_pubsub_topic",
+                "pinecone_index",
+                "pinecone_region",
+                "pdf_bucket",
+                "notification_function_url",
+                "voice_agent_function_url",
+                "dlq_gcs_path",
+            },
+        )
+        self.assertTrue(
+            required_args.issubset(template_parameter_names),
+            f"template_spec.json missing required parser args: {sorted(required_args - template_parameter_names)}",
+        )
+        self.assertFalse(
+            {"pubsub_topic", "dlq_bucket", "profiles_collection", "matches_collection"} & template_parameter_names,
+            "template_spec.json must not advertise stale/non-parser parameter names",
+        )
+        for arg_name in required_args:
+            self.assertIn(f'--parameters {arg_name}="', deploy_script)
+        self.assertNotIn('--parameters profiles_collection="', deploy_script)
+        self.assertNotIn('--parameters matches_collection="', deploy_script)
 
     def test_pinecone_store_transform_uses_existing_store_class(self):
         source = read("dataflow/pipelines/streaming/transforms/pinecone_ops.py")

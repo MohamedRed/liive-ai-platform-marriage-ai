@@ -130,7 +130,25 @@ gcloud dataflow flex-template run "user-matching-streaming-$(date +%Y%m%d-%H%M%S
     --project="your-project-id" \
     --region="your-region" \
     --template-file-gcs-location="gs://your-bucket/templates/streaming-pipeline.json" \
-    --parameters="pinecone_region=us-west1-gcp,pinecone_index=user-embeddings,top_k=50"
+    --service-account-email="dataflow-worker@your-project-id.iam.gserviceaccount.com" \
+    --staging-location="gs://your-bucket/dataflow/streaming/staging" \
+    --temp-location="gs://your-bucket/dataflow/streaming/temp" \
+    --parameters project="your-project-id" \
+    --parameters region="your-region" \
+    --parameters runner="DataflowRunner" \
+    --parameters temp_location="gs://your-bucket/dataflow/streaming/temp" \
+    --parameters staging_location="gs://your-bucket/dataflow/streaming/staging" \
+    --parameters service_account_email="dataflow-worker@your-project-id.iam.gserviceaccount.com" \
+    --parameters requirements_file="/template/requirements.txt" \
+    --parameters user_profile_updated_pubsub_topic="projects/your-project-id/topics/user-profile-updated" \
+    --parameters delayed_matching_pubsub_topic="projects/your-project-id/topics/delayed-matching" \
+    --parameters pinecone_region="us-west1-gcp" \
+    --parameters pinecone_index="user-embeddings" \
+    --parameters pdf_bucket="your-instructions-bucket" \
+    --parameters notification_function_url="https://example.com/notify" \
+    --parameters voice_agent_function_url="https://example.com/voice" \
+    --parameters dlq_gcs_path="gs://your-bucket/dataflow/streaming/dlq/" \
+    --parameters top_k="50"
 ```
 
 #### Batch Pipeline

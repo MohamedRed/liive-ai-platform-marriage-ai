@@ -1,67 +1,157 @@
 {
   "name": "Streaming User Matching Pipeline",
-  "description": "A streaming pipeline that processes user profiles and finds matches",
+  "description": "Streaming pipeline that processes Marriage AI profile updates, scoring evidence, reranks candidates, and writes match results.",
   "parameters": [
     {
       "name": "project",
       "label": "Project ID",
-      "helpText": "Project ID for GCP resources",
+      "helpText": "GCP project ID for Dataflow and Google Cloud resources.",
       "regexes": ["^[a-z0-9-]+$"],
       "isOptional": false
     },
     {
-      "name": "pubsub_topic",
-      "label": "PubSub Topic",
-      "helpText": "PubSub topic for user profile updates",
+      "name": "region",
+      "label": "Dataflow Region",
+      "helpText": "GCP region for the Dataflow job.",
       "isOptional": false
     },
     {
-      "name": "pinecone_region",
-      "label": "Pinecone Region",
-      "helpText": "Region for Pinecone service",
-      "isOptional": false
-    },
-    {
-      "name": "pinecone_index",
-      "label": "Pinecone Index",
-      "helpText": "Name of the Pinecone index",
-      "isOptional": false
-    },
-    {
-      "name": "profiles_collection",
-      "label": "Profiles Collection",
-      "helpText": "Firestore collection for user profiles",
-      "isOptional": false
-    },
-    {
-      "name": "matches_collection",
-      "label": "Matches Collection",
-      "helpText": "Firestore collection for matches",
-      "isOptional": false
-    },
-    {
-      "name": "top_k",
-      "label": "Top K Matches",
-      "helpText": "Number of matches to return",
+      "name": "runner",
+      "label": "Beam Runner",
+      "helpText": "Beam runner to use, usually DataflowRunner for production.",
       "isOptional": false
     },
     {
       "name": "temp_location",
       "label": "Temp Location",
-      "helpText": "GCS path for temporary files",
+      "helpText": "GCS path for temporary Dataflow files, e.g. gs://bucket/dataflow/streaming/temp.",
       "isOptional": false
     },
     {
       "name": "staging_location",
       "label": "Staging Location",
-      "helpText": "GCS path for staging files",
+      "helpText": "GCS path for staged Dataflow files, e.g. gs://bucket/dataflow/streaming/staging.",
       "isOptional": false
     },
     {
-      "name": "dlq_bucket",
-      "label": "DLQ Bucket",
-      "helpText": "GCS bucket for dead letter queue",
+      "name": "service_account_email",
+      "label": "Worker Service Account",
+      "helpText": "Service account email used by Dataflow workers.",
       "isOptional": false
+    },
+    {
+      "name": "requirements_file",
+      "label": "Requirements File",
+      "helpText": "Path to requirements.txt inside the Flex Template image.",
+      "isOptional": false
+    },
+    {
+      "name": "user_profile_updated_pubsub_topic",
+      "label": "Immediate Profile Update Pub/Sub Topic",
+      "helpText": "Full Pub/Sub topic path for immediate QA/profile update events.",
+      "isOptional": false
+    },
+    {
+      "name": "delayed_matching_pubsub_topic",
+      "label": "Delayed Matching Pub/Sub Topic",
+      "helpText": "Full Pub/Sub topic path for delayed matching events.",
+      "isOptional": false
+    },
+    {
+      "name": "pinecone_index",
+      "label": "Pinecone Index",
+      "helpText": "Name of the Pinecone index containing profile statement embeddings.",
+      "isOptional": false
+    },
+    {
+      "name": "pinecone_region",
+      "label": "Pinecone Region",
+      "helpText": "Pinecone region/environment, e.g. us-west1-gcp.",
+      "isOptional": false
+    },
+    {
+      "name": "pdf_bucket",
+      "label": "Instructions PDF Bucket",
+      "helpText": "GCS bucket containing the AI instructions PDF used by reranking.",
+      "isOptional": false
+    },
+    {
+      "name": "notification_function_url",
+      "label": "Notification Function URL",
+      "helpText": "HTTPS URL for match notification Cloud Function/Cloud Run service.",
+      "isOptional": false
+    },
+    {
+      "name": "voice_agent_function_url",
+      "label": "Voice Agent Function URL",
+      "helpText": "HTTPS URL for voice-agent action Cloud Function/Cloud Run service.",
+      "isOptional": false
+    },
+    {
+      "name": "dlq_gcs_path",
+      "label": "DLQ GCS Path",
+      "helpText": "GCS path prefix for dead-letter records, e.g. gs://bucket/dataflow/streaming/dlq/.",
+      "isOptional": false
+    },
+    {
+      "name": "top_k",
+      "label": "Top K Vector Candidates",
+      "helpText": "Number of nearest-neighbor candidates queried from Pinecone per statement.",
+      "isOptional": true
+    },
+    {
+      "name": "rerank_top_n",
+      "label": "Rerank Top N",
+      "helpText": "Number of top scoreboard candidates to rerank with the AI reranker.",
+      "isOptional": true
+    },
+    {
+      "name": "pdf_instructions_path",
+      "label": "Instructions PDF Path",
+      "helpText": "Path inside the PDF bucket for AI reranking instructions.",
+      "isOptional": true
+    },
+    {
+      "name": "weight_preference_fulfillment",
+      "label": "Preference Fulfillment Weight",
+      "helpText": "Scoreboard weight for applicant/preference fulfillment evidence.",
+      "isOptional": true
+    },
+    {
+      "name": "weight_attribute_similarity",
+      "label": "Attribute Similarity Weight",
+      "helpText": "Scoreboard weight for attribute similarity evidence.",
+      "isOptional": true
+    },
+    {
+      "name": "tasks_location",
+      "label": "Cloud Tasks Location",
+      "helpText": "Region/location for Cloud Tasks queues.",
+      "isOptional": true
+    },
+    {
+      "name": "delayed_matching_queue",
+      "label": "Delayed Matching Queue",
+      "helpText": "Cloud Tasks queue name for delayed matching.",
+      "isOptional": true
+    },
+    {
+      "name": "notification_queue",
+      "label": "Notification Queue",
+      "helpText": "Cloud Tasks queue name for match notifications.",
+      "isOptional": true
+    },
+    {
+      "name": "voice_agent_queue",
+      "label": "Voice Agent Queue",
+      "helpText": "Cloud Tasks queue name for voice-agent calls.",
+      "isOptional": true
+    },
+    {
+      "name": "delayed_task_delay_seconds",
+      "label": "Delayed Task Delay Seconds",
+      "helpText": "Delay before scheduling delayed matching tasks.",
+      "isOptional": true
     }
   ],
   "defaultEnvironment": {
@@ -69,4 +159,4 @@
       "use_runner_v2"
     ]
   }
-} 
+}
