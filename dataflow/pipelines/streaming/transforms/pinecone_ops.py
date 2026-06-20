@@ -55,14 +55,14 @@ class DeleteStaleQuestionVectorsDoFn(beam.DoFn):
             self.setup_error_message = None
             self.logger.info(f"Successfully connected to Pinecone index '{index_name_formatted}' for stale-vector cleanup.")
         except Exception as e:
-            self.setup_error_message = f"Pinecone stale-vector cleanup setup failed: {e}"
+            self.setup_error_message = f"DeleteStaleQuestionVectorsDoFn setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Dict[str, Any]):
         if not self.index:
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                "error_message": self.setup_error_message or "Pinecone index not initialized in stale-vector cleanup",
+                "error_message": self.setup_error_message or "DeleteStaleQuestionVectorsDoFn setup failed",
                 "element": element,
             })
             return
@@ -154,14 +154,14 @@ class StoreIndividualEmbeddingsDoFn(beam.DoFn): # Renamed class
                  self.logger.info(f"Successfully connected to Pinecone index '{index_name_formatted}' for storing.")
 
         except Exception as e:
-            self.setup_error_message = f"Pinecone embedding store setup failed: {e}"
+            self.setup_error_message = f"StoreIndividualEmbeddingsDoFn setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, element: Tuple[str, List[float], Dict[str, Any]]): # Updated input type
         if not self.index:
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                "error_message": self.setup_error_message or "Pinecone index not initialized in embedding store",
+                "error_message": self.setup_error_message or "StoreIndividualEmbeddingsDoFn setup failed",
                 "element": element,
             })
             return
@@ -264,14 +264,15 @@ class QueryPinecone(beam.DoFn):
             self.setup_error_message = None
 
         except Exception as e:
-            self.setup_error_message = f"Pinecone query setup failed: {e}"
+            self.setup_error_message = f"QueryPinecone setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, item: Tuple[str, List[float], Dict[str, Any]]): # Updated item type
         if not self.index:
-            self.logger.error("Pinecone index not initialized. Skipping query.")
+            error_message = self.setup_error_message or "QueryPinecone setup failed"
+            self.logger.error("%s. Skipping query.", error_message)
             self.error_counter.inc()
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": self.setup_error_message or "Pinecone index not initialized in process", "element": item})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": self.setup_error_message or "QueryPinecone setup failed", "element": item})
             return
 
         triggering_vector_id, embedding_vector, triggering_metadata = item
