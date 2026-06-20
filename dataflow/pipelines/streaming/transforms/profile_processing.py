@@ -60,12 +60,12 @@ class FetchProfileDoFn(beam.DoFn):
                 self.setup_error_message = None
                 self.logger.info(f"FetchProfileDoFn: Firestore client initialized successfully for project {self.project_id}.")
             except Exception as e:
-                self.setup_error_message = f"FetchProfileDoFn Firestore client setup failed: {str(e)}"
+                self.setup_error_message = f"FetchProfileDoFn setup failed: {str(e)}"
                 self.logger.error(self.setup_error_message, exc_info=True)
 
     def process(self, event_dict: Dict[str, Any]): # Input is the event dictionary
         if not self.db and not self.is_test:
-            error_message = self.setup_error_message or "FetchProfileDoFn: Firestore client not initialized"
+            error_message = self.setup_error_message or "FetchProfileDoFn setup failed"
             self.logger.error("%s. Skipping profile fetch.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
@@ -160,7 +160,7 @@ class ValidateProfileDoFn(beam.DoFn):
                 self.setup_error_message = None
                 self.logger.info("ValidateProfileDoFn: Firestore client initialized.")
             except Exception as e:
-                self.setup_error_message = f"ValidateProfileDoFn Firestore client setup failed: {e}"
+                self.setup_error_message = f"ValidateProfileDoFn setup failed: {e}"
                 self.logger.error(self.setup_error_message, exc_info=True)
         # else: self.logger.info("ValidateProfileDoFn: Running in test mode, Firestore client not initialized.") # Optional log for test mode
 
@@ -217,7 +217,7 @@ class ValidateProfileDoFn(beam.DoFn):
         user_id = profile.get('id', event_dict.get('user_id', '[UNKNOWN_ID]')) # Get ID for logging
 
         if not self.db and not self.is_test:
-            error_message = self.setup_error_message or "ValidateProfileDoFn: Firestore client not initialized"
+            error_message = self.setup_error_message or "ValidateProfileDoFn setup failed"
             self.logger.error("%s. Skipping profile validation for %s.", error_message, user_id)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {

@@ -722,6 +722,27 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("processed_profile_data = processed_profile_results.main", streaming_source)
         self.assertNotIn("raise\n", profile_processing_source)
 
+    def test_profile_processing_setup_failures_are_tagged_not_generic(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        profile_processing_source = read("dataflow/pipelines/streaming/transforms/profile_processing.py")
+
+        for class_name in ("FetchProfileDoFn", "ValidateProfileDoFn"):
+            self.assertIn(f"class {class_name}", profile_processing_source)
+            self.assertIn(f"{class_name}.OUTPUT_ERROR_TAG", profile_processing_source)
+            self.assertIn(f"{class_name} setup failed", profile_processing_source)
+
+        self.assertIn("setup_error_message", profile_processing_source)
+        self.assertIn("error_message = self.setup_error_message or \"FetchProfileDoFn setup failed\"", profile_processing_source)
+        self.assertIn("error_message = self.setup_error_message or \"ValidateProfileDoFn setup failed\"", profile_processing_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", profile_processing_source)
+        self.assertIn(".with_outputs(FetchProfileDoFn.OUTPUT_ERROR_TAG, main='main')", profile_processing_source)
+        self.assertIn(".with_outputs(ValidateProfileDoFn.OUTPUT_ERROR_TAG, main='main')", profile_processing_source)
+        self.assertIn("processed_profile_results.error | \"DLQ_ProfileProcessingErrors\" >> dlq_sink(\"ProfileProcessingErrors\")", streaming_source)
+        self.assertNotIn("FetchProfileDoFn Firestore client setup failed", profile_processing_source)
+        self.assertNotIn("ValidateProfileDoFn Firestore client setup failed", profile_processing_source)
+        self.assertNotIn("FetchProfileDoFn: Firestore client not initialized", profile_processing_source)
+        self.assertNotIn("ValidateProfileDoFn: Firestore client not initialized", profile_processing_source)
+
     def test_match_hard_filters_reject_ineligible_candidates_even_with_high_score(self):
         eligibility = importlib.import_module("dataflow.pipelines.streaming.transforms.eligibility")
 
