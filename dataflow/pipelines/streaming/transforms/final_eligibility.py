@@ -38,14 +38,16 @@ class FinalMatchEligibilityGateDoFn(beam.DoFn):
         self.profiles_collection = COLLECTIONS["USERS"]["USER_INFO"]
         self.candidate_identity_verification_coll = COLLECTIONS["MARRIAGE"]["IDENTITY_VERIFICATIONS"]
         self.candidate_wali_verification_coll = COLLECTIONS["MARRIAGE"]["USER_WALI_RELATION_VERIFICATIONS"]
+        self.setup_error_message = None
 
     def setup(self):
         try:
             self.db = firestore.Client(project=self.project_id)
+            self.setup_error_message = None
             self.logger.info("FinalMatchEligibilityGateDoFn setup complete for project %s", self.project_id)
         except Exception as e:
-            self.logger.error("Failed FinalMatchEligibilityGateDoFn setup: %s", e, exc_info=True)
-            raise RuntimeError(f"FinalMatchEligibilityGateDoFn Firestore setup failed: {e}") from e
+            self.setup_error_message = f"FinalMatchEligibilityGateDoFn setup failed: {e}"
+            self.logger.error(self.setup_error_message, exc_info=True)
 
     def _fetch_doc_data(self, collection_name: str, document_id: str) -> Dict[str, Any] | None:
         if not self.db:
@@ -73,9 +75,11 @@ class FinalMatchEligibilityGateDoFn(beam.DoFn):
 
     def process(self, element: Dict[str, Any]):
         if not self.db:
+            error_message = self.setup_error_message or "FinalMatchEligibilityGateDoFn setup failed"
+            self.logger.error("%s. Skipping.", error_message)
             self.error_counter.inc()
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
-                "error_message": "Firestore client not initialized in final eligibility gate",
+                "error_message": error_message,
                 "element": element,
             })
             return

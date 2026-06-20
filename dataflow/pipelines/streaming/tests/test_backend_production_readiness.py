@@ -913,6 +913,22 @@ class BackendProductionReadinessTests(unittest.TestCase):
             streaming_source.index('| "FetchTopCandidatesFromScoreboard"'),
         )
 
+    def test_final_match_eligibility_setup_failures_are_tagged_not_raised(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        final_gate_source = read("dataflow/pipelines/streaming/transforms/final_eligibility.py")
+
+        self.assertIn("class FinalMatchEligibilityGateDoFn", final_gate_source)
+        self.assertIn("FinalMatchEligibilityGateDoFn.OUTPUT_ERROR_TAG", final_gate_source)
+        self.assertIn("setup_error_message", final_gate_source)
+        self.assertIn("FinalMatchEligibilityGateDoFn setup failed", final_gate_source)
+        self.assertIn("error_message = self.setup_error_message or \"FinalMatchEligibilityGateDoFn setup failed\"", final_gate_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", final_gate_source)
+        self.assertIn(".with_outputs(FinalMatchEligibilityGateDoFn.OUTPUT_ERROR_TAG, main=\"main\")", final_gate_source)
+        self.assertIn("final_match_eligibility_results.error | \"DLQ_FinalMatchEligibilityErrors\" >> dlq_sink(\"FinalMatchEligibilityErrors\")", streaming_source)
+        self.assertNotIn("Failed FinalMatchEligibilityGateDoFn setup", final_gate_source)
+        self.assertNotIn("raise RuntimeError(f\"FinalMatchEligibilityGateDoFn Firestore setup failed", final_gate_source)
+        self.assertNotIn("Firestore client not initialized in final eligibility gate", final_gate_source)
+
     def test_final_match_write_and_actions_are_authoritatively_eligibility_gated(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         final_gate_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/final_eligibility.py"
