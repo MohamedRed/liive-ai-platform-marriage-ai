@@ -65,6 +65,19 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("auth.PhoneAuthProvider", source)
         self.assertNotIn("const userCredential =", source)
 
+    def test_python_livekit_callable_requires_auth_and_only_reads_livekit_secrets(self):
+        source = read("functions-python/main.py")
+
+        self.assertIn("if req.auth is None:", source)
+        self.assertIn("https_fn.HttpsError", source)
+        self.assertIn("FunctionsErrorCode.UNAUTHENTICATED", source)
+        self.assertLess(source.index("if req.auth is None:"), source.index("uid = req.auth.uid"))
+        self.assertIn("LIVEKIT_API_KEY", source)
+        self.assertIn("LIVEKIT_API_SECRET", source)
+        self.assertIn("LIVEKIT_WEBSOCKET_URL", source)
+        self.assertNotIn("OPENAI_API_KEY", source)
+        self.assertNotIn("openai_api_key", source)
+
     def test_root_toast_hook_has_self_contained_build_types(self):
         source = read("src/hooks/use-toast.ts")
 
