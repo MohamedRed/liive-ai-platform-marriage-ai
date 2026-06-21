@@ -43,6 +43,17 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("@nanostores/react", package_json["dependencies"])
         self.assertFalse((REPO_ROOT / "package-lock.json").exists())
 
+    def test_root_typescript_config_targets_local_sources_only(self):
+        tsconfig = json.loads(read("tsconfig.json"))
+        paths = tsconfig["compilerOptions"].get("paths", {})
+        excludes = set(tsconfig.get("exclude", []))
+
+        self.assertEqual(paths.get("@livve-1/database-types"), ["./packages/database-types/src"])
+        self.assertEqual(paths.get("@liive-marriage-ai/database-types"), ["./packages/database-types/src"])
+        self.assertIn("src/**/*.test.ts", excludes)
+        self.assertIn("src/**/*.test.tsx", excludes)
+        self.assertIn("src/**/__tests__/**", excludes)
+
     def test_streaming_uses_ptransform_wrappers_and_imports_update_lying_score(self):
         source = read("dataflow/pipelines/streaming/streaming.py")
         tree = ast.parse(source)

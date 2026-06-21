@@ -19,14 +19,17 @@
     "allowSyntheticDefaultImports": true,
     "paths": {
       "src/*": ["./src/*"],
-      "@livve-1/database-types": ["../packages/database-types/src"],
-      "@liive-marriage-ai/database-types": ["../packages/database-types/src"]
+      "@livve-1/database-types": ["./packages/database-types/src"],
+      "@liive-marriage-ai/database-types": ["./packages/database-types/src"]
     }
   },
   "include": ["src"],
   "exclude": [
     "node_modules",
-    "vite.config.ts"
+    "vite.config.ts",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/__tests__/**"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
