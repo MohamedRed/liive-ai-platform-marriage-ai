@@ -33,6 +33,16 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertEqual(definitions.COLLECTIONS["MARRIAGE"]["QAS"], "QAS")
         self.assertEqual(definitions.COLLECTIONS["MARRIAGE"]["QA_EDIT_LOGS"], "QA_EDIT_LOGS")
 
+    def test_root_frontend_uses_local_database_types_package(self):
+        package_json = json.loads(read("package.json"))
+
+        self.assertEqual(
+            package_json["dependencies"].get("@livve-1/database-types"),
+            "file:./packages/database-types",
+        )
+        self.assertNotIn("@nanostores/react", package_json["dependencies"])
+        self.assertFalse((REPO_ROOT / "package-lock.json").exists())
+
     def test_streaming_uses_ptransform_wrappers_and_imports_update_lying_score(self):
         source = read("dataflow/pipelines/streaming/streaming.py")
         tree = ast.parse(source)
