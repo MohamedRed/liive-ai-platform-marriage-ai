@@ -39,6 +39,21 @@ type Props = {
   onVerificationSuccess: () => void;
 };
 
+declare global {
+  interface Window {
+    recaptchaVerifier?: RecaptchaVerifier;
+  }
+}
+
+function getAuthErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return undefined;
+  }
+
+  const { code } = error as { code?: unknown };
+  return typeof code === "string" ? code : undefined;
+}
+
 // ----------------------------------------------------------------------
 
 export function PhoneNumberVerification({
@@ -95,6 +110,10 @@ export function PhoneNumberVerification({
 
     try {
       const appVerifier = window.recaptchaVerifier;
+      if (!appVerifier) {
+        throw new Error("Recaptcha verifier is not ready. Please try again.");
+      }
+
       const _confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
       setConfirmationResult(_confirmationResult);
       setVerificationId(_confirmationResult.verificationId);
@@ -102,7 +121,7 @@ export function PhoneNumberVerification({
     } catch (error) {
       console.error("Error sending verification code:", error);
       setErrorMessage(() => {
-        switch (error?.code) {
+        switch (getAuthErrorCode(error)) {
           case "auth/too-many-requests":
             return "Too many attempts. Please try again later.";
           default:
@@ -127,18 +146,22 @@ export function PhoneNumberVerification({
       return;
     }
 
+    if (!confirmationResult) {
+      setErrorMessage("Verification code has not been sent.");
+      return;
+    }
+
     setErrorMessage(null);
     setSuccessMessage(null);
 
     try {
-      const userCredential = await confirmationResult?.confirm(data.code);
+      await confirmationResult.confirm(data.code);
       setSuccessMessage("Phone number verified successfully!");
-      console.log("Logged in user:", userCredential.user);
       onVerificationSuccess();
     } catch (error) {
       console.error("Error verifying code:", error);
       setErrorMessage(() => {
-        switch (error?.code) {
+        switch (getAuthErrorCode(error)) {
           case "auth/invalid-verification-code":
             return "The verification code is invalid. Please try again.";
           default:
@@ -148,7 +171,7 @@ export function PhoneNumberVerification({
     }
   };
 
-  const onSubmit = handleSubmit(async (data) => {
+  const onSubmit = handleSubmit(async (data: VerifySchemaType) => {
     await verifyCode(data);
   });
 
@@ -177,7 +200,7 @@ export function PhoneNumberVerification({
         disabled={Boolean(prefilledPhoneNumber)}
       />
 
-      <Field.Code name="code" label="Verification Code" placeholder="123456" />
+      <Field.Code name="code" />
 
       <LoadingButton
         fullWidth

@@ -73,6 +73,19 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("onOpenChange?: (open: boolean) => void", source)
         self.assertIn("onOpenChange: (open: boolean) =>", source)
 
+    def test_phone_number_verification_has_typed_window_and_error_guards(self):
+        source = read("src/sections/assistant/phone-number-verification.tsx")
+
+        self.assertIn("interface Window", source)
+        self.assertIn("recaptchaVerifier?: RecaptchaVerifier", source)
+        self.assertIn("function getAuthErrorCode(error: unknown): string | undefined", source)
+        self.assertIn("getAuthErrorCode(error)", source)
+        self.assertIn("if (!confirmationResult)", source)
+        self.assertNotIn("error?.code", source)
+        self.assertNotIn("console.log(\"Logged in user:\", userCredential.user)", source)
+        self.assertIn('<Field.Code name="code" />', source)
+        self.assertNotIn('<Field.Code name="code" label=', source)
+
     def test_streaming_uses_ptransform_wrappers_and_imports_update_lying_score(self):
         source = read("dataflow/pipelines/streaming/streaming.py")
         tree = ast.parse(source)
