@@ -357,15 +357,25 @@ class BackendProductionReadinessTests(unittest.TestCase):
         fake_io.filesystems = fake_filesystems
         setattr(fake_io, "ReadFromPubSub", types.SimpleNamespace(PubsubMessage=type("PubsubMessage", (), {})))
         fake_beam.io = fake_io
+        fake_google = types.ModuleType("google")
+        fake_google_cloud = types.ModuleType("google.cloud")
+        fake_google_protobuf = types.ModuleType("google.protobuf")
+        fake_timestamp_pb2 = types.ModuleType("google.protobuf.timestamp_pb2")
         fake_firestore = types.ModuleType("google.cloud.firestore")
         setattr(fake_firestore, "Client", object)
+        setattr(fake_google_cloud, "firestore", fake_firestore)
+        setattr(fake_timestamp_pb2, "Timestamp", type("Timestamp", (), {}))
 
         stubbed_modules = {
             "apache_beam": fake_beam,
             "apache_beam.metrics": fake_metrics,
             "apache_beam.io": fake_io,
             "apache_beam.io.filesystems": fake_filesystems,
+            "google": fake_google,
+            "google.cloud": fake_google_cloud,
             "google.cloud.firestore": fake_firestore,
+            "google.protobuf": fake_google_protobuf,
+            "google.protobuf.timestamp_pb2": fake_timestamp_pb2,
         }
         original_modules = {name: sys.modules.get(name) for name in stubbed_modules}
         sys.modules.update(stubbed_modules)
