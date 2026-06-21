@@ -459,11 +459,16 @@ class FetchTopCandidatesDoFn(beam.DoFn):
         try:
             triggering_profile = self._fetch_doc_data(self.profiles_collection, triggering_user_id)
             if not triggering_profile:
-                self.logger.warning(
-                    f"FetchTopCandidatesDoFn: triggering profile {triggering_user_id} not found or unavailable; skipping candidates."
+                self.logger.error(
+                    "FetchTopCandidatesDoFn: triggering profile %s unavailable; cannot apply authoritative hard filters.",
+                    triggering_user_id,
                 )
-                self.no_candidates_counter.inc()
-                yield (triggering_user_id, [])
+                self.error_counter.inc()
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                    "error_message": "Triggering profile unavailable for candidate fetch",
+                    "triggering_user_id": triggering_user_id,
+                    "operation": "fetch_triggering_profile",
+                })
                 return
 
             self.logger.info(f"Fetching top {self.top_n} candidates for user {triggering_user_id} from scoreboard: {self.collection_name}")

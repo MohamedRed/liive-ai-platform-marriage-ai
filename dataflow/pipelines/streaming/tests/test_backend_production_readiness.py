@@ -1126,6 +1126,16 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Firestore client not initialized in process", scoreboard_source)
         self.assertNotIn("Firestore client not initialized in scoreboard cleanup", scoreboard_source)
 
+    def test_scoreboard_candidate_fetch_dlqs_missing_triggering_profile(self):
+        scoreboard_source = read("dataflow/pipelines/streaming/transforms/scoreboard.py")
+
+        self.assertIn('"error_message": "Triggering profile unavailable for candidate fetch"', scoreboard_source)
+        self.assertIn('"triggering_user_id": triggering_user_id', scoreboard_source)
+        self.assertIn('"operation": "fetch_triggering_profile"', scoreboard_source)
+        self.assertIn('yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {', scoreboard_source)
+        self.assertNotIn("triggering profile {triggering_user_id} not found or unavailable; skipping candidates", scoreboard_source)
+        self.assertNotIn("yield (triggering_user_id, [])\n                return\n\n            self.logger.info(f\"Fetching top", scoreboard_source)
+
     def test_candidate_fetch_waits_for_successful_scoreboard_updates(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
 
