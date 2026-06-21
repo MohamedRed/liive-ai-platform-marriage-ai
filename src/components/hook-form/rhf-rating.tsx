@@ -30,7 +30,7 @@ export function RHFRating({ name, helperText, slotProps, ...other }: Props) {
         <Box sx={slotProps?.wrap}>
           <Rating
             {...field}
-            onChange={(event, newValue) => {
+            onChange={(_event, newValue) => {
               field.onChange(Number(newValue));
             }}
             {...other}

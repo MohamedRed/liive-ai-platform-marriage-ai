@@ -96,6 +96,15 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("onChange={(event, newValue)", country_source)
         self.assertNotIn("onChange={(event, newValue)", autocomplete_source)
 
+    def test_strict_ui_callbacks_mark_intentionally_unused_events(self):
+        rating_source = read("src/components/hook-form/rhf-rating.tsx")
+        table_source = read("src/components/table/use-table.ts")
+
+        self.assertIn("onChange={(_event, newValue)", rating_source)
+        self.assertIn("onChangePage = useCallback((_event: unknown, newPage: number)", table_source)
+        self.assertNotIn("onChange={(event, newValue)", rating_source)
+        self.assertNotIn("onChangePage = useCallback((event: unknown, newPage: number)", table_source)
+
     def test_streaming_uses_ptransform_wrappers_and_imports_update_lying_score(self):
         source = read("dataflow/pipelines/streaming/streaming.py")
         tree = ast.parse(source)
