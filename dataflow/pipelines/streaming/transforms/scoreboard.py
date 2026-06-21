@@ -11,6 +11,7 @@ from google.cloud.firestore import SERVER_TIMESTAMP
 from .scoring import (
     DEFAULT_WEIGHT_ATTRIBUTE_SIMILARITY,
     DEFAULT_WEIGHT_PREFERENCE_FULFILLMENT,
+    calculate_candidate_compatibility_score,
     calculate_weighted_match_score,
     stable_match_evidence_id,
 )
@@ -106,8 +107,11 @@ class DeleteStaleScoreboardEvidenceDoFn(beam.DoFn):
             if evidence_count == 0:
                 transaction.delete(candidate_doc_ref)
             else:
+                compatibility_score = calculate_candidate_compatibility_score(total_score, evidence_count)
                 transaction.set(candidate_doc_ref, {
-                    'score': float(total_score),
+                    'score': compatibility_score,
+                    'compatibility_score': compatibility_score,
+                    'total_evidence_score': float(total_score),
                     'evidence_count': evidence_count,
                     'last_updated': SERVER_TIMESTAMP,
                 }, merge=True)
@@ -288,8 +292,11 @@ class UpdateScoreboardDoFn(beam.DoFn):
                 'matched_original_question_id': element.get('matched_original_question_id'),
                 'last_seen': SERVER_TIMESTAMP,
             }
+            compatibility_score = calculate_candidate_compatibility_score(total_score, evidence_count)
             candidate_payload = {
-                'score': float(total_score),
+                'score': compatibility_score,
+                'compatibility_score': compatibility_score,
+                'total_evidence_score': float(total_score),
                 'evidence_count': evidence_count,
                 'last_updated': SERVER_TIMESTAMP,
                 'triggering_user_id': triggering_user_id,

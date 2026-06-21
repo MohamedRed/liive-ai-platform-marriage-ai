@@ -759,15 +759,19 @@ class BackendProductionReadinessTests(unittest.TestCase):
         )
         self.assertIn("if not isinstance(parsed_statements, list)", source)
 
-    def test_scoreboard_uses_idempotent_match_evidence_not_additive_increment(self):
+    def test_scoreboard_uses_idempotent_normalized_match_evidence_not_additive_increment(self):
         source = read("dataflow/pipelines/streaming/transforms/scoreboard.py")
 
         self.assertNotIn("Increment(", source)
         self.assertIn("stable_match_evidence_id", source)
         self.assertIn("collection('evidence')", source)
         self.assertIn("weighted_score", source)
+        self.assertIn("calculate_candidate_compatibility_score", source)
+        self.assertIn("'score': compatibility_score", source)
+        self.assertIn("'compatibility_score': compatibility_score", source)
+        self.assertIn("'total_evidence_score': float(total_score)", source)
 
-    def test_scoreboard_scoring_helpers_are_deterministic_and_weighted(self):
+    def test_scoreboard_scoring_helpers_are_deterministic_weighted_and_normalized(self):
         scoring = importlib.import_module("dataflow.pipelines.streaming.transforms.scoring")
         hit = {
             "triggering_user_id": "u1",
@@ -781,6 +785,10 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertEqual(scoring.calculate_weighted_match_score(0.8, "PA"), 0.8)
         self.assertEqual(scoring.calculate_weighted_match_score(0.8, "AA"), 0.32000000000000006)
         self.assertIsNone(scoring.calculate_weighted_match_score(0.8, "UNKNOWN"))
+        self.assertEqual(scoring.calculate_candidate_compatibility_score(1.8, 3), 0.6)
+        self.assertEqual(scoring.calculate_candidate_compatibility_score(5.0, 2), 1.0)
+        self.assertEqual(scoring.calculate_candidate_compatibility_score(-1.0, 2), 0.0)
+        self.assertIsNone(scoring.calculate_candidate_compatibility_score(1.0, 0))
         self.assertEqual(
             scoring.stable_match_evidence_id(hit),
             scoring.stable_match_evidence_id(dict(reversed(list(hit.items())))),

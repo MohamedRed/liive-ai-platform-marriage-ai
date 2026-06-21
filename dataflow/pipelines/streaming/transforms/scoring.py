@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from numbers import Real
-from typing import Mapping
+from typing import Any, Mapping
 
 
 DEFAULT_WEIGHT_PREFERENCE_FULFILLMENT = 1.0
@@ -69,6 +69,28 @@ def calculate_weighted_match_score(
     if match_type in {"AP", "PA"}:
         return normalized_score * float(weight_preference_fulfillment)
     return normalized_score * float(weight_attribute_similarity)
+
+
+def calculate_candidate_compatibility_score(total_evidence_score: Any, evidence_count: Any) -> float | None:
+    """Return a normalized candidate compatibility score from evidence.
+
+    The scoreboard can accumulate multiple statement-level evidence rows for the
+    same candidate. Ranking by the raw sum rewards users for having more matched
+    statements, not necessarily higher compatibility. The production scoreboard
+    keeps evidence_count for confidence/observability but ranks by the bounded
+    average compatibility contribution.
+    """
+    try:
+        parsed_evidence_count = int(evidence_count)
+    except (TypeError, ValueError):
+        return None
+    if parsed_evidence_count <= 0:
+        return None
+    try:
+        average_score = float(total_evidence_score) / parsed_evidence_count
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    return max(0.0, min(1.0, average_score))
 
 
 def stable_match_evidence_id(match_hit: Mapping[str, object]) -> str | None:
