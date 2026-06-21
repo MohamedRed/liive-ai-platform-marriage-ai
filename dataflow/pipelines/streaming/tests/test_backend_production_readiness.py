@@ -54,6 +54,17 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("src/**/*.test.tsx", excludes)
         self.assertIn("src/**/__tests__/**", excludes)
 
+    def test_firebase_phone_auth_helper_uses_modular_verifier_contract(self):
+        source = read("src/auth/context/firebase/action.ts")
+
+        self.assertIn("ApplicationVerifier", source)
+        self.assertIn("PhoneAuthProvider", source)
+        self.assertIn("appVerifier: ApplicationVerifier", source)
+        self.assertIn("_signInWithPhoneNumber(auth, phoneNumber, appVerifier)", source)
+        self.assertIn("PhoneAuthProvider.credential(verificationId, verificationCode)", source)
+        self.assertNotIn("auth.PhoneAuthProvider", source)
+        self.assertNotIn("const userCredential =", source)
+
     def test_streaming_uses_ptransform_wrappers_and_imports_update_lying_score(self):
         source = read("dataflow/pipelines/streaming/streaming.py")
         tree = ast.parse(source)

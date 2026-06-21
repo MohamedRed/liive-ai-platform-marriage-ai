@@ -1,6 +1,8 @@
 import {doc, setDoc, collection} from 'firebase/firestore';
 import {
   getAuth,
+  PhoneAuthProvider,
+  type ApplicationVerifier,
   signOut as _signOut,
   signInWithPopup as _signInWithPopup,
   GithubAuthProvider as _GithubAuthProvider,
@@ -36,7 +38,7 @@ export type ForgotPasswordParams = {
 
 export type PhoneSignInParams = {
   phoneNumber: string;
-  verificationCode?: string; // Optional for later verification
+  appVerifier: ApplicationVerifier;
 };
 
 /** **************************************
@@ -72,7 +74,10 @@ export const signInWithTwitter = async (): Promise<void> => {
   await _signInWithPopup(AUTH, provider);
 };
 
-export const signInWithPhoneNumber = async ({ phoneNumber }: PhoneSignInParams): Promise<string> => {
+export const signInWithPhoneNumber = async ({
+  phoneNumber,
+  appVerifier,
+}: PhoneSignInParams): Promise<string> => {
   const auth = getAuth();
 
   try {
@@ -91,8 +96,8 @@ export const verifyPhoneNumber = async (verificationId: string, verificationCode
   const auth = getAuth();
 
   try {
-    const credential = auth.PhoneAuthProvider.credential(verificationId, verificationCode);
-    const userCredential = await _signInWithCredential(auth, credential);
+    const credential = PhoneAuthProvider.credential(verificationId, verificationCode);
+    await _signInWithCredential(auth, credential);
   } catch (error) {
     console.error("Error during phone number verification:", error);
     throw error;
