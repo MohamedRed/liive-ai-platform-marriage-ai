@@ -17,7 +17,6 @@ export function RHFCountrySelect({
 
   return (
     <Controller
-      sx={{zIndex: 99999999999}}
       name={name}
       control={control}
       render={({ field, fieldState: { error } }) => (
@@ -25,7 +24,7 @@ export function RHFCountrySelect({
           sx={{zIndex: 99999999999}}
           id={`rhf-country-select-${name}`}
           value={field.value}
-          onChange={(event, newValue) => setValue(name, newValue, { shouldValidate: true })}
+          onChange={(_event, newValue) => setValue(name, newValue, { shouldValidate: true })}
           error={!!error}
           helperText={error?.message ?? helperText}
           {...other}

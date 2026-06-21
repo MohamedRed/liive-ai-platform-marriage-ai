@@ -86,6 +86,16 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn('<Field.Code name="code" />', source)
         self.assertNotIn('<Field.Code name="code" label=', source)
 
+    def test_hook_form_autocomplete_wrappers_avoid_controller_props_and_unused_events(self):
+        country_source = read("src/components/hook-form/rhf-country-select.tsx")
+        autocomplete_source = read("src/components/hook-form/rhf-autocomplete.tsx")
+
+        self.assertNotIn("<Controller\n      sx=", country_source)
+        self.assertIn("onChange={(_event, newValue)", country_source)
+        self.assertIn("onChange={(_event, newValue)", autocomplete_source)
+        self.assertNotIn("onChange={(event, newValue)", country_source)
+        self.assertNotIn("onChange={(event, newValue)", autocomplete_source)
+
     def test_streaming_uses_ptransform_wrappers_and_imports_update_lying_score(self):
         source = read("dataflow/pipelines/streaming/streaming.py")
         tree = ast.parse(source)
