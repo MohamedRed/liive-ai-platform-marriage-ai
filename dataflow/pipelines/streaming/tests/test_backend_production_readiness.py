@@ -65,6 +65,14 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("auth.PhoneAuthProvider", source)
         self.assertNotIn("const userCredential =", source)
 
+    def test_root_toast_hook_has_self_contained_build_types(self):
+        source = read("src/hooks/use-toast.ts")
+
+        self.assertNotIn("src/components/ui/toast", source)
+        self.assertIn("type ToastActionElement = React.ReactElement", source)
+        self.assertIn("onOpenChange?: (open: boolean) => void", source)
+        self.assertIn("onOpenChange: (open: boolean) =>", source)
+
     def test_streaming_uses_ptransform_wrappers_and_imports_update_lying_score(self):
         source = read("dataflow/pipelines/streaming/streaming.py")
         tree = ast.parse(source)
