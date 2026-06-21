@@ -834,6 +834,17 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("match /MATCHING_EVENT_OUTBOX/{document=**}", rules)
         self.assertIn("allow read, write: if false", rules)
 
+    def test_matching_event_republisher_bounds_poison_retries_and_drains_oldest_first(self):
+        matching_events_source = read("functions-nodejs/src/domains/marriage/matching-events.ts")
+
+        self.assertIn("MAX_REPUBLISH_ATTEMPTS", matching_events_source)
+        self.assertIn("status: \"dead_letter\"", matching_events_source)
+        self.assertIn("markMatchingEventDeadLetter", matching_events_source)
+        self.assertIn("data.attempts >= MAX_REPUBLISH_ATTEMPTS", matching_events_source)
+        self.assertIn('.orderBy("createdAt", "asc")', matching_events_source)
+        self.assertIn('return "dead_letter"', matching_events_source)
+        self.assertIn("deadLettered", matching_events_source)
+
     def test_delayed_matching_uses_authenticated_http_task_to_publish_pubsub(self):
         source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
 

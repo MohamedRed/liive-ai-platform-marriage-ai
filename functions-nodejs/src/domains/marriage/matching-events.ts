@@ -8,6 +8,7 @@ import { QuestionLayer } from "@livve-1/database-types";
 export const MATCHING_TOPIC_ENV = "USER_PROFILE_UPDATED_PUBSUB_TOPIC";
 export const MATCHING_EVENT_OUTBOX_COLLECTION = "MATCHING_EVENT_OUTBOX";
 const MAX_REPUBLISH_BATCH_SIZE = 25;
+const MAX_REPUBLISH_ATTEMPTS = 5;
 
 const pubSub = new PubSub();
 
@@ -109,12 +110,30 @@ export async function markMatchingEventPublishFailed(
   }, { merge: true });
 }
 
+export async function markMatchingEventDeadLetter(
+  db: firestore.Firestore,
+  matchingEventId: string,
+  error: unknown,
+): Promise<void> {
+  await db.collection(MATCHING_EVENT_OUTBOX_COLLECTION).doc(matchingEventId).set({
+    status: "dead_letter",
+    lastError: error instanceof Error ? error.message : String(error),
+    deadLetteredAt: firestore.FieldValue.serverTimestamp(),
+    updatedAt: firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
 export async function publishQueuedMatchingEvent(
   db: firestore.Firestore,
   doc: firestore.QueryDocumentSnapshot,
-): Promise<"published" | "failed"> {
+): Promise<"published" | "failed" | "dead_letter"> {
   const data = doc.data();
   const payload = data.payload as MatchingEventPayload | undefined;
+
+  if (data.attempts >= MAX_REPUBLISH_ATTEMPTS) {
+    await markMatchingEventDeadLetter(db, doc.id, "Maximum matching outbox publish attempts exceeded");
+    return "dead_letter";
+  }
 
   if (!payload || payload.event_type !== "qa_answer_updated" || !payload.triggering_qa?.qa_id) {
     await markMatchingEventPublishFailed(db, doc.id, "Invalid matching outbox payload");
@@ -137,16 +156,20 @@ export async function republishPendingMatchingEventsHandler(): Promise<void> {
   const snapshot = await db
     .collection(MATCHING_EVENT_OUTBOX_COLLECTION)
     .where("status", "in", ["pending", "publish_failed"])
+    .orderBy("createdAt", "asc")
     .limit(MAX_REPUBLISH_BATCH_SIZE)
     .get();
 
   let published = 0;
   let failed = 0;
+  let deadLettered = 0;
 
   for (const doc of snapshot.docs) {
     const result = await publishQueuedMatchingEvent(db, doc);
     if (result === "published") {
       published += 1;
+    } else if (result === "dead_letter") {
+      deadLettered += 1;
     } else {
       failed += 1;
     }
@@ -156,5 +179,6 @@ export async function republishPendingMatchingEventsHandler(): Promise<void> {
     scanned: snapshot.size,
     published,
     failed,
+    deadLettered,
   });
 }
