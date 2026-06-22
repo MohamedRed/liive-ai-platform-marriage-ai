@@ -85,6 +85,8 @@ export interface MarriageSafetyReportReviewWriteInput {
 export interface MarriageSafetyReportReviewWrite {
   reportUpdate: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
+  targetUserId?: string;
+  targetUserUpdate?: Record<string, unknown>;
 }
 
 function trimOptionalString(value: unknown): string | undefined {
@@ -294,9 +296,21 @@ export function buildMarriageSafetyReportReviewWrite(
     reviewedAt: input.timestamp,
     updatedAt: input.timestamp,
   };
+  const targetUserUpdate = payload.resolution === "profile_suspended" && targetUserId ? {
+    status: "suspended",
+    accountStatus: "suspended",
+    safety: {
+      moderationStatus: "suspended",
+      suspendedBy: moderatorUserId,
+      suspensionReportId: payload.reportId,
+      suspendedAt: input.timestamp,
+    },
+    updatedAt: input.timestamp,
+  } : undefined;
 
   return {
     reportUpdate,
+    ...(targetUserId && targetUserUpdate ? { targetUserId, targetUserUpdate } : {}),
     auditEvent: {
       type: "marriage_report_reviewed",
       moderatorUserId,

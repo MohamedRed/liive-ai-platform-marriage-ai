@@ -210,5 +210,44 @@ describe("marriage safety block/report APIs", () => {
       createdAt: timestamp,
     });
     expect(write.auditEvent).not.toHaveProperty("moderatorNote");
+    expect(write.targetUserUpdate).toBeUndefined();
+  });
+
+  it("builds a target-user suspension update for profile-suspension resolutions", () => {
+    const write = buildMarriageSafetyReportReviewWrite({
+      moderatorUserId: " moderator-1 ",
+      payload: {
+        reportId: "report-1",
+        status: "resolved",
+        resolution: "profile_suspended",
+        moderatorNote: "Sensitive moderation note",
+        idempotencyKey: "review-1",
+      },
+      existingReport: {
+        reporterUserId: "actor-user",
+        targetUserId: "target-user",
+        category: "safety_concern",
+      },
+      timestamp,
+    });
+
+    expect(write.targetUserId).toBe("target-user");
+    expect(write.targetUserUpdate).toMatchObject({
+      status: "suspended",
+      accountStatus: "suspended",
+      updatedAt: timestamp,
+      safety: {
+        moderationStatus: "suspended",
+        suspendedBy: "moderator-1",
+        suspensionReportId: "report-1",
+        suspendedAt: timestamp,
+      },
+    });
+    expect(write.auditEvent).toMatchObject({
+      type: "marriage_report_reviewed",
+      resolution: "profile_suspended",
+      targetUserId: "target-user",
+    });
+    expect(write.auditEvent).not.toHaveProperty("moderatorNote");
   });
 });

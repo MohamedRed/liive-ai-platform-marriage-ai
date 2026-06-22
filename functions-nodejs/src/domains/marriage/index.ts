@@ -382,6 +382,10 @@ export const reviewMarriageReport = onCall(async (request) => {
       const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
 
       transaction.set(reportRef, reportReviewWrite.reportUpdate, { merge: true });
+      if (reportReviewWrite.targetUserId && reportReviewWrite.targetUserUpdate) {
+        const targetUserRef = db.collection(LEGACY_COLLECTIONS.USER_INFO).doc(reportReviewWrite.targetUserId);
+        transaction.set(targetUserRef, reportReviewWrite.targetUserUpdate, { merge: true });
+      }
       transaction.set(auditRef, reportReviewWrite.auditEvent);
 
       return {
