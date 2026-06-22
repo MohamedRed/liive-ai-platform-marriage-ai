@@ -1209,6 +1209,25 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn('filtered_element = {**element, "matches": []}', final_gate_source)
         self.assertNotIn("yield filtered_element\n                return", final_gate_source)
 
+    def test_final_selection_input_flatten_errors_are_tagged_not_inline_unchecked(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        flatten_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/final_selection_input.py"
+        self.assertTrue(flatten_path.exists(), "final selection input flatten transform must exist")
+        flatten_source = flatten_path.read_text()
+
+        self.assertIn("class FlattenFinalSelectionInputDoFn", flatten_source)
+        self.assertIn("FlattenFinalSelectionInputDoFn.OUTPUT_ERROR_TAG", flatten_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", flatten_source)
+        self.assertIn('"operation": "flatten_final_selection_input"', flatten_source)
+        self.assertIn('"Invalid final selection grouped data"', flatten_source)
+        self.assertIn('"Invalid candidates/history grouped payload"', flatten_source)
+        self.assertIn('"user_id": user_id', flatten_source)
+        self.assertIn('"element": element', flatten_source)
+        self.assertIn("FlattenFinalSelectionInput", flatten_source)
+        self.assertIn("flattened_input_results.error | \"DLQ_FlattenFinalSelectionInputErrors\" >> dlq_sink(\"FlattenFinalSelectionInputErrors\")", streaming_source)
+        self.assertIn("flattened_input_for_final_selection = flattened_input_results.main", streaming_source)
+        self.assertNotIn("class FlattenFinalSelectionInputDoFn(beam.DoFn):", streaming_source)
+
     def test_match_percentage_calculation_errors_are_tagged_not_logged_only(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         percentage_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/match_percentage.py"

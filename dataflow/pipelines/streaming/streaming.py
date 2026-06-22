@@ -79,6 +79,7 @@ from .transforms.profile_summarization import GenerateAndStoreProfileSummary
 from .transforms.answer_parsing import ParseAnswerIntoStatements
 from .transforms.match_percentage import CalculateAdjustedTopMatchPercentage
 from .transforms.llm_rerank_input import PrepareForLLMRerank
+from .transforms.final_selection_input import FlattenFinalSelectionInput
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -647,53 +648,20 @@ def run_streaming_pipeline(argv=None):
         )
         all_inputs_for_final_selection | "DebugLogCombinedForFinalSelect" >> DebugLogDoFn("CombinedForAllInputsFinalSelect")
 
-        # --- Prepare for Final Next Question Selection: Flatten CoGroupByKey output --- #
-        class FlattenFinalSelectionInputDoFn(beam.DoFn):
-            # Define tags as class attributes to ensure they are consistent with SelectBestQuestionDoFn
-            # These should match the tags used in the initial CoGroupByKey for candidates/history
-            # and the reranking results tag.
-            L1_TAG = Layer1CandidateDoFn.OUTPUT_CANDIDATES_TAG
-            L2_TAG = Layer2CandidateDoFn.__name__ # Or whatever was used as key
-            L3_TAG = Layer3CandidateDoFn.OUTPUT_CANDIDATES_TAG
-            L4_TAG = Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG # Assuming it was Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG
-            HISTORY_TAG = FetchUserHistoryDoFn.HISTORY_TAG 
-            RERANK_TAG = RERANKING_RESULTS_TAG # Defined as 'reranking_results'
-
-            CANDIDATES_HISTORY_GROUP_KEY = 'candidates_and_history_grouped'
-
-            def process(self, element):
-                user_id, grouped_data = element
-                
-                flat_data = {}
-                
-                # Extract from the nested 'candidates_and_history_grouped'
-                candidates_history_list = grouped_data.get(self.CANDIDATES_HISTORY_GROUP_KEY, [])
-                if candidates_history_list:
-                    # candidates_history_list[0] is the dict from the first CoGroupByKey
-                    # e.g., {L1_TAG: [...], L2_TAG: [...], HISTORY_TAG: [...]}
-                    nested_dict = candidates_history_list[0]
-                    flat_data[self.L1_TAG] = nested_dict.get(self.L1_TAG, [])
-                    flat_data[self.L2_TAG] = nested_dict.get(self.L2_TAG, [])
-                    flat_data[self.L3_TAG] = nested_dict.get(self.L3_TAG, [])
-                    flat_data[self.L4_TAG] = nested_dict.get(self.L4_TAG, [])
-                    flat_data[self.HISTORY_TAG] = nested_dict.get(self.HISTORY_TAG, [])
-                else:
-                    # Ensure keys exist even if empty, as SelectBestQuestionDoFn might expect them
-                    flat_data[self.L1_TAG] = []
-                    flat_data[self.L2_TAG] = []
-                    flat_data[self.L3_TAG] = []
-                    flat_data[self.L4_TAG] = []
-                    flat_data[self.HISTORY_TAG] = []
-
-                # Add the reranking results (which is already a list from CoGroupByKey)
-                flat_data[self.RERANK_TAG] = grouped_data.get(self.RERANK_TAG, [])
-                
-                yield (user_id, flat_data)
-
-        flattened_input_for_final_selection = (
+        flattened_input_results = (
             all_inputs_for_final_selection
-            | "FlattenFinalSelectionInput" >> beam.ParDo(FlattenFinalSelectionInputDoFn())
+            | "FlattenFinalSelectionInput" >> FlattenFinalSelectionInput(
+                layer1_tag=Layer1CandidateDoFn.OUTPUT_CANDIDATES_TAG,
+                layer2_tag=Layer2CandidateDoFn.__name__,
+                layer3_tag=Layer3CandidateDoFn.OUTPUT_CANDIDATES_TAG,
+                layer4_tag=Layer4CandidateDoFn.OUTPUT_CANDIDATES_TAG,
+                history_tag=FetchUserHistoryDoFn.HISTORY_TAG,
+                reranking_results_tag=RERANKING_RESULTS_TAG,
+            )
         )
+        flattened_input_results.error | "DLQ_FlattenFinalSelectionInputErrors" >> dlq_sink("FlattenFinalSelectionInputErrors")
+        flattened_input_for_final_selection = flattened_input_results.main
+
         flattened_input_for_final_selection | "DebugLogFlattenedFinalSelect" >> DebugLogDoFn("FlattenedInputForFinalSelect")
 
         # --- Select and Update Next Question (Second Pass - with Reranking Results) --- #
