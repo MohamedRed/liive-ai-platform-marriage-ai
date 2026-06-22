@@ -466,6 +466,24 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("action_errors | \"DLQ_ActionErrors\" >> dlq_sink(\"ActionErrors\")", streaming_source)
         self.assertNotIn("# Default to available on error to avoid blocking notifications due to bad settings", scheduling_source)
 
+    def test_handle_match_actions_missing_settings_are_tagged_not_log_only(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+
+        self.assertIn("if not user_settings_doc.exists:", scheduling_source)
+        self.assertIn('"error_message": f"User settings missing for HandleMatchActionsDoFn user {user_id}"', scheduling_source)
+        self.assertIn('"operation": "fetch_user_settings"', scheduling_source)
+        self.assertIn('"user_id": user_id', scheduling_source)
+        self.assertIn('"element": element', scheduling_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {", scheduling_source)
+        self.assertIn("yield element", scheduling_source)
+        self.assertIn("action_errors | \"DLQ_ActionErrors\" >> dlq_sink(\"ActionErrors\")", streaming_source)
+        self.assertLess(
+            scheduling_source.index('"error_message": f"User settings missing for HandleMatchActionsDoFn user {user_id}"'),
+            scheduling_source.index("yield element\n                return"),
+        )
+        self.assertNotIn("# Yield element anyway, as processing is done, just actions skipped", scheduling_source)
+
     def test_trigger_event_parser_dlq_error_paths_do_not_assume_pubsub_data(self):
         common_source = read("dataflow/pipelines/streaming/transforms/common.py")
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")

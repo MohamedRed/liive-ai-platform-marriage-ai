@@ -350,7 +350,12 @@ class HandleMatchActionsDoFn(beam.DoFn):
             if not user_settings_doc.exists:
                 self.logger.warning(f"No settings found for user {user_id}. Cannot determine match actions.")
                 self.settings_not_found.inc()
-                # Yield element anyway, as processing is done, just actions skipped
+                yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                    "error_message": f"User settings missing for HandleMatchActionsDoFn user {user_id}",
+                    "operation": "fetch_user_settings",
+                    "user_id": user_id,
+                    "element": element,
+                })
                 yield element
                 return
 
