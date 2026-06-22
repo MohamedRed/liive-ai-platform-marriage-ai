@@ -251,6 +251,10 @@ describe("Cloud Functions Tests", () => {
     it("acceptMatch should be defined", () => {
       expect(myFunctions.marriageFunctions.acceptMatch).toBeDefined();
     });
+
+    it("processMatchAcceptanceNotifications should be defined", () => {
+      expect(myFunctions.marriageFunctions.processMatchAcceptanceNotifications).toBeDefined();
+    });
   });
 
   // Simply test that identity verification functions exist

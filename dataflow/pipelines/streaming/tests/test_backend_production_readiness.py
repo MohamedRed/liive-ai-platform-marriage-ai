@@ -1103,7 +1103,9 @@ class BackendProductionReadinessTests(unittest.TestCase):
     def test_match_acceptance_queues_internal_wali_notification_outbox(self):
         source = read("functions-nodejs/src/domains/marriage/index.ts")
         match_acceptance_source = read("functions-nodejs/src/domains/marriage/match-acceptance.ts")
+        notification_source = read("functions-nodejs/src/domains/marriage/match-notifications.ts")
         rules = read("firestore.rules")
+        indexes = read("firestore.indexes.json")
 
         self.assertIn("MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX", match_acceptance_source)
         self.assertIn("wali_match_acceptance_requested", match_acceptance_source)
@@ -1111,8 +1113,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION", source)
         self.assertIn("transaction.set(notificationRef", source)
         self.assertLess(source.index("transaction.set(matchRef"), source.index("transaction.set(notificationRef"))
+        self.assertIn("processMatchAcceptanceNotifications", source)
+        self.assertIn("processPendingMatchAcceptanceNotificationsHandler", notification_source)
+        self.assertIn("admin.messaging()", notification_source)
+        self.assertIn(".where(\"status\", \"in\", [\"pending\", \"delivery_failed\"])", notification_source)
+        self.assertIn(".orderBy(\"createdAt\", \"asc\")", notification_source)
+        self.assertIn("MATCH_NOTIFICATION_MAX_ATTEMPTS", notification_source)
+        self.assertIn("status: \"dead_letter\"", notification_source)
+        self.assertIn("status: \"sent\"", notification_source)
+        self.assertIn("status: \"delivery_failed\"", notification_source)
+        self.assertIn("status: \"skipped\"", notification_source)
         self.assertIn("match /MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX/{document=**}", rules)
         self.assertIn("allow read, write: if false", rules)
+        self.assertIn('"collectionGroup": "MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX"', indexes)
+        self.assertIn('"fieldPath": "status"', indexes)
+        self.assertIn('"fieldPath": "createdAt"', indexes)
 
     def test_matching_event_republisher_bounds_poison_retries_and_drains_oldest_first(self):
         matching_events_source = read("functions-nodejs/src/domains/marriage/matching-events.ts")

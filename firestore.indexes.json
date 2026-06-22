@@ -18,6 +18,14 @@
       ]
     },
     {
+      "collectionGroup": "MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "candidate_scores",
       "queryScope": "COLLECTION",
       "fields": [

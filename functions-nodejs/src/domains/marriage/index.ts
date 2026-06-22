@@ -26,6 +26,9 @@ import {
   parseAcceptMatchPayload,
 } from "./match-acceptance";
 import {
+  processPendingMatchAcceptanceNotificationsHandler,
+} from "./match-notifications";
+import {
   parseUpdateUserAnswersPayload,
   requireAuthenticatedUid,
 } from "./request-validation";
@@ -276,6 +279,10 @@ export const acceptMatch = onCall(async (request) => {
     logger.error(`Error accepting match for ${userID}/${matchedUserId}:`, error);
     throw new HttpsError("internal", "Failed to accept match");
   }
+});
+
+export const processMatchAcceptanceNotifications = onSchedule("every 5 minutes", async () => {
+  await processPendingMatchAcceptanceNotificationsHandler();
 });
 
 export const republishPendingMatchingEvents = onSchedule("every 5 minutes", async () => {
