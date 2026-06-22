@@ -5,6 +5,7 @@ import hashlib
 import json
 import traceback
 from datetime import datetime, timezone
+from typing import Any, Dict, Tuple
 
 # Import third-party libraries
 import openai
@@ -147,8 +148,12 @@ class GenerateProfileSummaryDoFn(beam.DoFn):
 
             if not summary_text:
                 self.logger.warning(f"LLM generated an empty summary for user {user_id}.")
-                self.error_counter.inc() # Or a specific counter for empty LLM responses
-                # Decide if we should yield to error or just log and not yield
+                self.error_counter.inc()
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                    "error_message": "GenerateProfileSummaryDoFn empty summary generated",
+                    "user_id": user_id,
+                    "element": element,
+                })
                 return
 
             self.success_counter.inc()

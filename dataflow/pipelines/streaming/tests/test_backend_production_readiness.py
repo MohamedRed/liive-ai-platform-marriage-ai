@@ -488,6 +488,19 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("UpdateProfileSummaryInDedicatedCollectionDoFn not initialized", summary_source)
         self.assertNotIn("raise # Critical setup failure", summary_source)
 
+    def test_profile_summary_empty_llm_output_is_tagged_not_silently_dropped(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        summary_source = read("dataflow/pipelines/streaming/transforms/profile_summarization.py")
+
+        self.assertIn("GenerateProfileSummaryDoFn.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn("summary_text = response.choices[0].message.content.strip()", summary_source)
+        self.assertIn('"error_message": "GenerateProfileSummaryDoFn empty summary generated"', summary_source)
+        self.assertIn('"user_id": user_id', summary_source)
+        self.assertIn('"element": element', summary_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn("summary_results_tuple.generation_errors | \"DLQ_SummaryGenerationErrors\" >> dlq_sink(\"SummaryGenerationErrors\")", streaming_source)
+        self.assertNotIn("# Decide if we should yield to error or just log and not yield", summary_source)
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod
