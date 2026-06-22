@@ -37,8 +37,10 @@ describe("match acceptance notification delivery", () => {
 
   function fakeDb(settingsData: Record<string, unknown> | null = { notification: { fcmToken: "fcm-token" } }) {
     const outboxSet = jest.fn().mockResolvedValue(undefined);
+    const settingsSet = jest.fn().mockResolvedValue(undefined);
     return {
       outboxSet,
+      settingsSet,
       collection: jest.fn((name: string) => ({
         doc: jest.fn((id?: string) => {
           if (name === "USER_SETTINGS") {
@@ -48,6 +50,7 @@ describe("match acceptance notification delivery", () => {
                 exists: Boolean(settingsData),
                 data: () => settingsData,
               }),
+              set: settingsSet,
             };
           }
           return { set: outboxSet };
@@ -106,6 +109,27 @@ describe("match acceptance notification delivery", () => {
     expect(db.outboxSet).toHaveBeenCalledWith(expect.objectContaining({
       status: "dead_letter",
       lastError: "Maximum match notification delivery attempts exceeded",
+    }), { merge: true });
+  });
+
+  it("clears permanently invalid wali FCM tokens instead of retrying forever", async () => {
+    const db = fakeDb();
+    const permanentError = Object.assign(new Error("Requested entity was not found."), {
+      code: "messaging/registration-token-not-registered",
+    });
+    const messaging = { send: jest.fn().mockRejectedValue(permanentError) };
+
+    await expect(deliverMatchAcceptanceNotification(db as any, messaging as any, fakeDoc(baseEvent) as any)).resolves.toBe("skipped");
+
+    expect(db.settingsSet).toHaveBeenCalledWith(expect.objectContaining({
+      notification: expect.objectContaining({
+        fcmToken: expect.anything(),
+        fcmTokenInvalidatedAt: expect.anything(),
+      }),
+    }), { merge: true });
+    expect(db.outboxSet).toHaveBeenCalledWith(expect.objectContaining({
+      status: "skipped",
+      lastError: "Wali FCM token is permanently invalid",
     }), { merge: true });
   });
 

@@ -23,6 +23,21 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function isPermanentFcmTokenError(error: unknown): boolean {
+  return [
+    "messaging/registration-token-not-registered",
+    "messaging/invalid-registration-token",
+  ].includes(errorCode(error) ?? "");
+}
+
 function stringField(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -83,6 +98,21 @@ async function markNotificationDeadLetter(
     status: "dead_letter",
     lastError: reason,
     deadLetteredAt: firestore.FieldValue.serverTimestamp(),
+    updatedAt: firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
+async function clearInvalidWaliFcmToken(
+  db: firestore.Firestore,
+  waliId: string,
+  reason: string,
+): Promise<void> {
+  await db.collection(LEGACY_COLLECTIONS.USER_SETTINGS).doc(waliId).set({
+    notification: {
+      fcmToken: firestore.FieldValue.delete(),
+      fcmTokenInvalidatedAt: firestore.FieldValue.serverTimestamp(),
+      fcmTokenInvalidationReason: reason,
+    },
     updatedAt: firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
 }
@@ -164,6 +194,11 @@ export async function deliverMatchAcceptanceNotification(
     return "sent";
   } catch (error) {
     logger.error(`Failed to deliver match acceptance notification ${doc.id}:`, error);
+    if (isPermanentFcmTokenError(error)) {
+      await clearInvalidWaliFcmToken(db, event.waliId, errorCode(error) ?? errorMessage(error));
+      await markNotificationSkipped(db, doc.id, "Wali FCM token is permanently invalid");
+      return "skipped";
+    }
     await markNotificationFailed(db, doc.id, error);
     return "failed";
   }
