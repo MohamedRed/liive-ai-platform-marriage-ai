@@ -8,6 +8,7 @@ on:
       - ".github/workflows/backend-production-readiness.yml"
       - "dataflow/**"
       - "functions-nodejs/**"
+      - "functions-python/**"
       - "packages/database-types/**"
       - "firebase.json"
       - "firestore.indexes.json"
@@ -20,6 +21,7 @@ on:
       - ".github/workflows/backend-production-readiness.yml"
       - "dataflow/**"
       - "functions-nodejs/**"
+      - "functions-python/**"
       - "packages/database-types/**"
       - "firebase.json"
       - "firestore.indexes.json"
@@ -64,6 +66,9 @@ jobs:
 
       - name: Run backend production-readiness tests
         run: python3 -m unittest dataflow.pipelines.streaming.tests.test_backend_production_readiness -v
+
+      - name: Run Python Functions unit tests
+        run: PYTHONPATH=$PWD/functions-python python3 -m unittest discover -s functions-python/tests -v
 
       - name: Validate Firebase JSON
         run: |

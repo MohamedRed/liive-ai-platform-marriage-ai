@@ -67,16 +67,29 @@ class BackendProductionReadinessTests(unittest.TestCase):
 
     def test_python_livekit_callable_requires_auth_and_only_reads_livekit_secrets(self):
         source = read("functions-python/main.py")
+        auth_source = read("functions-python/video_authorization.py")
 
         self.assertIn("if req.auth is None:", source)
         self.assertIn("https_fn.HttpsError", source)
         self.assertIn("FunctionsErrorCode.UNAUTHENTICATED", source)
         self.assertLess(source.index("if req.auth is None:"), source.index("uid = req.auth.uid"))
+        self.assertIn("parse_supervised_video_request(req.data)", source)
+        self.assertIn("firestore.client().collection(MATCHES_COLLECTION).document(uid).get()", source)
+        self.assertIn("authorize_supervised_video_room(uid, match_id, match_document)", source)
+        self.assertLess(source.index("authorize_supervised_video_room"), source.index("secretmanager.SecretManagerServiceClient()"))
+        self.assertIn("room_name = authorization.room", source)
+        self.assertNotIn("room_name = f\"room_{uid}\"", source)
+        self.assertIn('"matchId": authorization.match_id', source)
+        self.assertIn('"waliId": authorization.wali_id', source)
         self.assertIn("LIVEKIT_API_KEY", source)
         self.assertIn("LIVEKIT_API_SECRET", source)
         self.assertIn("LIVEKIT_WEBSOCKET_URL", source)
         self.assertNotIn("OPENAI_API_KEY", source)
         self.assertNotIn("openai_api_key", source)
+        self.assertIn("class MatchVideoAuthorizationError", auth_source)
+        self.assertIn("def authorize_supervised_video_room", auth_source)
+        self.assertIn("Match must be accepted before supervised video starts", auth_source)
+        self.assertIn("Accepted match is missing wali authorization", auth_source)
 
     def test_root_toast_hook_has_self_contained_build_types(self):
         source = read("src/hooks/use-toast.ts")
