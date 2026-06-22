@@ -108,14 +108,22 @@ class GenerateProfileSummaryDoFn(beam.DoFn):
         if not questions_answers:
             self.logger.info(f"No Q&A data found for user {user_id}. Cannot generate summary.")
             self.empty_profile_counter.inc()
-            # We might still want to output something to clear an old summary or write a 'no_summary' marker
-            # For now, just return and don't yield to main output. Consider error tag if this is unexpected.
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "GenerateProfileSummaryDoFn missing questions_answers",
+                "user_id": user_id,
+                "element": element,
+            })
             return
 
         qas_text_for_prompt = self._prepare_qas_for_prompt(questions_answers)
         if not qas_text_for_prompt.strip():
             self.logger.info(f"Formatted Q&A text is empty for user {user_id}. Cannot generate summary.")
             self.empty_profile_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "GenerateProfileSummaryDoFn empty formatted Q&A text",
+                "user_id": user_id,
+                "element": element,
+            })
             return
 
         # Generate a hash of the Q&A data for versioning
