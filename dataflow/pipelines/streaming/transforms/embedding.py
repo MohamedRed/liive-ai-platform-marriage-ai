@@ -127,6 +127,22 @@ class GenerateStatementEmbeddingsDoFn(beam.DoFn): # Renamed class
                     })
                     continue
 
+                if facet not in ('attribute', 'preference'):
+                    self.logger.warning(
+                        "Skipping statement due to invalid facet for embedding: %r from element for user %r",
+                        facet,
+                        element.get('user_id', 'UNKNOWN'),
+                    )
+                    self.error_counter.inc()
+                    yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                        "error_message": "Invalid statement facet for embedding",
+                        "element": element,
+                        "statement": statement_data,
+                        "statement_index": stmt_index,
+                        "facet": facet,
+                    })
+                    continue
+
                 text_to_embed = f"Question: {original_question_text} [SEP] Statement: {statement_text}"
                 
                 embedding_vector = self._get_embedding(text_to_embed)

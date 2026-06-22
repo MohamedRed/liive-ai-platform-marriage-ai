@@ -1253,6 +1253,22 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("OpenAI client not initialized for statement embedding", embedding_source)
         self.assertNotIn("OpenAI client for embedding is not initialized", embedding_source)
 
+    def test_statement_embedding_rejects_invalid_facets_before_embedding(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        embedding_source = read("dataflow/pipelines/streaming/transforms/embedding.py")
+
+        self.assertIn("GenerateStatementEmbeddingsDoFn.OUTPUT_ERROR_TAG", embedding_source)
+        self.assertIn("if facet not in ('attribute', 'preference'):", embedding_source)
+        self.assertIn('"error_message": "Invalid statement facet for embedding"', embedding_source)
+        self.assertIn('"statement": statement_data', embedding_source)
+        self.assertIn('"statement_index": stmt_index', embedding_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", embedding_source)
+        self.assertIn("statement_embedding_results.error | \"DLQ_StatementEmbeddingErrors\" >> dlq_sink(\"StatementEmbeddingErrors\")", streaming_source)
+        self.assertLess(
+            embedding_source.index("if facet not in ('attribute', 'preference'):"),
+            embedding_source.index("embedding_vector = self._get_embedding(text_to_embed)"),
+        )
+
     def test_firestore_indexes_include_matching_production_queries(self):
         indexes = read("firestore.indexes.json")
 
