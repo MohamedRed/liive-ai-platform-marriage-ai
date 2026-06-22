@@ -45,6 +45,8 @@ import {
   buildMarriageSafetyEscalationResolutionWrite,
   buildMarriageSafetyReportReviewWrite,
   buildMarriageSafetyReportWrite,
+  buildMarriageSafetyWarningAcknowledgementWrite,
+  parseAcknowledgeMarriageWarningPayload,
   parseBlockMarriageUserPayload,
   parseReportMarriageUserPayload,
   parseResolveMarriageEscalationPayload,
@@ -450,6 +452,45 @@ export const resolveMarriageSafetyEscalation = onCall(async (request) => {
     }
     logger.error(`Error resolving marriage safety escalation ${payload.escalationId} by ${moderatorUserId}:`, error);
     throw new HttpsError("internal", "Failed to resolve marriage safety escalation");
+  }
+});
+
+export const acknowledgeMarriageSafetyWarning = onCall(async (request) => {
+  const actorUserId = requireAuthenticatedUid(request.auth);
+  const payload = parseAcknowledgeMarriageWarningPayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    return await db.runTransaction(async (transaction) => {
+      const warningRef = db.collection(USER_SAFETY_WARNINGS_COLLECTION).doc(payload.warningId);
+      const warningDoc = await transaction.get(warningRef);
+      if (!warningDoc.exists) {
+        throw new HttpsError("not-found", "Marriage safety warning is not available for acknowledgement.");
+      }
+
+      const warningAcknowledgementWrite = buildMarriageSafetyWarningAcknowledgementWrite({
+        actorUserId,
+        payload,
+        existingWarning: warningDoc.data() ?? {},
+        timestamp,
+      });
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+
+      transaction.set(warningRef, warningAcknowledgementWrite.warningUpdate, { merge: true });
+      transaction.set(auditRef, warningAcknowledgementWrite.auditEvent);
+
+      return {
+        status: "acknowledged",
+        warningId: payload.warningId,
+      };
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error acknowledging marriage safety warning ${payload.warningId} by ${actorUserId}:`, error);
+    throw new HttpsError("internal", "Failed to acknowledge marriage safety warning");
   }
 });
 

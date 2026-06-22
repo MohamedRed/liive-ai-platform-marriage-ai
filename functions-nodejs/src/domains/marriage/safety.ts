@@ -68,6 +68,11 @@ export interface ResolveMarriageEscalationPayload {
   idempotencyKey?: string;
 }
 
+export interface AcknowledgeMarriageWarningPayload {
+  warningId: string;
+  idempotencyKey?: string;
+}
+
 export interface ModeratorAuthLike {
   uid?: unknown;
   token?: unknown;
@@ -104,6 +109,13 @@ export interface MarriageSafetyEscalationResolutionWriteInput {
   timestamp: unknown;
 }
 
+export interface MarriageSafetyWarningAcknowledgementWriteInput {
+  actorUserId: string;
+  payload: AcknowledgeMarriageWarningPayload;
+  existingWarning: Record<string, unknown>;
+  timestamp: unknown;
+}
+
 export interface MarriageSafetyReportReviewWrite {
   reportUpdate: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
@@ -115,6 +127,11 @@ export interface MarriageSafetyReportReviewWrite {
 
 export interface MarriageSafetyEscalationResolutionWrite {
   escalationUpdate: Record<string, unknown>;
+  auditEvent: Record<string, unknown>;
+}
+
+export interface MarriageSafetyWarningAcknowledgementWrite {
+  warningUpdate: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
 }
 
@@ -261,6 +278,18 @@ export function parseResolveMarriageEscalationPayload(data: unknown): ResolveMar
     status,
     resolution: trimRequiredString(payload.resolution, "resolution"),
     moderatorNote: boundedOptionalString(payload.moderatorNote, "moderatorNote", MAX_MODERATOR_NOTE_LENGTH),
+    idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
+  };
+}
+
+export function parseAcknowledgeMarriageWarningPayload(data: unknown): AcknowledgeMarriageWarningPayload {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new HttpsError("invalid-argument", "Warning acknowledgement payload is required.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  return {
+    warningId: trimRequiredString(payload.warningId, "warningId"),
     idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
   };
 }
@@ -429,6 +458,40 @@ export function buildMarriageSafetyEscalationResolutionWrite(
       ...(category ? { category } : {}),
       status: payload.status,
       resolution: payload.resolution,
+      ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+      createdAt: input.timestamp,
+    },
+  };
+}
+
+export function buildMarriageSafetyWarningAcknowledgementWrite(
+  input: MarriageSafetyWarningAcknowledgementWriteInput,
+): MarriageSafetyWarningAcknowledgementWrite {
+  const actorUserId = trimRequiredString(input.actorUserId, "actorUserId");
+  const payload = parseAcknowledgeMarriageWarningPayload(input.payload);
+  const targetUserId = trimRequiredString(input.existingWarning.targetUserId, "targetUserId");
+  if (actorUserId !== targetUserId) {
+    throw new HttpsError("permission-denied", "Only the warned user can acknowledge this warning.");
+  }
+
+  const reportId = trimOptionalString(input.existingWarning.reportId);
+  const category = trimOptionalString(input.existingWarning.category);
+
+  return {
+    warningUpdate: {
+      status: "acknowledged",
+      acknowledgedBy: actorUserId,
+      acknowledgedAt: input.timestamp,
+      updatedAt: input.timestamp,
+      ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+    },
+    auditEvent: {
+      type: "marriage_warning_acknowledged",
+      actorUserId,
+      warningId: payload.warningId,
+      ...(reportId ? { reportId } : {}),
+      targetUserId,
+      ...(category ? { category } : {}),
       ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
       createdAt: input.timestamp,
     },

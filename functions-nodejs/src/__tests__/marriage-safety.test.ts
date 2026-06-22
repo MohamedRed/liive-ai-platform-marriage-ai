@@ -4,6 +4,8 @@ import {
   buildMarriageSafetyEscalationResolutionWrite,
   buildMarriageSafetyReportReviewWrite,
   buildMarriageSafetyReportWrite,
+  buildMarriageSafetyWarningAcknowledgementWrite,
+  parseAcknowledgeMarriageWarningPayload,
   parseBlockMarriageUserPayload,
   parseResolveMarriageEscalationPayload,
   parseReviewMarriageReportPayload,
@@ -376,5 +378,70 @@ describe("marriage safety block/report APIs", () => {
       createdAt: timestamp,
     });
     expect(write.auditEvent).not.toHaveProperty("moderatorNote");
+  });
+
+  it("parses warning acknowledgement payloads", () => {
+    expect(parseAcknowledgeMarriageWarningPayload({
+      warningId: " warning-1 ",
+      idempotencyKey: " warning-ack-1 ",
+    })).toEqual({
+      warningId: "warning-1",
+      idempotencyKey: "warning-ack-1",
+    });
+  });
+
+  it("rejects malformed warning acknowledgement payloads", () => {
+    for (const payload of [
+      undefined,
+      null,
+      {},
+      { warningId: "" },
+      { warningId: "warning-1", idempotencyKey: "x".repeat(129) },
+    ]) {
+      expect(() => parseAcknowledgeMarriageWarningPayload(payload)).toThrow(HttpsError);
+    }
+  });
+
+  it("builds user-scoped warning acknowledgement updates and audit logs", () => {
+    const write = buildMarriageSafetyWarningAcknowledgementWrite({
+      actorUserId: " target-user ",
+      payload: {
+        warningId: "warning-1",
+        idempotencyKey: "warning-ack-1",
+      },
+      existingWarning: {
+        reportId: "report-1",
+        targetUserId: "target-user",
+        category: "safety_concern",
+      },
+      timestamp,
+    });
+
+    expect(write.warningUpdate).toMatchObject({
+      status: "acknowledged",
+      acknowledgedBy: "target-user",
+      acknowledgedAt: timestamp,
+      updatedAt: timestamp,
+      idempotencyKey: "warning-ack-1",
+    });
+    expect(write.auditEvent).toMatchObject({
+      type: "marriage_warning_acknowledged",
+      actorUserId: "target-user",
+      warningId: "warning-1",
+      reportId: "report-1",
+      targetUserId: "target-user",
+      category: "safety_concern",
+      idempotencyKey: "warning-ack-1",
+      createdAt: timestamp,
+    });
+  });
+
+  it("rejects warning acknowledgement by anyone except the warned user", () => {
+    expect(() => buildMarriageSafetyWarningAcknowledgementWrite({
+      actorUserId: "other-user",
+      payload: { warningId: "warning-1" },
+      existingWarning: { targetUserId: "target-user" },
+      timestamp,
+    })).toThrow(HttpsError);
   });
 });
