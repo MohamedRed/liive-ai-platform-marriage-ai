@@ -5,6 +5,7 @@ export const USER_SAFETY_REPORTS_COLLECTION = "USER_SAFETY_REPORTS";
 
 const MAX_BLOCK_REASON_LENGTH = 500;
 const MAX_REPORT_DESCRIPTION_LENGTH = 2000;
+const MAX_MODERATOR_NOTE_LENGTH = 2000;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 const REPORT_CATEGORIES = new Set([
@@ -13,6 +14,21 @@ const REPORT_CATEGORIES = new Set([
   "fake_profile",
   "safety_concern",
   "spam",
+  "other",
+]);
+
+const REPORT_REVIEW_STATUSES = new Set([
+  "under_review",
+  "resolved",
+  "dismissed",
+  "escalated",
+]);
+
+const REPORT_RESOLUTIONS = new Set([
+  "no_action",
+  "user_warned",
+  "profile_suspended",
+  "escalated",
   "other",
 ]);
 
@@ -29,6 +45,19 @@ export interface ReportMarriageUserPayload {
   idempotencyKey?: string;
 }
 
+export interface ReviewMarriageReportPayload {
+  reportId: string;
+  status: string;
+  resolution?: string;
+  moderatorNote?: string;
+  idempotencyKey?: string;
+}
+
+export interface ModeratorAuthLike {
+  uid?: unknown;
+  token?: unknown;
+}
+
 export interface MarriageSafetyWriteInput<TPayload> {
   actorUserId: string;
   payload: TPayload;
@@ -43,6 +72,18 @@ export interface MarriageSafetyBlockWrite {
 
 export interface MarriageSafetyReportWrite {
   reportRecord: Record<string, unknown>;
+  auditEvent: Record<string, unknown>;
+}
+
+export interface MarriageSafetyReportReviewWriteInput {
+  moderatorUserId: string;
+  payload: ReviewMarriageReportPayload;
+  existingReport: Record<string, unknown>;
+  timestamp: unknown;
+}
+
+export interface MarriageSafetyReportReviewWrite {
+  reportUpdate: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
 }
 
@@ -82,6 +123,40 @@ function canonicalActorTarget(actorUserId: unknown, targetUserId: unknown): { ac
   return { actorUserId: actor, targetUserId: target };
 }
 
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+export function requireMarriageSafetyModerator(auth: ModeratorAuthLike | null | undefined): string {
+  const uid = trimOptionalString(auth?.uid);
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Authentication is required to review marriage safety reports.");
+  }
+
+  const token = objectRecord(auth?.token) ?? {};
+  const roles = stringArray(token.roles);
+  const hasModeratorClaim = token.admin === true ||
+    token.moderator === true ||
+    token.marriageModerator === true ||
+    token.marriage_moderator === true ||
+    roles.includes("admin") ||
+    roles.includes("moderator") ||
+    roles.includes("marriage_moderator");
+
+  if (!hasModeratorClaim) {
+    throw new HttpsError("permission-denied", "A marriage safety moderator role is required.");
+  }
+
+  return uid;
+}
+
 export function parseBlockMarriageUserPayload(data: unknown): BlockMarriageUserPayload {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new HttpsError("invalid-argument", "Block user payload is required.");
@@ -110,6 +185,31 @@ export function parseReportMarriageUserPayload(data: unknown): ReportMarriageUse
     targetUserId: trimRequiredString(payload.targetUserId, "targetUserId"),
     category,
     description: boundedOptionalString(payload.description, "description", MAX_REPORT_DESCRIPTION_LENGTH),
+    idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
+  };
+}
+
+export function parseReviewMarriageReportPayload(data: unknown): ReviewMarriageReportPayload {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new HttpsError("invalid-argument", "Report review payload is required.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  const status = trimOptionalString(payload.status) ?? "under_review";
+  if (!REPORT_REVIEW_STATUSES.has(status)) {
+    throw new HttpsError("invalid-argument", "status is not supported.");
+  }
+
+  const resolution = boundedOptionalString(payload.resolution, "resolution", 64);
+  if (resolution && !REPORT_RESOLUTIONS.has(resolution)) {
+    throw new HttpsError("invalid-argument", "resolution is not supported.");
+  }
+
+  return {
+    reportId: trimRequiredString(payload.reportId, "reportId"),
+    status,
+    ...(resolution ? { resolution } : {}),
+    moderatorNote: boundedOptionalString(payload.moderatorNote, "moderatorNote", MAX_MODERATOR_NOTE_LENGTH),
     idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
   };
 }
@@ -171,6 +271,42 @@ export function buildMarriageSafetyReportWrite(
       targetUserId,
       category,
       ...(idempotencyKey ? { idempotencyKey } : {}),
+      createdAt: input.timestamp,
+    },
+  };
+}
+
+export function buildMarriageSafetyReportReviewWrite(
+  input: MarriageSafetyReportReviewWriteInput,
+): MarriageSafetyReportReviewWrite {
+  const moderatorUserId = trimRequiredString(input.moderatorUserId, "moderatorUserId");
+  const payload = parseReviewMarriageReportPayload(input.payload);
+  const reporterUserId = trimOptionalString(input.existingReport.reporterUserId);
+  const targetUserId = trimOptionalString(input.existingReport.targetUserId);
+  const category = trimOptionalString(input.existingReport.category);
+
+  const reportUpdate = {
+    status: payload.status,
+    ...(payload.resolution ? { resolution: payload.resolution } : {}),
+    ...(payload.moderatorNote ? { moderatorNote: payload.moderatorNote } : {}),
+    ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+    reviewedBy: moderatorUserId,
+    reviewedAt: input.timestamp,
+    updatedAt: input.timestamp,
+  };
+
+  return {
+    reportUpdate,
+    auditEvent: {
+      type: "marriage_report_reviewed",
+      moderatorUserId,
+      reportId: payload.reportId,
+      ...(reporterUserId ? { reporterUserId } : {}),
+      ...(targetUserId ? { targetUserId } : {}),
+      ...(category ? { category } : {}),
+      status: payload.status,
+      ...(payload.resolution ? { resolution: payload.resolution } : {}),
+      ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
       createdAt: input.timestamp,
     },
   };

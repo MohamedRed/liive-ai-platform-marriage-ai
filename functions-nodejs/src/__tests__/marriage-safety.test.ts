@@ -1,9 +1,12 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import {
   buildMarriageSafetyBlockWrite,
+  buildMarriageSafetyReportReviewWrite,
   buildMarriageSafetyReportWrite,
   parseBlockMarriageUserPayload,
+  parseReviewMarriageReportPayload,
   parseReportMarriageUserPayload,
+  requireMarriageSafetyModerator,
 } from "../domains/marriage/safety";
 
 describe("marriage safety block/report APIs", () => {
@@ -127,5 +130,85 @@ describe("marriage safety block/report APIs", () => {
       createdAt: timestamp,
     });
     expect(write.auditEvent).not.toHaveProperty("description");
+  });
+
+  it("requires moderator or admin claims for report review", () => {
+    expect(requireMarriageSafetyModerator({ uid: " moderator-1 ", token: { marriageModerator: true } })).toBe("moderator-1");
+    expect(requireMarriageSafetyModerator({ uid: "admin-1", token: { roles: ["user", "admin"] } })).toBe("admin-1");
+    expect(() => requireMarriageSafetyModerator({ uid: "user-1", token: { roles: ["user"] } })).toThrow(HttpsError);
+    expect(() => requireMarriageSafetyModerator(undefined)).toThrow(HttpsError);
+  });
+
+  it("parses report-review payloads with bounded moderator notes", () => {
+    expect(parseReviewMarriageReportPayload({
+      reportId: " report-1 ",
+      status: " resolved ",
+      resolution: " user_warned ",
+      moderatorNote: "  Reviewed evidence  ",
+      idempotencyKey: " review-1 ",
+    })).toEqual({
+      reportId: "report-1",
+      status: "resolved",
+      resolution: "user_warned",
+      moderatorNote: "Reviewed evidence",
+      idempotencyKey: "review-1",
+    });
+  });
+
+  it("rejects malformed report-review payloads", () => {
+    for (const payload of [
+      undefined,
+      null,
+      {},
+      { reportId: "" },
+      { reportId: "report-1", status: "unsupported" },
+      { reportId: "report-1", status: "resolved", resolution: "unsupported" },
+      { reportId: "report-1", status: "resolved", moderatorNote: "x".repeat(2001) },
+      { reportId: "report-1", status: "resolved", idempotencyKey: "x".repeat(129) },
+    ]) {
+      expect(() => parseReviewMarriageReportPayload(payload)).toThrow(HttpsError);
+    }
+  });
+
+  it("builds report review updates without leaking moderator notes to audit logs", () => {
+    const write = buildMarriageSafetyReportReviewWrite({
+      moderatorUserId: " moderator-1 ",
+      payload: {
+        reportId: "report-1",
+        status: "resolved",
+        resolution: "user_warned",
+        moderatorNote: "Sensitive moderation note",
+        idempotencyKey: "review-1",
+      },
+      existingReport: {
+        reporterUserId: "actor-user",
+        targetUserId: "target-user",
+        category: "safety_concern",
+      },
+      timestamp,
+    });
+
+    expect(write.reportUpdate).toMatchObject({
+      status: "resolved",
+      resolution: "user_warned",
+      moderatorNote: "Sensitive moderation note",
+      reviewedBy: "moderator-1",
+      reviewedAt: timestamp,
+      updatedAt: timestamp,
+      idempotencyKey: "review-1",
+    });
+    expect(write.auditEvent).toMatchObject({
+      type: "marriage_report_reviewed",
+      moderatorUserId: "moderator-1",
+      reportId: "report-1",
+      reporterUserId: "actor-user",
+      targetUserId: "target-user",
+      category: "safety_concern",
+      status: "resolved",
+      resolution: "user_warned",
+      idempotencyKey: "review-1",
+      createdAt: timestamp,
+    });
+    expect(write.auditEvent).not.toHaveProperty("moderatorNote");
   });
 });

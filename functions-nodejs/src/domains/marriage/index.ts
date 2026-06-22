@@ -42,9 +42,12 @@ import {
 } from "./request-validation";
 import {
   buildMarriageSafetyBlockWrite,
+  buildMarriageSafetyReportReviewWrite,
   buildMarriageSafetyReportWrite,
   parseBlockMarriageUserPayload,
   parseReportMarriageUserPayload,
+  parseReviewMarriageReportPayload,
+  requireMarriageSafetyModerator,
   USER_SAFETY_BLOCKS_COLLECTION,
   USER_SAFETY_REPORTS_COLLECTION,
 } from "./safety";
@@ -353,6 +356,45 @@ export const reportMarriageUser = onCall(async (request) => {
     }
     logger.error(`Error reporting marriage user for ${actorUserId}/${payload.targetUserId}:`, error);
     throw new HttpsError("internal", "Failed to report marriage user");
+  }
+});
+
+export const reviewMarriageReport = onCall(async (request) => {
+  const moderatorUserId = requireMarriageSafetyModerator(request.auth);
+  const payload = parseReviewMarriageReportPayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    return await db.runTransaction(async (transaction) => {
+      const reportRef = db.collection(USER_SAFETY_REPORTS_COLLECTION).doc(payload.reportId);
+      const reportDoc = await transaction.get(reportRef);
+      if (!reportDoc.exists) {
+        throw new HttpsError("not-found", "Marriage safety report is not available for review.");
+      }
+
+      const reportReviewWrite = buildMarriageSafetyReportReviewWrite({
+        moderatorUserId,
+        payload,
+        existingReport: reportDoc.data() ?? {},
+        timestamp,
+      });
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+
+      transaction.set(reportRef, reportReviewWrite.reportUpdate, { merge: true });
+      transaction.set(auditRef, reportReviewWrite.auditEvent);
+
+      return {
+        status: payload.status,
+        reportId: payload.reportId,
+      };
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error reviewing marriage safety report ${payload.reportId} by ${moderatorUserId}:`, error);
+    throw new HttpsError("internal", "Failed to review marriage safety report");
   }
 });
 
