@@ -78,6 +78,7 @@ from .transforms.scheduling import ScheduleDelayedMatching, HandleMatchActions
 from .transforms.profile_summarization import GenerateAndStoreProfileSummary
 from .transforms.answer_parsing import ParseAnswerIntoStatements
 from .transforms.match_percentage import CalculateAdjustedTopMatchPercentage
+from .transforms.llm_rerank_input import PrepareForLLMRerank
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -571,30 +572,16 @@ def run_streaming_pipeline(argv=None):
             # Output of CoGroupByKey: (triggering_user_id, {CROSS_ENCODED_TAG: [list_of_candidates], USER_HISTORY_TAG: [user_qas_list]})
         )
 
-        # DoFn to format the CoGroupByKey output for RerankAndScoreMatches
-        class FormatForLLMRerankDoFn(beam.DoFn):
-            def process(self, element):
-                triggering_user_id, grouped_data = element
-                cross_encoded_list = grouped_data.get(CROSS_ENCODED_TAG, [])
-                user_qas_list = grouped_data.get(USER_HISTORY_TAG, [])
-
-                if not cross_encoded_list: # Should be a list containing one item: the list of candidates
-                    logger.warning(f"Missing cross-encoded candidates for user {triggering_user_id} in CoGroup output. Skipping LLM rerank.")
-                    # Optionally yield to an error tag here if this is unexpected
-                    return 
-                
-                # cross_encoded_list[0] is the actual list_of_candidates from cross_encoded_candidates PCollection
-                # user_qas_list[0] is the actual list_of_qa_dicts from user_history_keyed PCollection
-                
-                candidates = cross_encoded_list[0] if cross_encoded_list else []
-                user_qas = user_qas_list[0] if user_qas_list else {}
-
-                yield (triggering_user_id, {'candidates': candidates, 'user_qas': user_qas})
-
-        prepared_for_llm_rerank = (
+        prepared_for_llm_rerank_results = (
             inputs_for_llm_rerank
-            | "FormatForLLMRerank" >> beam.ParDo(FormatForLLMRerankDoFn())
+            | "PrepareForLLMRerank" >> PrepareForLLMRerank(
+                cross_encoded_tag=CROSS_ENCODED_TAG,
+                user_history_tag=USER_HISTORY_TAG,
+            )
         )
+        prepared_for_llm_rerank_results.error | "DLQ_FormatForLLMRerankErrors" >> dlq_sink("FormatForLLMRerankErrors")
+        prepared_for_llm_rerank = prepared_for_llm_rerank_results.main
+
         prepared_for_llm_rerank | "DebugLogPreparedForLLMRerank" >> DebugLogDoFn(label="PreparedForLLMRerank")
 
         # Stage 2 Reranking: LLM-based (uses the adapted RerankAndScoreMatches)

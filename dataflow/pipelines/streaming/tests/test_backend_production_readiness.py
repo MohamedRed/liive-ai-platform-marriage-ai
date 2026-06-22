@@ -1032,6 +1032,25 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Failed to read PDF instructions", reranking_source)
         self.assertNotIn("raise\n\n    def _fetch_profile", reranking_source)
 
+    def test_llm_rerank_input_format_errors_are_tagged_not_silently_dropped(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        formatter_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/llm_rerank_input.py"
+        self.assertTrue(formatter_path.exists(), "LLM rerank input formatter transform must exist")
+        formatter_source = formatter_path.read_text()
+
+        self.assertIn("class FormatForLLMRerankDoFn", formatter_source)
+        self.assertIn("FormatForLLMRerankDoFn.OUTPUT_ERROR_TAG", formatter_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", formatter_source)
+        self.assertIn('"error_message": "Missing cross-encoded candidates for LLM rerank"', formatter_source)
+        self.assertIn('"operation": "format_for_llm_rerank"', formatter_source)
+        self.assertIn('"triggering_user_id": triggering_user_id', formatter_source)
+        self.assertIn('"grouped_data": grouped_data', formatter_source)
+        self.assertIn("PrepareForLLMRerank", formatter_source)
+        self.assertIn("prepared_for_llm_rerank_results.error | \"DLQ_FormatForLLMRerankErrors\" >> dlq_sink(\"FormatForLLMRerankErrors\")", streaming_source)
+        self.assertIn("prepared_for_llm_rerank = prepared_for_llm_rerank_results.main", streaming_source)
+        self.assertNotIn("class FormatForLLMRerankDoFn(beam.DoFn):", streaming_source)
+        self.assertNotIn("Skipping LLM rerank", streaming_source)
+
     def test_answer_parsing_setup_and_llm_failures_are_tagged_not_silently_main(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         answer_parsing_source = read("dataflow/pipelines/streaming/transforms/answer_parsing.py")
