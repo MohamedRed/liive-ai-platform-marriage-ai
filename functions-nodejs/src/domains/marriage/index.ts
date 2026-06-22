@@ -1,4 +1,4 @@
-import { onCall } from "firebase-functions/v2/https";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import * as admin from 'firebase-admin';
@@ -20,6 +20,10 @@ import {
   queueMatchingEvent,
   republishPendingMatchingEventsHandler,
 } from "./matching-events";
+import {
+  buildAcceptedMatchUpdate,
+  parseAcceptMatchPayload,
+} from "./match-acceptance";
 import {
   parseUpdateUserAnswersPayload,
   requireAuthenticatedUid,
@@ -209,6 +213,64 @@ export async function updateWaliVerificationStatus(
     throw new Error("Failed to update Wali verification");
   }
 }
+
+export const acceptMatch = onCall(async (request) => {
+  const userID = requireAuthenticatedUid(request.auth);
+  const { matchedUserId, notifyWali, idempotencyKey } = parseAcceptMatchPayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    const waliSnapshot = await db
+      .collection(LEGACY_COLLECTIONS.USER_WALI_RELATION_VERIFICATIONS)
+      .where("userId", "==", userID)
+      .where("status", "==", "verified")
+      .limit(1)
+      .get();
+    const waliRelation = waliSnapshot.docs[0]?.data();
+
+    if (!waliRelation) {
+      throw new HttpsError("failed-precondition", "A verified wali relationship is required before accepting a match.");
+    }
+
+    return await db.runTransaction(async (transaction) => {
+      const matchRef = db.collection(LEGACY_COLLECTIONS.MATCHES).doc(userID);
+      const matchDoc = await transaction.get(matchRef);
+      const matchData = matchDoc.exists ? matchDoc.data() : undefined;
+      const acceptedUpdate = buildAcceptedMatchUpdate({
+        userId: userID,
+        matchedUserId,
+        matches: matchData?.matches,
+        waliRelation,
+        notifyWali,
+        timestamp,
+        idempotencyKey,
+      });
+
+      transaction.set(matchRef, {
+        matches: acceptedUpdate.matches,
+        lastAcceptedMatchId: matchedUserId,
+        matchAcceptanceUpdatedAt: timestamp,
+        updatedAt: timestamp,
+      }, { merge: true });
+
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+      transaction.set(auditRef, acceptedUpdate.auditEvent);
+
+      return {
+        status: "accepted",
+        wali_notification_status: notifyWali ? "queued" : "not_requested",
+        chat_id: null,
+      };
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error accepting match for ${userID}/${matchedUserId}:`, error);
+    throw new HttpsError("internal", "Failed to accept match");
+  }
+});
 
 export const republishPendingMatchingEvents = onSchedule("every 5 minutes", async () => {
   await republishPendingMatchingEventsHandler();
