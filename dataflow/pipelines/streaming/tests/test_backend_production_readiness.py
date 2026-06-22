@@ -409,6 +409,27 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Clients not initialized in ScheduleDelayedMatchingDoFn", scheduling_source)
         self.assertNotIn("Clients not initialized in HandleMatchActionsDoFn", scheduling_source)
 
+    def test_handle_match_actions_validates_matches_shape_before_side_effects(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+
+        self.assertIn("HandleMatchActionsDoFn.ERROR_TAG", scheduling_source)
+        self.assertIn("matches = element.get('matches')", scheduling_source)
+        self.assertIn("if not isinstance(matches, list):", scheduling_source)
+        self.assertIn('"error_message": "Invalid matches shape for HandleMatchActionsDoFn"', scheduling_source)
+        self.assertIn("if not all(isinstance(match, dict) for match in matches):", scheduling_source)
+        self.assertIn('"error_message": "Invalid match item shape for HandleMatchActionsDoFn"', scheduling_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG", scheduling_source)
+        self.assertIn("action_errors | \"DLQ_ActionErrors\" >> dlq_sink(\"ActionErrors\")", streaming_source)
+        self.assertLess(
+            scheduling_source.index("if not isinstance(matches, list):"),
+            scheduling_source.index("settings_ref = self.db.collection"),
+        )
+        self.assertLess(
+            scheduling_source.index("if not all(isinstance(match, dict) for match in matches):"),
+            scheduling_source.index("settings_ref = self.db.collection"),
+        )
+
     def test_trigger_event_parser_dlq_error_paths_do_not_assume_pubsub_data(self):
         common_source = read("dataflow/pipelines/streaming/transforms/common.py")
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")

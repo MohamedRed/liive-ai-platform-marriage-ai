@@ -310,7 +310,25 @@ class HandleMatchActionsDoFn(beam.DoFn):
             return
 
         user_id = element['user_id']
-        matches = element.get('matches', []) # Reranked matches
+        matches = element.get('matches') # Reranked matches
+        if not isinstance(matches, list):
+            self.logger.error("Invalid matches shape for HandleMatchActionsDoFn: %r", matches)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": "Invalid matches shape for HandleMatchActionsDoFn",
+                "element": element,
+                "matches_type": str(type(matches)),
+            })
+            return
+
+        if not all(isinstance(match, dict) for match in matches):
+            self.logger.error("Invalid match item shape for HandleMatchActionsDoFn: %r", matches)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                "error_message": "Invalid match item shape for HandleMatchActionsDoFn",
+                "element": element,
+            })
+            return
 
         try:
             # Get user settings - use COLLECTIONS constant
