@@ -83,6 +83,7 @@ from .transforms.final_selection_input import FlattenFinalSelectionInput
 from .transforms.lying_score_input import FormatForLyingScore
 from .transforms.scoreboard_update_input import ExtractTriggeringUserIdAfterScoreboardUpdate
 from .transforms.match_side_effect_input import FilterNonEmptyMatchesForSideEffects
+from .transforms.next_question_input import FormatInputForLayer3
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -464,10 +465,12 @@ def run_streaming_pipeline(argv=None):
         # where 'matches' is the list of candidate dicts.
         # top_candidates_for_reranking is PCollection of (triggering_user_id, list_of_candidate_dicts)
         
-        layer3_input = (
+        layer3_input_results = (
             top_candidates_for_reranking
-            | "FormatInputForLayer3" >> beam.Map(lambda x: {'user_id': x[0], 'matches': x[1]})
+            | "FormatInputForLayer3" >> FormatInputForLayer3()
         )
+        layer3_input_results.error | "DLQ_Layer3InputErrors" >> dlq_sink("Layer3InputErrors")
+        layer3_input = layer3_input_results.main
         layer3_input | "DebugLogLayer3Input" >> DebugLogDoFn(label="Layer3Input")
 
         layer3_results = (

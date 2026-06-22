@@ -298,6 +298,24 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Vertex AI client not loaded", next_question_source)
         self.assertNotIn("# Propagate exception to potentially fail the pipeline startup", next_question_source)
 
+    def test_layer3_input_format_errors_are_tagged_not_inline_lambda_failures(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        layer_input_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/next_question_input.py"
+        self.assertTrue(layer_input_path.exists(), "next-question input formatting transform must exist")
+        layer_input_source = layer_input_path.read_text()
+
+        self.assertIn("class FormatInputForLayer3DoFn", layer_input_source)
+        self.assertIn("FormatInputForLayer3DoFn.OUTPUT_ERROR_TAG", layer_input_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", layer_input_source)
+        self.assertIn('"operation": "format_input_for_layer3"', layer_input_source)
+        self.assertIn('"Malformed Layer 3 input"', layer_input_source)
+        self.assertIn('"user_id": user_id', layer_input_source)
+        self.assertIn('"matches": matches', layer_input_source)
+        self.assertIn("FormatInputForLayer3", streaming_source)
+        self.assertIn("layer3_input_results.error | \"DLQ_Layer3InputErrors\" >> dlq_sink(\"Layer3InputErrors\")", streaming_source)
+        self.assertIn("layer3_input = layer3_input_results.main", streaming_source)
+        self.assertNotIn("| \"FormatInputForLayer3\" >> beam.Map(lambda x: {'user_id': x[0], 'matches': x[1]})", streaming_source)
+
     def test_select_best_question_setup_failures_are_tagged_not_silent_fallbacks(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         next_question_source = read("dataflow/pipelines/streaming/transforms/next_question.py")
