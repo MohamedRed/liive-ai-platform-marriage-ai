@@ -451,6 +451,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Firestore client not initialized", common_source)
         self.assertNotIn("raise\n\n    def process(self, element: Tuple[str, Dict[str, Any]]):", common_source)
 
+    def test_fetch_full_qas_input_keying_errors_are_tagged_not_inline_lambda_failures(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        common_source = read("dataflow/pipelines/streaming/transforms/common.py")
+
+        self.assertIn("class KeyProfileForQAFetchDoFn", common_source)
+        self.assertIn("OUTPUT_ERROR_TAG = 'error'", common_source)
+        self.assertIn("Missing user_id for Q&A fetch keying", common_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", common_source)
+        self.assertIn("beam.ParDo(KeyProfileForQAFetchDoFn()).with_outputs(", common_source)
+        self.assertIn("KeyProfileForQAFetchDoFn.OUTPUT_ERROR_TAG, main='main'", common_source)
+        self.assertIn("FlattenFetchFullQAsErrors", common_source)
+        self.assertIn("return FetchFullQAsResult(main=fetch_results['main'], error=combined_errors)", common_source)
+        self.assertIn("fetch_qas_errors | \"DLQ_FetchQAsErrors\" >> dlq_sink(\"FetchQAsErrors\")", streaming_source)
+        self.assertNotIn("| 'KeyByUserForQAFetch' >> beam.Map(lambda x: (x['user_id'], x))", common_source)
+
     def test_profile_summary_setup_failures_are_tagged_not_raised(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         summary_source = read("dataflow/pipelines/streaming/transforms/profile_summarization.py")

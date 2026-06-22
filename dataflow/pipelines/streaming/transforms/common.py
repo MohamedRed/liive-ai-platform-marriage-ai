@@ -10,7 +10,7 @@ from apache_beam.io.filesystems import FileSystems
 from google.protobuf.timestamp_pb2 import Timestamp # Needed for DLQ
 from ..common.definitions import COLLECTIONS # Ensure COLLECTIONS is available
 from google.cloud import firestore
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, NamedTuple
 
 # Configure logging (can be configured once in the main script)
 # logger = logging.getLogger(__name__) # Each module can get its own logger if needed
@@ -359,6 +359,42 @@ FETCH_FULL_QAS_SUCCESS = 'FetchFullQAsSuccess'
 FETCH_FULL_QAS_ERRORS = 'FetchFullQAsErrors'
 FETCH_FULL_QAS_NOT_FOUND = 'FetchFullQAsNotFound'
 
+
+class FetchFullQAsResult(NamedTuple):
+    main: Any
+    error: Any
+
+
+class KeyProfileForQAFetchDoFn(beam.DoFn):
+    """Keys profile-processing outputs for full Q&A fetch."""
+
+    OUTPUT_ERROR_TAG = 'error'
+
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        self.error_counter = Metrics.counter('KeyProfileForQAFetchDoFn', FETCH_FULL_QAS_ERRORS)
+
+    def process(self, element: Dict[str, Any]):
+        if not isinstance(element, dict):
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Invalid profile payload for Q&A fetch keying",
+                "element": element,
+            })
+            return
+
+        user_id = element.get('user_id')
+        if not user_id:
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Missing user_id for Q&A fetch keying",
+                "element": element,
+            })
+            return
+
+        yield (user_id, element)
+
+
 class FetchFullQAsDoFn(beam.DoFn):
     """Fetches the full Q&A document (questions_answers map) for a user from Firestore."""
     OUTPUT_ERROR_TAG = 'error'
@@ -461,11 +497,20 @@ def FetchFullQAsForUser(pcoll: beam.PCollection[Dict[str,Any]],
                 from the input element, now augmented with a 'questions_answers' map.
                 And 'error' tag for errors.
     """
-    return (
+    keyed_results = (
         pcoll
-        # Key the input PCollection by user_id, passing through the original element as value
-        | 'KeyByUserForQAFetch' >> beam.Map(lambda x: (x['user_id'], x)) 
+        | 'KeyByUserForQAFetch' >> beam.ParDo(KeyProfileForQAFetchDoFn()).with_outputs(
+            KeyProfileForQAFetchDoFn.OUTPUT_ERROR_TAG, main='main'
+        )
+    )
+    fetch_results = (
+        keyed_results['main']
         | 'FetchQADocument' >> beam.ParDo(
             FetchFullQAsDoFn(project_id=project_id, qa_collection_name=qa_collection_name)
           ).with_outputs(FetchFullQAsDoFn.OUTPUT_ERROR_TAG, main='main')
-    ) 
+    )
+    combined_errors = (
+        (keyed_results[KeyProfileForQAFetchDoFn.OUTPUT_ERROR_TAG], fetch_results[FetchFullQAsDoFn.OUTPUT_ERROR_TAG])
+        | 'FlattenFetchFullQAsErrors' >> beam.Flatten()
+    )
+    return FetchFullQAsResult(main=fetch_results['main'], error=combined_errors)
