@@ -81,6 +81,7 @@ from .transforms.match_percentage import CalculateAdjustedTopMatchPercentage
 from .transforms.llm_rerank_input import PrepareForLLMRerank
 from .transforms.final_selection_input import FlattenFinalSelectionInput
 from .transforms.lying_score_input import FormatForLyingScore
+from .transforms.scoreboard_update_input import ExtractTriggeringUserIdAfterScoreboardUpdate
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -392,9 +393,13 @@ def run_streaming_pipeline(argv=None):
         # 7. Prepare for Fetching Top Candidates only after successful
         # scoreboard writes. This prevents reranking from reading candidate
         # scores before the fresh evidence for this event has been committed.
-        distinct_triggering_users = (
+        triggering_user_extraction_results = (
             scoreboard_update_results.main
-            | "ExtractTriggeringUserIdAfterScoreboardUpdate" >> beam.Map(lambda x: x['triggering_user_id'])
+            | "ExtractTriggeringUserIdAfterScoreboardUpdate" >> ExtractTriggeringUserIdAfterScoreboardUpdate()
+        )
+        triggering_user_extraction_results.error | "DLQ_ScoreboardTriggerUserExtractionErrors" >> dlq_sink("ScoreboardTriggerUserExtractionErrors")
+        distinct_triggering_users = (
+            triggering_user_extraction_results.main
             | "DistinctTriggeringUsersAfterScoreboardUpdate" >> beam.Distinct()
         )
         distinct_triggering_users | "DebugLogDistinctUsersForRerank" >> DebugLogDoFn(label="DistinctTriggeringUsersForRerank")

@@ -1185,7 +1185,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
 
         self.assertIn("scoreboard_update_results.main", streaming_source)
-        self.assertIn("'triggering_user_id'", streaming_source)
+        self.assertIn("ExtractTriggeringUserIdAfterScoreboardUpdate", streaming_source)
         self.assertIn("DistinctTriggeringUsersAfterScoreboardUpdate", streaming_source)
         self.assertNotIn(
             "processed_profile_data\n            | \"ExtractTriggeringUserIdForScoreboardFetch\"",
@@ -1199,6 +1199,22 @@ class BackendProductionReadinessTests(unittest.TestCase):
             streaming_source.index('| "ExtractTriggeringUserIdAfterScoreboardUpdate"'),
             streaming_source.index('| "FetchTopCandidatesFromScoreboard"'),
         )
+
+    def test_scoreboard_update_trigger_user_extraction_errors_are_tagged(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        extraction_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/scoreboard_update_input.py"
+        self.assertTrue(extraction_path.exists(), "scoreboard update input transform must exist")
+        extraction_source = extraction_path.read_text()
+
+        self.assertIn("class ExtractTriggeringUserIdAfterScoreboardUpdateDoFn", extraction_source)
+        self.assertIn("ExtractTriggeringUserIdAfterScoreboardUpdateDoFn.OUTPUT_ERROR_TAG", extraction_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", extraction_source)
+        self.assertIn('"operation": "extract_triggering_user_after_scoreboard_update"', extraction_source)
+        self.assertIn('"Missing triggering_user_id after scoreboard update"', extraction_source)
+        self.assertIn('"element": element', extraction_source)
+        self.assertIn("triggering_user_extraction_results.error | \"DLQ_ScoreboardTriggerUserExtractionErrors\" >> dlq_sink(\"ScoreboardTriggerUserExtractionErrors\")", streaming_source)
+        self.assertIn("distinct_triggering_users = (\n            triggering_user_extraction_results.main", streaming_source)
+        self.assertNotIn("beam.Map(lambda x: x['triggering_user_id'])", streaming_source)
 
     def test_final_match_eligibility_setup_failures_are_tagged_not_raised(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
