@@ -144,6 +144,24 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn(".with_outputs(ScheduleDelayedMatching", source)
         self.assertNotIn(".with_outputs(HandleMatchActions", source)
 
+    def test_lying_score_input_format_errors_are_tagged_not_lambda_failures(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        formatter_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/lying_score_input.py"
+        self.assertTrue(formatter_path.exists(), "lying score input formatter transform must exist")
+        formatter_source = formatter_path.read_text()
+
+        self.assertIn("class FormatForLyingScoreDoFn", formatter_source)
+        self.assertIn("FormatForLyingScoreDoFn.OUTPUT_ERROR_TAG", formatter_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", formatter_source)
+        self.assertIn('"operation": "format_for_lying_score"', formatter_source)
+        self.assertIn('"Missing fields for lying score input"', formatter_source)
+        self.assertIn('"profile_id": user_id', formatter_source)
+        self.assertIn('"qa_id": question_id', formatter_source)
+        self.assertIn("FormatForLyingScore", streaming_source)
+        self.assertIn("lying_score_input_results.error | \"DLQ_LyingScoreInputErrors\" >> dlq_sink(\"LyingScoreInputErrors\")", streaming_source)
+        self.assertIn("lying_score_input = lying_score_input_results.main", streaming_source)
+        self.assertNotIn("| \"FormatForLyingScore\" >> beam.Map(\n                lambda x:", streaming_source)
+
     def test_streaming_lying_score_errors_are_tagged_and_written_to_dlq(self):
         source = read("dataflow/pipelines/streaming/streaming.py")
         reranking_source = read("dataflow/pipelines/streaming/transforms/reranking.py")

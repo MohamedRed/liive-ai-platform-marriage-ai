@@ -80,6 +80,7 @@ from .transforms.answer_parsing import ParseAnswerIntoStatements
 from .transforms.match_percentage import CalculateAdjustedTopMatchPercentage
 from .transforms.llm_rerank_input import PrepareForLLMRerank
 from .transforms.final_selection_input import FlattenFinalSelectionInput
+from .transforms.lying_score_input import FormatForLyingScore
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -276,19 +277,13 @@ def run_streaming_pipeline(argv=None):
 
         # --- Lying Score Calculation Branch (Updates Q&As in Firestore) ---
         # Input: parsed_event_data (which now contains 'user_id', 'question_id', 'question_text', 'answer_text')
-        lying_score_input = (
+        lying_score_input_results = (
             parsed_event_data # Use parsed_event_data directly
-            | "FormatForLyingScore" >> beam.Map(
-                lambda x: {
-                    'profile_id': x['user_id'], 
-                    'qa_id': x['question_id'], 
-                    'qa_data': {
-                        'question': x.get('question_text'), 
-                        'answer': x.get('answer_text')
-                    }
-                }
-            )
+            | "FormatForLyingScore" >> FormatForLyingScore()
         )
+        lying_score_input_results.error | "DLQ_LyingScoreInputErrors" >> dlq_sink("LyingScoreInputErrors")
+        lying_score_input = lying_score_input_results.main
+
         lying_score_input | "DebugLogLyingScoreInput" >> DebugLogDoFn(label="LyingScoreInput")
 
         calculated_lying_scores_results = (
