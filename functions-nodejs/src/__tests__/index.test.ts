@@ -284,6 +284,10 @@ describe("Cloud Functions Tests", () => {
       expect(myFunctions.marriageFunctions.reviewMarriageReport).toBeDefined();
     });
 
+    it("resolveMarriageSafetyEscalation should be defined", () => {
+      expect(myFunctions.marriageFunctions.resolveMarriageSafetyEscalation).toBeDefined();
+    });
+
     it("processMatchAcceptanceNotifications should be defined", () => {
       expect(myFunctions.marriageFunctions.processMatchAcceptanceNotifications).toBeDefined();
     });

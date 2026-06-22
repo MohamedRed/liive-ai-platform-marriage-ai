@@ -42,10 +42,12 @@ import {
 } from "./request-validation";
 import {
   buildMarriageSafetyBlockWrite,
+  buildMarriageSafetyEscalationResolutionWrite,
   buildMarriageSafetyReportReviewWrite,
   buildMarriageSafetyReportWrite,
   parseBlockMarriageUserPayload,
   parseReportMarriageUserPayload,
+  parseResolveMarriageEscalationPayload,
   parseReviewMarriageReportPayload,
   requireMarriageSafetyModerator,
   USER_SAFETY_BLOCKS_COLLECTION,
@@ -409,6 +411,45 @@ export const reviewMarriageReport = onCall(async (request) => {
     }
     logger.error(`Error reviewing marriage safety report ${payload.reportId} by ${moderatorUserId}:`, error);
     throw new HttpsError("internal", "Failed to review marriage safety report");
+  }
+});
+
+export const resolveMarriageSafetyEscalation = onCall(async (request) => {
+  const moderatorUserId = requireMarriageSafetyModerator(request.auth);
+  const payload = parseResolveMarriageEscalationPayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    return await db.runTransaction(async (transaction) => {
+      const escalationRef = db.collection(USER_SAFETY_ESCALATIONS_COLLECTION).doc(payload.escalationId);
+      const escalationDoc = await transaction.get(escalationRef);
+      if (!escalationDoc.exists) {
+        throw new HttpsError("not-found", "Marriage safety escalation is not available for resolution.");
+      }
+
+      const escalationResolutionWrite = buildMarriageSafetyEscalationResolutionWrite({
+        moderatorUserId,
+        payload,
+        existingEscalation: escalationDoc.data() ?? {},
+        timestamp,
+      });
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+
+      transaction.set(escalationRef, escalationResolutionWrite.escalationUpdate, { merge: true });
+      transaction.set(auditRef, escalationResolutionWrite.auditEvent);
+
+      return {
+        status: payload.status,
+        escalationId: payload.escalationId,
+      };
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error resolving marriage safety escalation ${payload.escalationId} by ${moderatorUserId}:`, error);
+    throw new HttpsError("internal", "Failed to resolve marriage safety escalation");
   }
 });
 

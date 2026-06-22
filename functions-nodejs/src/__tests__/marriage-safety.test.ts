@@ -1,9 +1,11 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import {
   buildMarriageSafetyBlockWrite,
+  buildMarriageSafetyEscalationResolutionWrite,
   buildMarriageSafetyReportReviewWrite,
   buildMarriageSafetyReportWrite,
   parseBlockMarriageUserPayload,
+  parseResolveMarriageEscalationPayload,
   parseReviewMarriageReportPayload,
   parseReportMarriageUserPayload,
   requireMarriageSafetyModerator,
@@ -299,6 +301,79 @@ describe("marriage safety block/report APIs", () => {
       type: "marriage_report_reviewed",
       status: "escalated",
       resolution: "escalated",
+    });
+    expect(write.auditEvent).not.toHaveProperty("moderatorNote");
+  });
+
+  it("parses escalation resolution payloads with bounded moderator notes", () => {
+    expect(parseResolveMarriageEscalationPayload({
+      escalationId: " escalation-1 ",
+      status: " resolved ",
+      resolution: "  duplicate_report  ",
+      moderatorNote: "  Already handled through report-2  ",
+      idempotencyKey: " escalation-resolution-1 ",
+    })).toEqual({
+      escalationId: "escalation-1",
+      status: "resolved",
+      resolution: "duplicate_report",
+      moderatorNote: "Already handled through report-2",
+      idempotencyKey: "escalation-resolution-1",
+    });
+  });
+
+  it("rejects malformed escalation resolution payloads", () => {
+    for (const payload of [
+      undefined,
+      null,
+      {},
+      { escalationId: "" },
+      { escalationId: "escalation-1", status: "open" },
+      { escalationId: "escalation-1", status: "resolved", resolution: "" },
+      { escalationId: "escalation-1", status: "resolved", moderatorNote: "x".repeat(2001) },
+      { escalationId: "escalation-1", status: "resolved", idempotencyKey: "x".repeat(129) },
+    ]) {
+      expect(() => parseResolveMarriageEscalationPayload(payload)).toThrow(HttpsError);
+    }
+  });
+
+  it("builds escalation resolution updates without leaking moderator notes to audit logs", () => {
+    const write = buildMarriageSafetyEscalationResolutionWrite({
+      moderatorUserId: " moderator-1 ",
+      payload: {
+        escalationId: "escalation-1",
+        status: "resolved",
+        resolution: "duplicate_report",
+        moderatorNote: "Sensitive closure note",
+        idempotencyKey: "escalation-resolution-1",
+      },
+      existingEscalation: {
+        reportId: "report-1",
+        targetUserId: "target-user",
+        category: "safety_concern",
+      },
+      timestamp,
+    });
+
+    expect(write.escalationUpdate).toMatchObject({
+      status: "resolved",
+      resolution: "duplicate_report",
+      moderatorNote: "Sensitive closure note",
+      resolvedBy: "moderator-1",
+      resolvedAt: timestamp,
+      updatedAt: timestamp,
+      idempotencyKey: "escalation-resolution-1",
+    });
+    expect(write.auditEvent).toMatchObject({
+      type: "marriage_escalation_resolved",
+      moderatorUserId: "moderator-1",
+      escalationId: "escalation-1",
+      reportId: "report-1",
+      targetUserId: "target-user",
+      category: "safety_concern",
+      status: "resolved",
+      resolution: "duplicate_report",
+      idempotencyKey: "escalation-resolution-1",
+      createdAt: timestamp,
     });
     expect(write.auditEvent).not.toHaveProperty("moderatorNote");
   });

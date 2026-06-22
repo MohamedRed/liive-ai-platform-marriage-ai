@@ -34,6 +34,11 @@ const REPORT_RESOLUTIONS = new Set([
   "other",
 ]);
 
+const ESCALATION_RESOLUTION_STATUSES = new Set([
+  "resolved",
+  "dismissed",
+]);
+
 export interface BlockMarriageUserPayload {
   targetUserId: string;
   reason?: string;
@@ -51,6 +56,14 @@ export interface ReviewMarriageReportPayload {
   reportId: string;
   status: string;
   resolution?: string;
+  moderatorNote?: string;
+  idempotencyKey?: string;
+}
+
+export interface ResolveMarriageEscalationPayload {
+  escalationId: string;
+  status: string;
+  resolution: string;
   moderatorNote?: string;
   idempotencyKey?: string;
 }
@@ -84,6 +97,13 @@ export interface MarriageSafetyReportReviewWriteInput {
   timestamp: unknown;
 }
 
+export interface MarriageSafetyEscalationResolutionWriteInput {
+  moderatorUserId: string;
+  payload: ResolveMarriageEscalationPayload;
+  existingEscalation: Record<string, unknown>;
+  timestamp: unknown;
+}
+
 export interface MarriageSafetyReportReviewWrite {
   reportUpdate: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
@@ -91,6 +111,11 @@ export interface MarriageSafetyReportReviewWrite {
   targetUserUpdate?: Record<string, unknown>;
   escalationRecord?: Record<string, unknown>;
   warningRecord?: Record<string, unknown>;
+}
+
+export interface MarriageSafetyEscalationResolutionWrite {
+  escalationUpdate: Record<string, unknown>;
+  auditEvent: Record<string, unknown>;
 }
 
 function trimOptionalString(value: unknown): string | undefined {
@@ -215,6 +240,26 @@ export function parseReviewMarriageReportPayload(data: unknown): ReviewMarriageR
     reportId: trimRequiredString(payload.reportId, "reportId"),
     status,
     ...(resolution ? { resolution } : {}),
+    moderatorNote: boundedOptionalString(payload.moderatorNote, "moderatorNote", MAX_MODERATOR_NOTE_LENGTH),
+    idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
+  };
+}
+
+export function parseResolveMarriageEscalationPayload(data: unknown): ResolveMarriageEscalationPayload {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new HttpsError("invalid-argument", "Escalation resolution payload is required.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  const status = trimRequiredString(payload.status, "status");
+  if (!ESCALATION_RESOLUTION_STATUSES.has(status)) {
+    throw new HttpsError("invalid-argument", "status is not supported.");
+  }
+
+  return {
+    escalationId: trimRequiredString(payload.escalationId, "escalationId"),
+    status,
+    resolution: trimRequiredString(payload.resolution, "resolution"),
     moderatorNote: boundedOptionalString(payload.moderatorNote, "moderatorNote", MAX_MODERATOR_NOTE_LENGTH),
     idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
   };
@@ -350,6 +395,40 @@ export function buildMarriageSafetyReportReviewWrite(
       ...(category ? { category } : {}),
       status: payload.status,
       ...(payload.resolution ? { resolution: payload.resolution } : {}),
+      ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+      createdAt: input.timestamp,
+    },
+  };
+}
+
+export function buildMarriageSafetyEscalationResolutionWrite(
+  input: MarriageSafetyEscalationResolutionWriteInput,
+): MarriageSafetyEscalationResolutionWrite {
+  const moderatorUserId = trimRequiredString(input.moderatorUserId, "moderatorUserId");
+  const payload = parseResolveMarriageEscalationPayload(input.payload);
+  const reportId = trimOptionalString(input.existingEscalation.reportId);
+  const targetUserId = trimOptionalString(input.existingEscalation.targetUserId);
+  const category = trimOptionalString(input.existingEscalation.category);
+
+  return {
+    escalationUpdate: {
+      status: payload.status,
+      resolution: payload.resolution,
+      ...(payload.moderatorNote ? { moderatorNote: payload.moderatorNote } : {}),
+      ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+      resolvedBy: moderatorUserId,
+      resolvedAt: input.timestamp,
+      updatedAt: input.timestamp,
+    },
+    auditEvent: {
+      type: "marriage_escalation_resolved",
+      moderatorUserId,
+      escalationId: payload.escalationId,
+      ...(reportId ? { reportId } : {}),
+      ...(targetUserId ? { targetUserId } : {}),
+      ...(category ? { category } : {}),
+      status: payload.status,
+      resolution: payload.resolution,
       ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
       createdAt: input.timestamp,
     },
