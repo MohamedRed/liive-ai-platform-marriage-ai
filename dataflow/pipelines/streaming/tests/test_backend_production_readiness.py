@@ -409,6 +409,18 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Clients not initialized in ScheduleDelayedMatchingDoFn", scheduling_source)
         self.assertNotIn("Clients not initialized in HandleMatchActionsDoFn", scheduling_source)
 
+    def test_trigger_event_parser_dlq_error_paths_do_not_assume_pubsub_data(self):
+        common_source = read("dataflow/pipelines/streaming/transforms/common.py")
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+
+        self.assertIn("class ParseFirestoreTriggerEventDoFn", common_source)
+        self.assertIn("def _raw_data_for_dlq", common_source)
+        self.assertIn("raw_data = self._raw_data_for_dlq(element)", common_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", common_source)
+        self.assertIn("parsing_errors | \"DLQ_ParsingErrors\" >> dlq_sink(\"ParsingErrors\")", streaming_source)
+        self.assertNotIn("element.data[:200]", common_source)
+        self.assertNotIn("repr(element.data)", common_source)
+
     def test_fetch_user_history_setup_failures_are_tagged_not_generic(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         common_source = read("dataflow/pipelines/streaming/transforms/common.py")

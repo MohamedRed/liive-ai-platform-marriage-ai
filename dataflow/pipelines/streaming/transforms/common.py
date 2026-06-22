@@ -62,6 +62,11 @@ class ParseFirestoreTriggerEventDoFn(beam.DoFn):
         self.error_counter = Metrics.counter('ParseFirestoreTriggerEventDoFn', MetricNames.ERRORS)
         self.missing_data_counter = Metrics.counter('ParseFirestoreTriggerEventDoFn', 'missing_trigger_data')
 
+    def _raw_data_for_dlq(self, element: Any) -> str:
+        """Return a safe representation of Pub/Sub data for parser DLQ payloads."""
+        raw_data = getattr(element, 'data', element)
+        return repr(raw_data)
+
     def process(self, element: beam.io.ReadFromPubSub.PubsubMessage):
         try:
             # Decode message data
@@ -69,9 +74,10 @@ class ParseFirestoreTriggerEventDoFn(beam.DoFn):
                 message_data_str = element.data.decode('utf-8')
                 event_data = json.loads(message_data_str)
             except (AttributeError, UnicodeDecodeError, json.JSONDecodeError) as e:
-                self.logger.error(f"Failed to decode/parse Pub/Sub message data: {e}. Data: {element.data[:200]}...", exc_info=True)
+                raw_data = self._raw_data_for_dlq(element)
+                self.logger.error(f"Failed to decode/parse Pub/Sub message data: {e}. Data: {raw_data[:200]}...", exc_info=True)
                 self.error_counter.inc()
-                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': f'Message parsing failed: {e}', 'raw_data': repr(element.data)})
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': f'Message parsing failed: {e}', 'raw_data': raw_data})
                 return
 
             # Extract required fields (adjust based on actual event structure)
@@ -108,9 +114,10 @@ class ParseFirestoreTriggerEventDoFn(beam.DoFn):
 
         except Exception as e:
             self.error_counter.inc()
+            raw_data = self._raw_data_for_dlq(element)
             self.logger.error(f"Unexpected error parsing trigger event: {e}", exc_info=True)
             # Output raw data to DLQ on unexpected errors
-            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': f'Unexpected error: {e}', 'raw_data': repr(element.data)})
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {'error': f'Unexpected error: {e}', 'raw_data': raw_data})
 
 class ExtractUserIDDoFn(beam.DoFn):
     def __init__(self):
