@@ -82,6 +82,7 @@ from .transforms.llm_rerank_input import PrepareForLLMRerank
 from .transforms.final_selection_input import FlattenFinalSelectionInput
 from .transforms.lying_score_input import FormatForLyingScore
 from .transforms.scoreboard_update_input import ExtractTriggeringUserIdAfterScoreboardUpdate
+from .transforms.match_side_effect_input import FilterNonEmptyMatchesForSideEffects
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -702,10 +703,12 @@ def run_streaming_pipeline(argv=None):
         write_match_errors | "DLQ_WriteMatchErrors" >> dlq_sink("WriteMatchErrors")
         successful_match_writes = write_match_results.main
 
-        non_empty_matches_for_side_effects = (
+        side_effect_filter_results = (
             successful_match_writes
-            | "FilterNonEmptyMatchesForSideEffects" >> beam.Filter(lambda element: bool(element.get('matches')))
+            | "FilterNonEmptyMatchesForSideEffects" >> FilterNonEmptyMatchesForSideEffects()
         )
+        side_effect_filter_results.error | "DLQ_MatchSideEffectInputErrors" >> dlq_sink("MatchSideEffectInputErrors")
+        non_empty_matches_for_side_effects = side_effect_filter_results.main
 
         # Schedule Delayed Matching
         schedule_results = (

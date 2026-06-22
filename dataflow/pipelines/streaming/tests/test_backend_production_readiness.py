@@ -1313,11 +1313,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
 
     def test_empty_final_matches_are_written_but_do_not_trigger_side_effects(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        side_effect_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/match_side_effect_input.py"
+        self.assertTrue(side_effect_path.exists(), "side-effect input filter transform must exist")
+        side_effect_source = side_effect_path.read_text()
 
         self.assertIn("matches_with_percentage", streaming_source)
         self.assertIn("non_empty_matches_for_side_effects", streaming_source)
-        self.assertIn('| "FilterNonEmptyMatchesForSideEffects"', streaming_source)
-        self.assertIn("bool(element.get('matches'))", streaming_source)
+        self.assertIn("class FilterNonEmptyMatchesForSideEffectsDoFn", side_effect_source)
+        self.assertIn("FilterNonEmptyMatchesForSideEffectsDoFn.OUTPUT_ERROR_TAG", side_effect_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", side_effect_source)
+        self.assertIn('"operation": "filter_non_empty_matches_for_side_effects"', side_effect_source)
+        self.assertIn('"Malformed match write output before side effects"', side_effect_source)
+        self.assertIn("matches=matches", side_effect_source)
+        self.assertIn("side_effect_filter_results.error | \"DLQ_MatchSideEffectInputErrors\" >> dlq_sink(\"MatchSideEffectInputErrors\")", streaming_source)
+        self.assertIn("non_empty_matches_for_side_effects = side_effect_filter_results.main", streaming_source)
+        self.assertNotIn("beam.Filter(lambda element: bool(element.get('matches')))", streaming_source)
         self.assertLess(
             streaming_source.index('| "CalculateAdjustedTopMatchPercentage"'),
             streaming_source.index('| "WriteMatchesToFirestore"'),
@@ -1410,7 +1420,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("successful_match_writes = write_match_results.main", streaming_source)
         self.assertIn("non_empty_matches_for_side_effects", streaming_source)
         side_effect_filter_block = streaming_source[
-            streaming_source.index("non_empty_matches_for_side_effects = ("):
+            streaming_source.index("side_effect_filter_results = ("):
             streaming_source.index("# Schedule Delayed Matching")
         ]
         self.assertIn("successful_match_writes", side_effect_filter_block)
