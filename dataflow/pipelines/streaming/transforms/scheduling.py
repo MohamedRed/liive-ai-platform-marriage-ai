@@ -152,13 +152,29 @@ class ScheduleDelayedMatchingDoFn(beam.DoFn):
 
             # Store task info in Firestore for potential cancellation/tracking
             # Use a dedicated collection, e.g., 'delayed_matching_tasks'
-            task_tracking_ref = self.db.collection('delayed_matching_tasks').document(user_id)
-            task_tracking_ref.set({
-                'taskName': response.name,
-                'scheduledTime': firestore.Timestamp.fromtimestamp(schedule_timestamp),
-                'status': 'SCHEDULED', # Track status
-                'createdAt': firestore.SERVER_TIMESTAMP
-            }, merge=True) # Use merge=True to update if exists
+            try:
+                task_tracking_ref = self.db.collection('delayed_matching_tasks').document(user_id)
+                task_tracking_ref.set({
+                    'taskName': response.name,
+                    'scheduledTime': firestore.Timestamp.fromtimestamp(schedule_timestamp),
+                    'status': 'SCHEDULED', # Track status
+                    'createdAt': firestore.SERVER_TIMESTAMP
+                }, merge=True) # Use merge=True to update if exists
+            except Exception as tracking_error:
+                self.error_counter.inc()
+                self.logger.error(
+                    f"Failed to track delayed matching task for user {user_id}: {tracking_error}",
+                    exc_info=True,
+                )
+                yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                    "error_message": f"Failed to track delayed matching task for user {user_id}: {tracking_error}",
+                    "operation": "track_delayed_matching_task",
+                    "task_name": response.name,
+                    "scheduled_timestamp": schedule_timestamp,
+                    "user_id": user_id,
+                    "element": element,
+                    "traceback": traceback.format_exc(),
+                })
 
             # Yield the original element to allow further processing if needed
             yield element

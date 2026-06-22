@@ -428,6 +428,32 @@ class BackendProductionReadinessTests(unittest.TestCase):
         )
         self.assertNotIn("No query_time found for user {user_id} in element. Using current time + delay for scheduling.", scheduling_source)
 
+    def test_schedule_delayed_matching_tracking_write_failures_are_tagged_after_task_creation(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+
+        self.assertIn("response = self.tasks_client.create_task(", scheduling_source)
+        self.assertIn("task_tracking_ref = self.db.collection('delayed_matching_tasks').document(user_id)", scheduling_source)
+        self.assertIn('"operation": "track_delayed_matching_task"', scheduling_source)
+        self.assertIn('"task_name": response.name', scheduling_source)
+        self.assertIn('"scheduled_timestamp": schedule_timestamp', scheduling_source)
+        self.assertIn('"error_message": f"Failed to track delayed matching task for user {user_id}: {tracking_error}"', scheduling_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {", scheduling_source)
+        self.assertIn("yield element", scheduling_source)
+        self.assertIn("schedule_errors | \"DLQ_ScheduleErrors\" >> dlq_sink(\"ScheduleErrors\")", streaming_source)
+        self.assertLess(
+            scheduling_source.index("response = self.tasks_client.create_task("),
+            scheduling_source.index('"operation": "track_delayed_matching_task"'),
+        )
+        self.assertLess(
+            scheduling_source.index('"operation": "track_delayed_matching_task"'),
+            scheduling_source.index("# Yield the original element to allow further processing if needed"),
+        )
+        self.assertNotIn("Failed to schedule delayed matching task for user {user_id}: {str(e)}", scheduling_source[
+            scheduling_source.index("task_tracking_ref = self.db.collection('delayed_matching_tasks').document(user_id)"):
+            scheduling_source.index("# Yield the original element to allow further processing if needed")
+        ])
+
     def test_handle_match_actions_validates_matches_shape_before_side_effects(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
