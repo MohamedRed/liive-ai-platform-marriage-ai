@@ -1152,6 +1152,23 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn('"fieldPath": "status"', indexes)
         self.assertIn('"fieldPath": "createdAt"', indexes)
 
+    def test_notification_device_registration_is_server_validated_and_settings_are_server_only(self):
+        source = read("functions-nodejs/src/domains/marriage/index.ts")
+        notification_source = read("functions-nodejs/src/domains/marriage/notification-settings.ts")
+        rules = read("firestore.rules")
+
+        self.assertIn("registerNotificationDevice", source)
+        self.assertIn("parseRegisterNotificationDevicePayload", notification_source)
+        self.assertIn("buildNotificationDeviceRegistrationWrite", notification_source)
+        self.assertIn("notification_device_registered", notification_source)
+        self.assertIn("fcmTokenUpdatedAt", notification_source)
+        self.assertIn("LEGACY_COLLECTIONS.USER_SETTINGS", source)
+        self.assertIn("transaction.set(settingsRef", source)
+        self.assertIn("transaction.set(auditRef", source)
+        self.assertIn("match /USER_SETTINGS/{userId}", rules)
+        self.assertIn("allow read: if isOwner(userId)", rules)
+        self.assertIn("allow write: if false", rules)
+
     def test_supervised_chat_has_server_authorized_write_and_read_paths(self):
         source = read("functions-nodejs/src/domains/marriage/index.ts")
         supervised_source = read("functions-nodejs/src/domains/marriage/supervised-chat.ts")

@@ -47,6 +47,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // User settings include notification device tokens. Clients can read their
+    // own effective settings, but device registration and preferences writes go
+    // through vetted Cloud Functions for validation/auditing.
+    match /USER_SETTINGS/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
     // Wali relationship records: readable by the user or wali named on the doc.
     match /WALI_INFO/{waliInfoId} {
       allow read: if isSignedIn()

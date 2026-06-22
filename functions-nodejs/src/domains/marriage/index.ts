@@ -29,6 +29,10 @@ import {
   processPendingMatchAcceptanceNotificationsHandler,
 } from "./match-notifications";
 import {
+  buildNotificationDeviceRegistrationWrite,
+  parseRegisterNotificationDevicePayload,
+} from "./notification-settings";
+import {
   parseUpdateUserAnswersPayload,
   requireAuthenticatedUid,
 } from "./request-validation";
@@ -226,6 +230,41 @@ export async function updateWaliVerificationStatus(
     throw new Error("Failed to update Wali verification");
   }
 }
+
+export const registerNotificationDevice = onCall(async (request) => {
+  const userID = requireAuthenticatedUid(request.auth);
+  const payload = parseRegisterNotificationDevicePayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const settingsRef = db.collection(LEGACY_COLLECTIONS.USER_SETTINGS).doc(userID);
+      const settingsDoc = await transaction.get(settingsRef);
+      const notificationWrite = buildNotificationDeviceRegistrationWrite({
+        userId: userID,
+        payload,
+        existingSettings: settingsDoc.exists ? settingsDoc.data() : undefined,
+        timestamp,
+      });
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+
+      transaction.set(settingsRef, notificationWrite.settingsRecord, { merge: true });
+      transaction.set(auditRef, notificationWrite.auditEvent);
+    });
+
+    return {
+      status: "registered",
+      platform: payload.platform ?? null,
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error registering notification device for ${userID}:`, error);
+    throw new HttpsError("internal", "Failed to register notification device");
+  }
+});
 
 export const acceptMatch = onCall(async (request) => {
   const userID = requireAuthenticatedUid(request.auth);
