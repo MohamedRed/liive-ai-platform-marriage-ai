@@ -1179,6 +1179,17 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("raise RuntimeError(f\"FinalMatchEligibilityGateDoFn Firestore setup failed", final_gate_source)
         self.assertNotIn("Firestore client not initialized in final eligibility gate", final_gate_source)
 
+    def test_final_match_eligibility_dlqs_missing_triggering_profile(self):
+        final_gate_source = read("dataflow/pipelines/streaming/transforms/final_eligibility.py")
+
+        self.assertIn('"error_message": "Triggering profile unavailable for final eligibility gate"', final_gate_source)
+        self.assertIn('"operation": "fetch_triggering_profile"', final_gate_source)
+        self.assertIn('"triggering_user_id": user_id', final_gate_source)
+        self.assertIn('"matches": matches', final_gate_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {", final_gate_source)
+        self.assertNotIn('filtered_element = {**element, "matches": []}', final_gate_source)
+        self.assertNotIn("yield filtered_element\n                return", final_gate_source)
+
     def test_final_match_write_and_actions_are_authoritatively_eligibility_gated(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         final_gate_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/final_eligibility.py"

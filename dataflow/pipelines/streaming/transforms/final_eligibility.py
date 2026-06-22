@@ -105,14 +105,18 @@ class FinalMatchEligibilityGateDoFn(beam.DoFn):
         try:
             triggering_profile = self._fetch_doc_data(self.profiles_collection, user_id)
             if not triggering_profile:
-                self.logger.warning(
-                    "FinalMatchEligibilityGateDoFn: triggering profile %s missing; filtering all matches.",
+                self.logger.error(
+                    "FinalMatchEligibilityGateDoFn: triggering profile %s unavailable; cannot apply final hard gate.",
                     user_id,
                 )
-                filtered_element = {**element, "matches": []}
-                if matches:
-                    self.filtered_counter.inc(len(matches))
-                yield filtered_element
+                self.error_counter.inc()
+                yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                    "error_message": "Triggering profile unavailable for final eligibility gate",
+                    "triggering_user_id": user_id,
+                    "operation": "fetch_triggering_profile",
+                    "matches": matches,
+                    "element": element,
+                })
                 return
 
             filtered_matches = []
