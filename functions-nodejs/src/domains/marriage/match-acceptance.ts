@@ -1,5 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 
+export const MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION = "MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX";
+
 interface WaliRelationLike {
   userId?: unknown;
   waliId?: unknown;
@@ -26,6 +28,7 @@ export interface AcceptedMatchUpdateResult {
   matches: Record<string, unknown>[];
   acceptedMatch: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
+  notificationOutboxEvent?: Record<string, unknown>;
 }
 
 function trimOptionalString(value: unknown): string | undefined {
@@ -120,17 +123,38 @@ export function buildAcceptedMatchUpdate(input: AcceptedMatchUpdateInput): Accep
     throw new HttpsError("not-found", "Match candidate is not available for acceptance.");
   }
 
+  const auditEvent = {
+    type: "match_acceptance",
+    actorUserId: userId,
+    matchedUserId,
+    waliId,
+    notifyWali: input.notifyWali,
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+    createdAt: input.timestamp,
+  };
+
   return {
     matches,
     acceptedMatch,
-    auditEvent: {
-      type: "match_acceptance",
-      actorUserId: userId,
-      matchedUserId,
-      waliId,
-      notifyWali: input.notifyWali,
-      idempotencyKey: input.idempotencyKey,
-      createdAt: input.timestamp,
-    },
+    auditEvent,
+    ...(input.notifyWali ? {
+      notificationOutboxEvent: {
+        type: "wali_match_acceptance_requested",
+        status: "pending",
+        attempts: 0,
+        userId,
+        matchedUserId,
+        waliId,
+        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+        payload: {
+          userId,
+          matchedUserId,
+          waliId,
+          notificationType: "match_acceptance_requested",
+        },
+        createdAt: input.timestamp,
+        updatedAt: input.timestamp,
+      },
+    } : {}),
   };
 }

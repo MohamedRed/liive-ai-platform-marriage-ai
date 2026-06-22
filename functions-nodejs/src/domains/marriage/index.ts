@@ -22,6 +22,7 @@ import {
 } from "./matching-events";
 import {
   buildAcceptedMatchUpdate,
+  MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION,
   parseAcceptMatchPayload,
 } from "./match-acceptance";
 import {
@@ -256,6 +257,11 @@ export const acceptMatch = onCall(async (request) => {
 
       const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
       transaction.set(auditRef, acceptedUpdate.auditEvent);
+
+      if (acceptedUpdate.notificationOutboxEvent) {
+        const notificationRef = db.collection(MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION).doc();
+        transaction.set(notificationRef, acceptedUpdate.notificationOutboxEvent);
+      }
 
       return {
         status: "accepted",

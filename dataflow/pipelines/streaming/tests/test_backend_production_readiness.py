@@ -1100,6 +1100,20 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("match /MATCHING_EVENT_OUTBOX/{document=**}", rules)
         self.assertIn("allow read, write: if false", rules)
 
+    def test_match_acceptance_queues_internal_wali_notification_outbox(self):
+        source = read("functions-nodejs/src/domains/marriage/index.ts")
+        match_acceptance_source = read("functions-nodejs/src/domains/marriage/match-acceptance.ts")
+        rules = read("firestore.rules")
+
+        self.assertIn("MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX", match_acceptance_source)
+        self.assertIn("wali_match_acceptance_requested", match_acceptance_source)
+        self.assertIn("notificationOutboxEvent", match_acceptance_source)
+        self.assertIn("MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION", source)
+        self.assertIn("transaction.set(notificationRef", source)
+        self.assertLess(source.index("transaction.set(matchRef"), source.index("transaction.set(notificationRef"))
+        self.assertIn("match /MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX/{document=**}", rules)
+        self.assertIn("allow read, write: if false", rules)
+
     def test_matching_event_republisher_bounds_poison_retries_and_drains_oldest_first(self):
         matching_events_source = read("functions-nodejs/src/domains/marriage/matching-events.ts")
 

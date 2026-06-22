@@ -76,6 +76,45 @@ describe("match acceptance state machine", () => {
       waliId: "wali-1",
       notifyWali: true,
     });
+    expect(result.notificationOutboxEvent).toMatchObject({
+      type: "wali_match_acceptance_requested",
+      status: "pending",
+      userId: "user-1",
+      matchedUserId: "match-1",
+      waliId: "wali-1",
+      attempts: 0,
+      idempotencyKey: "accept-1",
+    });
+  });
+
+  it("does not queue wali notification outbox records when notification is not requested", () => {
+    const result = buildAcceptedMatchUpdate({
+      userId: "user-1",
+      matchedUserId: "match-1",
+      matches: [{ id: "match-1", ai_score: 92 }],
+      waliRelation: verifiedWaliRelation,
+      notifyWali: false,
+      timestamp,
+    });
+
+    expect(result.acceptedMatch).toMatchObject({
+      acceptance: { waliNotificationStatus: "not_requested" },
+    });
+    expect(result.notificationOutboxEvent).toBeUndefined();
+  });
+
+  it("omits undefined idempotency keys from Firestore-bound records", () => {
+    const result = buildAcceptedMatchUpdate({
+      userId: "user-1",
+      matchedUserId: "match-1",
+      matches: [{ id: "match-1", ai_score: 92 }],
+      waliRelation: verifiedWaliRelation,
+      notifyWali: true,
+      timestamp,
+    });
+
+    expect(result.auditEvent).not.toHaveProperty("idempotencyKey");
+    expect(result.notificationOutboxEvent).not.toHaveProperty("idempotencyKey");
   });
 
   it("rejects acceptances for missing match candidates", () => {

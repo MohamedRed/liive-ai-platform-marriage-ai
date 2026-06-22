@@ -75,6 +75,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX/{document=**} {
+      allow read, write: if false;
+    }
+
     match /MARRIAGE_PROFILE_SUMMARIES/{document=**} {
       allow read, write: if false;
     }
