@@ -1146,6 +1146,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("status: \"delivery_failed\"", notification_source)
         self.assertIn("status: \"skipped\"", notification_source)
         self.assertIn("match /MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX/{document=**}", rules)
+        self.assertIn("match /SUPERVISED_CHATS/{document=**}", rules)
         self.assertIn("allow read, write: if false", rules)
         self.assertIn('"collectionGroup": "MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX"', indexes)
         self.assertIn('"fieldPath": "status"', indexes)

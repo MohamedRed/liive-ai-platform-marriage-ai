@@ -252,6 +252,10 @@ describe("Cloud Functions Tests", () => {
       expect(myFunctions.marriageFunctions.acceptMatch).toBeDefined();
     });
 
+    it("sendSupervisedChatMessage should be defined", () => {
+      expect(myFunctions.marriageFunctions.sendSupervisedChatMessage).toBeDefined();
+    });
+
     it("processMatchAcceptanceNotifications should be defined", () => {
       expect(myFunctions.marriageFunctions.processMatchAcceptanceNotifications).toBeDefined();
     });

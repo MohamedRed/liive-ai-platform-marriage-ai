@@ -32,6 +32,12 @@ import {
   parseUpdateUserAnswersPayload,
   requireAuthenticatedUid,
 } from "./request-validation";
+import {
+  buildSupervisedChatMessageWrite,
+  parseSendSupervisedChatMessagePayload,
+  SUPERVISED_CHAT_MESSAGES_SUBCOLLECTION,
+  SUPERVISED_CHATS_COLLECTION,
+} from "./supervised-chat";
 import { buildVerifiedWaliRelationPayload } from "./wali-verification";
 
 /**
@@ -278,6 +284,58 @@ export const acceptMatch = onCall(async (request) => {
     }
     logger.error(`Error accepting match for ${userID}/${matchedUserId}:`, error);
     throw new HttpsError("internal", "Failed to accept match");
+  }
+});
+
+export const sendSupervisedChatMessage = onCall(async (request) => {
+  const senderUserId = requireAuthenticatedUid(request.auth);
+  const { matchedUserId, message, idempotencyKey } = parseSendSupervisedChatMessagePayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    return await db.runTransaction(async (transaction) => {
+      const requesterMatchRef = db.collection(LEGACY_COLLECTIONS.MATCHES).doc(senderUserId);
+      const matchedUserMatchRef = db.collection(LEGACY_COLLECTIONS.MATCHES).doc(matchedUserId);
+      const requesterMatchDoc = await transaction.get(requesterMatchRef);
+      const matchedUserMatchDoc = await transaction.get(matchedUserMatchRef);
+
+      const chatWrite = buildSupervisedChatMessageWrite({
+        senderUserId,
+        matchedUserId,
+        message,
+        requesterMatchDocument: requesterMatchDoc.exists ? requesterMatchDoc.data() : undefined,
+        matchedUserMatchDocument: matchedUserMatchDoc.exists ? matchedUserMatchDoc.data() : undefined,
+        timestamp,
+        idempotencyKey,
+      });
+
+      const chatRef = db.collection(SUPERVISED_CHATS_COLLECTION).doc(chatWrite.chatId);
+      const messageRef = chatRef.collection(SUPERVISED_CHAT_MESSAGES_SUBCOLLECTION).doc();
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+
+      transaction.set(chatRef, chatWrite.chatRecord, { merge: true });
+      transaction.set(messageRef, {
+        ...chatWrite.messageRecord,
+        id: messageRef.id,
+      });
+      transaction.set(auditRef, {
+        ...chatWrite.auditEvent,
+        messageId: messageRef.id,
+      });
+
+      return {
+        status: "sent",
+        chatId: chatWrite.chatId,
+        messageId: messageRef.id,
+      };
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error sending supervised chat message for ${senderUserId}/${matchedUserId}:`, error);
+    throw new HttpsError("internal", "Failed to send supervised chat message");
   }
 });
 
