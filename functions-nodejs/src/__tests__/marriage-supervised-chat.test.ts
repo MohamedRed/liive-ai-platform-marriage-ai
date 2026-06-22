@@ -1,7 +1,10 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import {
+  authorizeSupervisedChatAccess,
   buildSupervisedChatMessageWrite,
+  parseGetSupervisedChatMessagesPayload,
   parseSendSupervisedChatMessagePayload,
+  sanitizeSupervisedChatMessages,
   SUPERVISED_CHATS_COLLECTION,
 } from "../domains/marriage/supervised-chat";
 
@@ -102,5 +105,86 @@ describe("supervised chat authorization", () => {
       chatId: "marriage_chat_user-1_user-2",
       waliIds: ["wali-1", "wali-2"],
     });
+  });
+
+  it("parses supervised-chat read payloads with bounded limits", () => {
+    expect(parseGetSupervisedChatMessagesPayload({ matchedUserId: " user-2 ", limit: 75 })).toEqual({
+      matchedUserId: "user-2",
+      limit: 75,
+    });
+    expect(parseGetSupervisedChatMessagesPayload({ matchedUserId: "user-2" })).toEqual({
+      matchedUserId: "user-2",
+      limit: 50,
+    });
+
+    for (const payload of [undefined, {}, { matchedUserId: "" }, { matchedUserId: "user-2", limit: 0 }, { matchedUserId: "user-2", limit: 101 }]) {
+      expect(() => parseGetSupervisedChatMessagesPayload(payload)).toThrow(HttpsError);
+    }
+  });
+
+  it("authorizes supervised-chat reads only after reciprocal wali-gated match state", () => {
+    const access = authorizeSupervisedChatAccess({
+      requesterUserId: " user-1 ",
+      matchedUserId: " user-2 ",
+      requesterMatchDocument: { matches: [acceptedMatch("user-2", "wali-1")] },
+      matchedUserMatchDocument: { matches: [acceptedMatch("user-1", "wali-2")] },
+    });
+
+    expect(access).toEqual({
+      chatId: "marriage_chat_user-1_user-2",
+      participantIds: ["user-1", "user-2"],
+      waliIds: ["wali-1", "wali-2"],
+    });
+    expect(() => authorizeSupervisedChatAccess({
+      requesterUserId: "user-1",
+      matchedUserId: "user-2",
+      requesterMatchDocument: { matches: [acceptedMatch("user-2", "wali-1")] },
+      matchedUserMatchDocument: { matches: [] },
+    })).toThrow(HttpsError);
+  });
+
+  it("sanitizes supervised-chat message reads without leaking internal fields", () => {
+    const messages = sanitizeSupervisedChatMessages([
+      {
+        id: "message-1",
+        chatId: "marriage_chat_user-1_user-2",
+        senderUserId: "user-1",
+        recipientUserId: "user-2",
+        body: "Assalamu alaikum",
+        createdAt: timestamp,
+        idempotencyKey: "send-1",
+        waliIds: ["wali-1", "wali-2"],
+      },
+      {
+        id: "message-2",
+        chatId: "marriage_chat_user-1_user-2",
+        senderUserId: "user-2",
+        recipientUserId: "user-1",
+        body: "Wa alaikum assalam",
+        createdAt: timestamp,
+      },
+      { id: "bad-message", body: 123 },
+    ]);
+
+    expect(messages).toEqual([
+      {
+        id: "message-1",
+        chatId: "marriage_chat_user-1_user-2",
+        senderUserId: "user-1",
+        recipientUserId: "user-2",
+        body: "Assalamu alaikum",
+        createdAt: timestamp,
+      },
+      {
+        id: "message-2",
+        chatId: "marriage_chat_user-1_user-2",
+        senderUserId: "user-2",
+        recipientUserId: "user-1",
+        body: "Wa alaikum assalam",
+        createdAt: timestamp,
+      },
+    ]);
+    expect(messages[0]).not.toHaveProperty("idempotencyKey");
+    expect(messages[0]).not.toHaveProperty("waliIds");
   });
 });

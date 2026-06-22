@@ -33,8 +33,11 @@ import {
   requireAuthenticatedUid,
 } from "./request-validation";
 import {
+  authorizeSupervisedChatAccess,
   buildSupervisedChatMessageWrite,
+  parseGetSupervisedChatMessagesPayload,
   parseSendSupervisedChatMessagePayload,
+  sanitizeSupervisedChatMessages,
   SUPERVISED_CHAT_MESSAGES_SUBCOLLECTION,
   SUPERVISED_CHATS_COLLECTION,
 } from "./supervised-chat";
@@ -336,6 +339,47 @@ export const sendSupervisedChatMessage = onCall(async (request) => {
     }
     logger.error(`Error sending supervised chat message for ${senderUserId}/${matchedUserId}:`, error);
     throw new HttpsError("internal", "Failed to send supervised chat message");
+  }
+});
+
+export const getSupervisedChatMessages = onCall(async (request) => {
+  const requesterUserId = requireAuthenticatedUid(request.auth);
+  const { matchedUserId, limit } = parseGetSupervisedChatMessagesPayload(request.data);
+  const db = admin.firestore();
+
+  try {
+    const requesterMatchDoc = await db.collection(LEGACY_COLLECTIONS.MATCHES).doc(requesterUserId).get();
+    const matchedUserMatchDoc = await db.collection(LEGACY_COLLECTIONS.MATCHES).doc(matchedUserId).get();
+    const access = authorizeSupervisedChatAccess({
+      requesterUserId,
+      matchedUserId,
+      requesterMatchDocument: requesterMatchDoc.exists ? requesterMatchDoc.data() : undefined,
+      matchedUserMatchDocument: matchedUserMatchDoc.exists ? matchedUserMatchDoc.data() : undefined,
+    });
+
+    const messagesSnapshot = await db
+      .collection(SUPERVISED_CHATS_COLLECTION)
+      .doc(access.chatId)
+      .collection(SUPERVISED_CHAT_MESSAGES_SUBCOLLECTION)
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get();
+
+    const rawMessages = messagesSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return {
+      chatId: access.chatId,
+      messages: sanitizeSupervisedChatMessages(rawMessages),
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error reading supervised chat messages for ${requesterUserId}/${matchedUserId}:`, error);
+    throw new HttpsError("internal", "Failed to read supervised chat messages");
   }
 });
 

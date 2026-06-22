@@ -20,6 +20,24 @@ export interface SendSupervisedChatMessagePayload {
   idempotencyKey?: string;
 }
 
+export interface GetSupervisedChatMessagesPayload {
+  matchedUserId: string;
+  limit: number;
+}
+
+export interface SupervisedChatAccessInput {
+  requesterUserId: string;
+  matchedUserId: string;
+  requesterMatchDocument: unknown;
+  matchedUserMatchDocument: unknown;
+}
+
+export interface SupervisedChatAccessResult {
+  chatId: string;
+  participantIds: [string, string];
+  waliIds: [string, string];
+}
+
 export interface SupervisedChatMessageWriteInput {
   senderUserId: string;
   matchedUserId: string;
@@ -30,13 +48,19 @@ export interface SupervisedChatMessageWriteInput {
   idempotencyKey?: string;
 }
 
-export interface SupervisedChatMessageWriteResult {
-  chatId: string;
-  participantIds: [string, string];
-  waliIds: [string, string];
+export interface SupervisedChatMessageWriteResult extends SupervisedChatAccessResult {
   chatRecord: Record<string, unknown>;
   messageRecord: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
+}
+
+export interface SupervisedChatMessageReadRecord {
+  id: string;
+  chatId: string;
+  senderUserId: string;
+  recipientUserId: string;
+  body: string;
+  createdAt: unknown;
 }
 
 function trimOptionalString(value: unknown): string | undefined {
@@ -80,6 +104,23 @@ export function parseSendSupervisedChatMessagePayload(data: unknown): SendSuperv
     matchedUserId: trimRequiredString(payload.matchedUserId, "matchedUserId"),
     message,
     idempotencyKey: trimOptionalString(payload.idempotencyKey),
+  };
+}
+
+export function parseGetSupervisedChatMessagesPayload(data: unknown): GetSupervisedChatMessagesPayload {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new HttpsError("invalid-argument", "Supervised chat read payload is required.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  const limit = payload.limit === undefined ? 50 : payload.limit;
+  if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > 100) {
+    throw new HttpsError("invalid-argument", "limit must be an integer between 1 and 100.");
+  }
+
+  return {
+    matchedUserId: trimRequiredString(payload.matchedUserId, "matchedUserId"),
+    limit: limit as number,
   };
 }
 
@@ -139,14 +180,9 @@ function requireAcceptedWaliMatch(
   return verifiedWaliId;
 }
 
-export function buildSupervisedChatMessageWrite(input: SupervisedChatMessageWriteInput): SupervisedChatMessageWriteResult {
-  const senderUserId = trimRequiredString(input.senderUserId, "senderUserId");
+export function authorizeSupervisedChatAccess(input: SupervisedChatAccessInput): SupervisedChatAccessResult {
+  const requesterUserId = trimRequiredString(input.requesterUserId, "requesterUserId");
   const matchedUserId = trimRequiredString(input.matchedUserId, "matchedUserId");
-  const message = trimRequiredString(input.message, "message");
-  if (message.length > 2000) {
-    throw new HttpsError("invalid-argument", "message must be at most 2000 characters.");
-  }
-
   const senderWaliId = requireAcceptedWaliMatch(
     input.requesterMatchDocument,
     matchedUserId,
@@ -156,26 +192,69 @@ export function buildSupervisedChatMessageWrite(input: SupervisedChatMessageWrit
   );
   const matchedUserWaliId = requireAcceptedWaliMatch(
     input.matchedUserMatchDocument,
-    senderUserId,
+    requesterUserId,
     "Matched user",
     "Matched user must have a reciprocal accepted match before supervised chat.",
     "Matched user accepted match is missing wali authorization.",
   );
 
-  const participantIds: [string, string] = [senderUserId, matchedUserId].sort() as [string, string];
-  const waliIds: [string, string] = [senderWaliId, matchedUserWaliId].sort() as [string, string];
-  const chatId = supervisedChatId(senderUserId, matchedUserId);
+  return {
+    chatId: supervisedChatId(requesterUserId, matchedUserId),
+    participantIds: [requesterUserId, matchedUserId].sort() as [string, string],
+    waliIds: [senderWaliId, matchedUserWaliId].sort() as [string, string],
+  };
+}
+
+export function sanitizeSupervisedChatMessages(rawMessages: unknown[]): SupervisedChatMessageReadRecord[] {
+  return rawMessages.flatMap((rawMessage) => {
+    if (!rawMessage || typeof rawMessage !== "object" || Array.isArray(rawMessage)) {
+      return [];
+    }
+    const message = rawMessage as Record<string, unknown>;
+    const id = trimOptionalString(message.id);
+    const chatId = trimOptionalString(message.chatId);
+    const senderUserId = trimOptionalString(message.senderUserId);
+    const recipientUserId = trimOptionalString(message.recipientUserId);
+    const body = trimOptionalString(message.body);
+
+    if (!id || !chatId || !senderUserId || !recipientUserId || !body || !message.createdAt) {
+      return [];
+    }
+
+    return [{
+      id,
+      chatId,
+      senderUserId,
+      recipientUserId,
+      body,
+      createdAt: message.createdAt,
+    }];
+  });
+}
+
+export function buildSupervisedChatMessageWrite(input: SupervisedChatMessageWriteInput): SupervisedChatMessageWriteResult {
+  const senderUserId = trimRequiredString(input.senderUserId, "senderUserId");
+  const matchedUserId = trimRequiredString(input.matchedUserId, "matchedUserId");
+  const message = trimRequiredString(input.message, "message");
+  if (message.length > 2000) {
+    throw new HttpsError("invalid-argument", "message must be at most 2000 characters.");
+  }
+
+  const access = authorizeSupervisedChatAccess({
+    requesterUserId: senderUserId,
+    matchedUserId,
+    requesterMatchDocument: input.requesterMatchDocument,
+    matchedUserMatchDocument: input.matchedUserMatchDocument,
+  });
   const baseMetadata = {
-    chatId,
-    participantIds,
-    waliIds,
+    chatId: access.chatId,
+    participantIds: access.participantIds,
+    waliIds: access.waliIds,
     updatedAt: input.timestamp,
   };
 
   return {
-    chatId,
-    participantIds,
-    waliIds,
+    ...access,
     chatRecord: {
       ...baseMetadata,
       status: "active",
@@ -196,8 +275,8 @@ export function buildSupervisedChatMessageWrite(input: SupervisedChatMessageWrit
       type: "supervised_chat_message_sent",
       actorUserId: senderUserId,
       matchedUserId,
-      chatId,
-      waliIds,
+      chatId: access.chatId,
+      waliIds: access.waliIds,
       createdAt: input.timestamp,
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     },

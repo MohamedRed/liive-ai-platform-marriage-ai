@@ -1152,6 +1152,32 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn('"fieldPath": "status"', indexes)
         self.assertIn('"fieldPath": "createdAt"', indexes)
 
+    def test_supervised_chat_has_server_authorized_write_and_read_paths(self):
+        source = read("functions-nodejs/src/domains/marriage/index.ts")
+        supervised_source = read("functions-nodejs/src/domains/marriage/supervised-chat.ts")
+        rules = read("firestore.rules")
+
+        self.assertIn("sendSupervisedChatMessage", source)
+        self.assertIn("getSupervisedChatMessages", source)
+        self.assertIn("buildSupervisedChatMessageWrite", supervised_source)
+        self.assertIn("parseGetSupervisedChatMessagesPayload", supervised_source)
+        self.assertIn("authorizeSupervisedChatAccess", supervised_source)
+        self.assertIn("sanitizeSupervisedChatMessages", supervised_source)
+        self.assertIn("Requester must have an accepted match before supervised chat", supervised_source)
+        self.assertIn("Matched user must have a reciprocal accepted match before supervised chat", supervised_source)
+        self.assertIn("Requester accepted match is missing wali authorization", supervised_source)
+        self.assertIn("Matched user accepted match is missing wali authorization", supervised_source)
+        self.assertIn("supervised_chat_message_sent", supervised_source)
+        self.assertIn("SUPERVISED_CHATS_COLLECTION", source)
+        self.assertIn("SUPERVISED_CHAT_MESSAGES_SUBCOLLECTION", source)
+        self.assertIn("transaction.set(chatRef", source)
+        self.assertIn("transaction.set(messageRef", source)
+        self.assertIn("transaction.set(auditRef", source)
+        self.assertIn(".orderBy(\"createdAt\", \"desc\")", source)
+        self.assertIn("sanitizeSupervisedChatMessages(rawMessages)", source)
+        self.assertIn("match /SUPERVISED_CHATS/{document=**}", rules)
+        self.assertIn("allow read, write: if false", rules)
+
     def test_matching_event_republisher_bounds_poison_retries_and_drains_oldest_first(self):
         matching_events_source = read("functions-nodejs/src/domains/marriage/matching-events.ts")
 
