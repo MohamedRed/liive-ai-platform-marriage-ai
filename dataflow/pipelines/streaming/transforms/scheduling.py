@@ -72,7 +72,17 @@ class ScheduleDelayedMatchingDoFn(beam.DoFn):
 
         try:
             if not query_time:
-                self.logger.warning(f"No query_time found for user {user_id} in element. Using current time + delay for scheduling.")
+                self.logger.warning(
+                    f"ScheduleDelayedMatchingDoFn missing query_time for user {user_id}; using current time fallback"
+                )
+                self.error_counter.inc()
+                yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {
+                    "error_message": f"ScheduleDelayedMatchingDoFn missing query_time for user {user_id}; using current time fallback",
+                    "operation": "calculate_schedule_time",
+                    "fallback_delay_seconds": self.delay_seconds,
+                    "user_id": user_id,
+                    "element": element,
+                })
                 schedule_timestamp = time.time() + self.delay_seconds
             else:
                 # Schedule task for specified seconds after the Pinecone query time

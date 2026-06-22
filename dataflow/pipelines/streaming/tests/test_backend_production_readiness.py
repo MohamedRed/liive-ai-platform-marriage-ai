@@ -409,6 +409,25 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("Clients not initialized in ScheduleDelayedMatchingDoFn", scheduling_source)
         self.assertNotIn("Clients not initialized in HandleMatchActionsDoFn", scheduling_source)
 
+    def test_schedule_delayed_matching_missing_query_time_is_tagged_not_log_only(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+
+        self.assertIn("if not query_time:", scheduling_source)
+        self.assertIn('"error_message": f"ScheduleDelayedMatchingDoFn missing query_time for user {user_id}; using current time fallback"', scheduling_source)
+        self.assertIn('"operation": "calculate_schedule_time"', scheduling_source)
+        self.assertIn('"fallback_delay_seconds": self.delay_seconds', scheduling_source)
+        self.assertIn('"user_id": user_id', scheduling_source)
+        self.assertIn('"element": element', scheduling_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG, {", scheduling_source)
+        self.assertIn("schedule_timestamp = time.time() + self.delay_seconds", scheduling_source)
+        self.assertIn("schedule_errors | \"DLQ_ScheduleErrors\" >> dlq_sink(\"ScheduleErrors\")", streaming_source)
+        self.assertLess(
+            scheduling_source.index('"error_message": f"ScheduleDelayedMatchingDoFn missing query_time for user {user_id}; using current time fallback"'),
+            scheduling_source.index("schedule_timestamp = time.time() + self.delay_seconds"),
+        )
+        self.assertNotIn("No query_time found for user {user_id} in element. Using current time + delay for scheduling.", scheduling_source)
+
     def test_handle_match_actions_validates_matches_shape_before_side_effects(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
