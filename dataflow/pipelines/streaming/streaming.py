@@ -83,7 +83,7 @@ from .transforms.final_selection_input import FlattenFinalSelectionInput
 from .transforms.lying_score_input import FormatForLyingScore
 from .transforms.scoreboard_update_input import ExtractTriggeringUserIdAfterScoreboardUpdate
 from .transforms.match_side_effect_input import FilterNonEmptyMatchesForSideEffects
-from .transforms.next_question_input import FormatInputForLayer3
+from .transforms.next_question_input import FormatInputForLayer3, KeyLayer2Candidates
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -451,10 +451,12 @@ def run_streaming_pipeline(argv=None):
                 profiles_collection=user_info_collection
             )).with_outputs(Layer2CandidateDoFn.OUTPUT_ERROR_TAG, main='main')
         )
-        layer2_candidates_tagged = (
+        layer2_keying_results = (
             layer2_results['main']
-            | "KeyLayer2Candidates" >> beam.Map(lambda x: (x['user_id'], x.get('candidates', [])))
+            | "KeyLayer2Candidates" >> KeyLayer2Candidates()
         )
+        layer2_keying_results.error | "DLQ_Layer2KeyingErrors" >> dlq_sink("Layer2KeyingErrors")
+        layer2_candidates_tagged = layer2_keying_results.main
         layer2_errors = layer2_results[Layer2CandidateDoFn.OUTPUT_ERROR_TAG]
         layer2_errors | "DLQ_Layer2Errors" >> dlq_sink("Layer2Errors")
         # layer2_candidates_tagged is PCollection of (user_id, [list_of_L2_cands])

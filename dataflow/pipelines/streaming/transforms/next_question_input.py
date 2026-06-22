@@ -11,6 +11,59 @@ from apache_beam.metrics import Metrics
 logger = logging.getLogger(__name__)
 
 
+class KeyLayer2CandidatesDoFn(beam.DoFn):
+    """Keys Layer 2 candidate outputs for next-question CoGroupByKey."""
+
+    OUTPUT_ERROR_TAG = "error"
+
+    def __init__(self):
+        self.success_counter = Metrics.counter(self.__class__.__name__, "layer2_candidates_keyed")
+        self.error_counter = Metrics.counter(self.__class__.__name__, "layer2_candidate_keying_errors")
+
+    def _error_payload(self, error_message: str, element: Any, **context: Any) -> Dict[str, Any]:
+        self.error_counter.inc()
+        payload = {
+            "error_message": error_message,
+            "operation": "key_layer2_candidates",
+            "element": element,
+        }
+        payload.update(context)
+        return payload
+
+    def process(self, element: Dict[str, Any]):
+        if not isinstance(element, dict):
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, self._error_payload(
+                "Malformed Layer 2 candidate output",
+                element,
+            ))
+            return
+
+        user_id = element.get("user_id")
+        candidates = element.get("candidates", [])
+        if not user_id or not isinstance(candidates, list):
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, self._error_payload(
+                "Malformed Layer 2 candidate output",
+                element,
+                user_id=user_id,
+                candidates=candidates,
+            ))
+            return
+
+        self.success_counter.inc()
+        yield (user_id, candidates)
+
+
+@beam.ptransform_fn
+def KeyLayer2Candidates(pcoll: beam.PCollection[Dict[str, Any]]) -> beam.PCollectionTuple:
+    """Validate and key Layer 2 candidate outputs for next-question selection."""
+    return (
+        pcoll
+        | "KeyLayer2CandidateRecords" >> beam.ParDo(
+            KeyLayer2CandidatesDoFn()
+        ).with_outputs(KeyLayer2CandidatesDoFn.OUTPUT_ERROR_TAG, main="main")
+    )
+
+
 class FormatInputForLayer3DoFn(beam.DoFn):
     """Formats scoreboard candidate tuples for Layer 3 question generation."""
 
