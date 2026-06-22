@@ -259,8 +259,8 @@ class HandleMatchActionsDoFn(beam.DoFn):
              # Default to available on error to avoid blocking notifications due to bad settings
              return True
 
-    def _schedule_task(self, queue_name: str, function_url: str, payload: dict):
-        """Helper function to create and schedule a Cloud Task targeting an HTTP function."""
+    def _schedule_task(self, queue_name: str, function_url: str, payload: dict, operation: str):
+        """Create a Cloud Task and return a DLQ payload when scheduling fails."""
         try:
             queue_path = self.tasks_client.queue_path(self.project_id, self.location, queue_name)
             task_payload_bytes = json.dumps(payload).encode('utf-8')
@@ -280,13 +280,19 @@ class HandleMatchActionsDoFn(beam.DoFn):
 
             response = self.tasks_client.create_task(request={"parent": queue_path, "task": task})
             self.logger.info(f"Scheduled task {response.name} on queue {queue_name} for user {payload.get('userId')}")
-            return True
+            return True, None
         except Exception as e:
              user_id = payload.get('userId', '[UNKNOWN]')
              self.logger.error(f"Failed to schedule task on queue {queue_name} for user {user_id}: {e}", exc_info=True)
              self.error_counter.inc()
-             # Don't raise here, just log the failure for this specific action
-             return False
+             return False, {
+                 "error_message": f"Failed to schedule {operation} task on queue {queue_name} for user {user_id}: {e}",
+                 "operation": operation,
+                 "queue_name": queue_name,
+                 "function_url": function_url,
+                 "payload": payload,
+                 "traceback": traceback.format_exc(),
+             }
 
     def process(self, element):
         # Expecting element like {'user_id': ..., 'matches': [...]} from RerankMatchesDoFn
@@ -365,8 +371,17 @@ class HandleMatchActionsDoFn(beam.DoFn):
                             'questions': suggested_questions
                             # Add any other relevant info for the notification function
                         }
-                        if self._schedule_task(self.notification_queue, self.notification_function_url, payload):
+                        success, action_error = self._schedule_task(
+                            self.notification_queue,
+                            self.notification_function_url,
+                            payload,
+                            operation="schedule_match_notification",
+                        )
+                        if success:
                              self.notifications_scheduled.inc()
+                        if not success and action_error:
+                             action_error["element"] = element
+                             yield beam.pvalue.TaggedOutput(self.ERROR_TAG, action_error)
                     else:
                         # User is unavailable for notifications, schedule AI voice agent call
                         self.logger.info(f"User {user_id} unavailable for notification, scheduling voice agent call for match {match_id}.")
@@ -377,8 +392,17 @@ class HandleMatchActionsDoFn(beam.DoFn):
                             'questions': suggested_questions
                             # Add any other relevant info for the voice agent function
                         }
-                        if self._schedule_task(self.voice_agent_queue, self.voice_agent_function_url, payload):
+                        success, action_error = self._schedule_task(
+                            self.voice_agent_queue,
+                            self.voice_agent_function_url,
+                            payload,
+                            operation="schedule_voice_agent_call",
+                        )
+                        if success:
                              self.voice_calls_scheduled.inc()
+                        if not success and action_error:
+                             action_error["element"] = element
+                             yield beam.pvalue.TaggedOutput(self.ERROR_TAG, action_error)
 
             # Yield the original element after processing actions
             yield element

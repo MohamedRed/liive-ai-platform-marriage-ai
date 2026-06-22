@@ -430,6 +430,25 @@ class BackendProductionReadinessTests(unittest.TestCase):
             scheduling_source.index("settings_ref = self.db.collection"),
         )
 
+    def test_handle_match_actions_task_failures_are_tagged_not_log_only(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+
+        self.assertIn("def _schedule_task(", scheduling_source)
+        self.assertIn("return True, None", scheduling_source)
+        self.assertIn("return False, {", scheduling_source)
+        self.assertIn('"error_message": f"Failed to schedule {operation} task on queue {queue_name} for user {user_id}: {e}"', scheduling_source)
+        self.assertIn('"operation": operation', scheduling_source)
+        self.assertIn('"payload": payload', scheduling_source)
+        self.assertIn("success, action_error = self._schedule_task(", scheduling_source)
+        self.assertIn("if not success and action_error:", scheduling_source)
+        self.assertIn('action_error["element"] = element', scheduling_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG, action_error)", scheduling_source)
+        self.assertIn('operation="schedule_match_notification"', scheduling_source)
+        self.assertIn('operation="schedule_voice_agent_call"', scheduling_source)
+        self.assertIn("action_errors | \"DLQ_ActionErrors\" >> dlq_sink(\"ActionErrors\")", streaming_source)
+        self.assertNotIn("# Don't raise here, just log the failure for this specific action", scheduling_source)
+
     def test_trigger_event_parser_dlq_error_paths_do_not_assume_pubsub_data(self):
         common_source = read("dataflow/pipelines/streaming/transforms/common.py")
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
