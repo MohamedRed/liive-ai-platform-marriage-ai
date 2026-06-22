@@ -3,6 +3,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 export const USER_SAFETY_BLOCKS_COLLECTION = "USER_SAFETY_BLOCKS";
 export const USER_SAFETY_REPORTS_COLLECTION = "USER_SAFETY_REPORTS";
 export const USER_SAFETY_ESCALATIONS_COLLECTION = "USER_SAFETY_ESCALATIONS";
+export const USER_SAFETY_WARNINGS_COLLECTION = "USER_SAFETY_WARNINGS";
 
 const MAX_BLOCK_REASON_LENGTH = 500;
 const MAX_REPORT_DESCRIPTION_LENGTH = 2000;
@@ -89,6 +90,7 @@ export interface MarriageSafetyReportReviewWrite {
   targetUserId?: string;
   targetUserUpdate?: Record<string, unknown>;
   escalationRecord?: Record<string, unknown>;
+  warningRecord?: Record<string, unknown>;
 }
 
 function trimOptionalString(value: unknown): string | undefined {
@@ -321,11 +323,24 @@ export function buildMarriageSafetyReportReviewWrite(
     createdAt: input.timestamp,
     updatedAt: input.timestamp,
   } : undefined;
+  const warningRecord = payload.resolution === "user_warned" && targetUserId ? {
+    reportId: payload.reportId,
+    ...(reporterUserId ? { reporterUserId } : {}),
+    targetUserId,
+    ...(category ? { category } : {}),
+    status: "active",
+    warningType: "report_resolution",
+    warnedBy: moderatorUserId,
+    ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+    createdAt: input.timestamp,
+    updatedAt: input.timestamp,
+  } : undefined;
 
   return {
     reportUpdate,
     ...(targetUserId && targetUserUpdate ? { targetUserId, targetUserUpdate } : {}),
     ...(escalationRecord ? { escalationRecord } : {}),
+    ...(warningRecord ? { warningRecord } : {}),
     auditEvent: {
       type: "marriage_report_reviewed",
       moderatorUserId,

@@ -99,6 +99,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /USER_SAFETY_WARNINGS/{document=**} {
+      allow read, write: if false;
+    }
+
     match /SUPERVISED_CHATS/{document=**} {
       allow read, write: if false;
     }

@@ -51,6 +51,7 @@ import {
   USER_SAFETY_BLOCKS_COLLECTION,
   USER_SAFETY_ESCALATIONS_COLLECTION,
   USER_SAFETY_REPORTS_COLLECTION,
+  USER_SAFETY_WARNINGS_COLLECTION,
 } from "./safety";
 import {
   authorizeSupervisedChatAccess,
@@ -390,6 +391,10 @@ export const reviewMarriageReport = onCall(async (request) => {
       if (reportReviewWrite.escalationRecord) {
         const escalationRef = db.collection(USER_SAFETY_ESCALATIONS_COLLECTION).doc();
         transaction.set(escalationRef, reportReviewWrite.escalationRecord);
+      }
+      if (reportReviewWrite.warningRecord) {
+        const warningRef = db.collection(USER_SAFETY_WARNINGS_COLLECTION).doc();
+        transaction.set(warningRef, reportReviewWrite.warningRecord);
       }
       transaction.set(auditRef, reportReviewWrite.auditEvent);
 

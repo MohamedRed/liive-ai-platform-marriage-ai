@@ -211,6 +211,19 @@ describe("marriage safety block/report APIs", () => {
     });
     expect(write.auditEvent).not.toHaveProperty("moderatorNote");
     expect(write.targetUserUpdate).toBeUndefined();
+    expect(write.warningRecord).toMatchObject({
+      reportId: "report-1",
+      reporterUserId: "actor-user",
+      targetUserId: "target-user",
+      category: "safety_concern",
+      status: "active",
+      warningType: "report_resolution",
+      warnedBy: "moderator-1",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      idempotencyKey: "review-1",
+    });
+    expect(write.warningRecord).not.toHaveProperty("moderatorNote");
   });
 
   it("builds a target-user suspension update for profile-suspension resolutions", () => {
