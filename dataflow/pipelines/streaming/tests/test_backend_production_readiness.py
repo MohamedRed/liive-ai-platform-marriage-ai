@@ -1174,6 +1174,29 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("allow read: if isOwner(userId)", rules)
         self.assertIn("allow write: if false", rules)
 
+    def test_marriage_safety_block_and_report_are_server_validated_and_server_only(self):
+        source = read("functions-nodejs/src/domains/marriage/index.ts")
+        safety_source = read("functions-nodejs/src/domains/marriage/safety.ts")
+        rules = read("firestore.rules")
+
+        self.assertIn("blockMarriageUser", source)
+        self.assertIn("reportMarriageUser", source)
+        self.assertIn("parseBlockMarriageUserPayload", safety_source)
+        self.assertIn("parseReportMarriageUserPayload", safety_source)
+        self.assertIn("buildMarriageSafetyBlockWrite", safety_source)
+        self.assertIn("buildMarriageSafetyReportWrite", safety_source)
+        self.assertIn("marriage_user_blocked", safety_source)
+        self.assertIn("marriage_user_reported", safety_source)
+        self.assertIn("blockedUserIds", source)
+        self.assertIn("USER_SAFETY_BLOCKS_COLLECTION", source)
+        self.assertIn("USER_SAFETY_REPORTS_COLLECTION", source)
+        self.assertIn("transaction.set(blockRef", source)
+        self.assertIn("transaction.set(reportRef", source)
+        self.assertIn("transaction.set(auditRef", source)
+        self.assertIn("match /USER_SAFETY_BLOCKS/{document=**}", rules)
+        self.assertIn("match /USER_SAFETY_REPORTS/{document=**}", rules)
+        self.assertIn("allow read, write: if false", rules)
+
     def test_supervised_chat_has_server_authorized_write_and_read_paths(self):
         source = read("functions-nodejs/src/domains/marriage/index.ts")
         supervised_source = read("functions-nodejs/src/domains/marriage/supervised-chat.ts")

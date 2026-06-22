@@ -37,6 +37,14 @@ import {
   requireAuthenticatedUid,
 } from "./request-validation";
 import {
+  buildMarriageSafetyBlockWrite,
+  buildMarriageSafetyReportWrite,
+  parseBlockMarriageUserPayload,
+  parseReportMarriageUserPayload,
+  USER_SAFETY_BLOCKS_COLLECTION,
+  USER_SAFETY_REPORTS_COLLECTION,
+} from "./safety";
+import {
   authorizeSupervisedChatAccess,
   buildSupervisedChatMessageWrite,
   parseGetSupervisedChatMessagesPayload,
@@ -263,6 +271,84 @@ export const registerNotificationDevice = onCall(async (request) => {
     }
     logger.error(`Error registering notification device for ${userID}:`, error);
     throw new HttpsError("internal", "Failed to register notification device");
+  }
+});
+
+export const blockMarriageUser = onCall(async (request) => {
+  const actorUserId = requireAuthenticatedUid(request.auth);
+  const payload = parseBlockMarriageUserPayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const blockWrite = buildMarriageSafetyBlockWrite({
+        actorUserId,
+        payload,
+        timestamp,
+      });
+      const userRef = db.collection(LEGACY_COLLECTIONS.USER_INFO).doc(actorUserId);
+      const blockRef = db.collection(USER_SAFETY_BLOCKS_COLLECTION).doc(blockWrite.blockId);
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+
+      transaction.set(userRef, {
+        blockedUserIds: firestore.FieldValue.arrayUnion(payload.targetUserId),
+        safety: {
+          blockedUserIds: firestore.FieldValue.arrayUnion(payload.targetUserId),
+          updatedAt: timestamp,
+        },
+        updatedAt: timestamp,
+      }, { merge: true });
+      transaction.set(blockRef, blockWrite.blockRecord, { merge: true });
+      transaction.set(auditRef, blockWrite.auditEvent);
+    });
+
+    return {
+      status: "blocked",
+      targetUserId: payload.targetUserId,
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error blocking marriage user for ${actorUserId}/${payload.targetUserId}:`, error);
+    throw new HttpsError("internal", "Failed to block marriage user");
+  }
+});
+
+export const reportMarriageUser = onCall(async (request) => {
+  const actorUserId = requireAuthenticatedUid(request.auth);
+  const payload = parseReportMarriageUserPayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const reportWrite = buildMarriageSafetyReportWrite({
+        actorUserId,
+        payload,
+        timestamp,
+      });
+      const reportRef = db.collection(USER_SAFETY_REPORTS_COLLECTION).doc();
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+
+      transaction.set(reportRef, reportWrite.reportRecord);
+      transaction.set(auditRef, {
+        ...reportWrite.auditEvent,
+        reportId: reportRef.id,
+      });
+    });
+
+    return {
+      status: "reported",
+      targetUserId: payload.targetUserId,
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error reporting marriage user for ${actorUserId}/${payload.targetUserId}:`, error);
+    throw new HttpsError("internal", "Failed to report marriage user");
   }
 });
 

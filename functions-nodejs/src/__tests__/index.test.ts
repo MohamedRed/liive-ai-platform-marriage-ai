@@ -264,6 +264,14 @@ describe("Cloud Functions Tests", () => {
       expect(myFunctions.marriageFunctions.registerNotificationDevice).toBeDefined();
     });
 
+    it("blockMarriageUser should be defined", () => {
+      expect(myFunctions.marriageFunctions.blockMarriageUser).toBeDefined();
+    });
+
+    it("reportMarriageUser should be defined", () => {
+      expect(myFunctions.marriageFunctions.reportMarriageUser).toBeDefined();
+    });
+
     it("processMatchAcceptanceNotifications should be defined", () => {
       expect(myFunctions.marriageFunctions.processMatchAcceptanceNotifications).toBeDefined();
     });
