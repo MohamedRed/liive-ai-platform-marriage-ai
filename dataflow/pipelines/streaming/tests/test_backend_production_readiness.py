@@ -514,6 +514,23 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("summary_results_tuple.generation_errors | \"DLQ_SummaryGenerationErrors\" >> dlq_sink(\"SummaryGenerationErrors\")", streaming_source)
         self.assertNotIn("# For now, just return and don't yield to main output. Consider error tag if this is unexpected.", summary_source)
 
+    def test_profile_summary_qas_formatting_exceptions_are_tagged_not_bundle_failures(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        summary_source = read("dataflow/pipelines/streaming/transforms/profile_summarization.py")
+
+        self.assertIn("GenerateProfileSummaryDoFn.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn("qas_text_for_prompt = self._prepare_qas_for_prompt(questions_answers)", summary_source)
+        self.assertIn('"error_message": f"GenerateProfileSummaryDoFn Q&A formatting failed: {str(e)}"', summary_source)
+        self.assertIn('"user_id": user_id', summary_source)
+        self.assertIn('"element": element', summary_source)
+        self.assertIn('"traceback": traceback.format_exc()', summary_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn("summary_results_tuple.generation_errors | \"DLQ_SummaryGenerationErrors\" >> dlq_sink(\"SummaryGenerationErrors\")", streaming_source)
+        self.assertNotIn(
+            "qas_text_for_prompt = self._prepare_qas_for_prompt(questions_answers)\n        if not qas_text_for_prompt.strip()",
+            summary_source,
+        )
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod

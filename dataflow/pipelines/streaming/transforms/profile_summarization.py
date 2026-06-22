@@ -115,7 +115,22 @@ class GenerateProfileSummaryDoFn(beam.DoFn):
             })
             return
 
-        qas_text_for_prompt = self._prepare_qas_for_prompt(questions_answers)
+        try:
+            qas_text_for_prompt = self._prepare_qas_for_prompt(questions_answers)
+        except Exception as e:
+            self.logger.error(
+                f"Failed to format Q&A text for profile summary for user {user_id}: {e}",
+                exc_info=True,
+            )
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"GenerateProfileSummaryDoFn Q&A formatting failed: {str(e)}",
+                "user_id": user_id,
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
+            return
+
         if not qas_text_for_prompt.strip():
             self.logger.info(f"Formatted Q&A text is empty for user {user_id}. Cannot generate summary.")
             self.empty_profile_counter.inc()
