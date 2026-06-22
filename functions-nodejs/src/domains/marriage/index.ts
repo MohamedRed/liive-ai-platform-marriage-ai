@@ -21,6 +21,7 @@ import {
   queueMatchingEvent,
   republishPendingMatchingEventsHandler,
 } from "./matching-events";
+import { buildVerifiedWaliRelationPayload } from "./wali-verification";
 
 /**
  * Get user's questions and answers
@@ -210,18 +211,8 @@ export async function updateWaliVerificationStatus(
 
     await db
       .collection(LEGACY_COLLECTIONS.USER_WALI_RELATION_VERIFICATIONS)
-      .doc(`${userID}_${waliID}`)
-      .set({
-        userId: userID,
-        waliId: waliID,
-        relationship: status,
-        status: 'verified',
-        verificationMetadata: {
-          attempts: 1
-        },
-        createdAt: timestamp,
-        updatedAt: timestamp
-      }, { merge: true });
+      .doc(`${userID.trim()}_${waliID.trim()}`)
+      .set(buildVerifiedWaliRelationPayload(userID, waliID, status, timestamp), { merge: true });
 
     logger.info(`Wali verification updated for user ${userID} and wali ${waliID}`);
   } catch (error) {
