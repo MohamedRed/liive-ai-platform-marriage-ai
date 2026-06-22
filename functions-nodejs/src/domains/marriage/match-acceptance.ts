@@ -2,7 +2,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 export const MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION = "MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX";
 
-const MAX_DECLINE_REASON_LENGTH = 500;
+const MAX_STATE_CHANGE_REASON_LENGTH = 500;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 interface WaliRelationLike {
@@ -18,6 +18,12 @@ export interface AcceptMatchPayload {
 }
 
 export interface DeclineMatchPayload {
+  matchedUserId: string;
+  reason?: string;
+  idempotencyKey?: string;
+}
+
+export interface UnmatchPayload {
   matchedUserId: string;
   reason?: string;
   idempotencyKey?: string;
@@ -42,6 +48,15 @@ export interface DeclinedMatchUpdateInput {
   idempotencyKey?: string;
 }
 
+export interface UnmatchedMatchUpdateInput {
+  userId: string;
+  matchedUserId: string;
+  matches: unknown;
+  reason?: string;
+  timestamp: unknown;
+  idempotencyKey?: string;
+}
+
 export interface AcceptedMatchUpdateResult {
   matches: Record<string, unknown>[];
   acceptedMatch: Record<string, unknown>;
@@ -52,6 +67,12 @@ export interface AcceptedMatchUpdateResult {
 export interface DeclinedMatchUpdateResult {
   matches: Record<string, unknown>[];
   declinedMatch: Record<string, unknown>;
+  auditEvent: Record<string, unknown>;
+}
+
+export interface UnmatchedMatchUpdateResult {
+  matches: Record<string, unknown>[];
+  unmatchedMatch: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
 }
 
@@ -108,7 +129,20 @@ export function parseDeclineMatchPayload(data: unknown): DeclineMatchPayload {
   const payload = data as Record<string, unknown>;
   return {
     matchedUserId: trimRequiredString(payload.matchedUserId, "matchedUserId"),
-    reason: boundedOptionalString(payload.reason, "reason", MAX_DECLINE_REASON_LENGTH),
+    reason: boundedOptionalString(payload.reason, "reason", MAX_STATE_CHANGE_REASON_LENGTH),
+    idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
+  };
+}
+
+export function parseUnmatchPayload(data: unknown): UnmatchPayload {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new HttpsError("invalid-argument", "Unmatch payload is required.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  return {
+    matchedUserId: trimRequiredString(payload.matchedUserId, "matchedUserId"),
+    reason: boundedOptionalString(payload.reason, "reason", MAX_STATE_CHANGE_REASON_LENGTH),
     idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
   };
 }
@@ -117,6 +151,20 @@ function candidateIds(candidate: Record<string, unknown>): string[] {
   return [candidate.id, candidate.matchedUserId, candidate.matched_user_id, candidate.userId, candidate.user_id]
     .map((value) => trimOptionalString(value))
     .filter((value): value is string => Boolean(value));
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function isAcceptedMatch(candidate: Record<string, unknown>): boolean {
+  if (candidate.status === "accepted") {
+    return true;
+  }
+  return objectRecord(candidate.acceptance)?.status === "accepted";
 }
 
 export function isVerifiedWaliRelationForUser(waliRelation: WaliRelationLike | null | undefined, userId: string): waliRelation is WaliRelationLike & { waliId: string } {
@@ -210,7 +258,7 @@ export function buildAcceptedMatchUpdate(input: AcceptedMatchUpdateInput): Accep
 export function buildDeclinedMatchUpdate(input: DeclinedMatchUpdateInput): DeclinedMatchUpdateResult {
   const userId = trimRequiredString(input.userId, "userId");
   const matchedUserId = trimRequiredString(input.matchedUserId, "matchedUserId");
-  const reason = boundedOptionalString(input.reason, "reason", MAX_DECLINE_REASON_LENGTH);
+  const reason = boundedOptionalString(input.reason, "reason", MAX_STATE_CHANGE_REASON_LENGTH);
   const idempotencyKey = boundedOptionalString(input.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH);
 
   if (!Array.isArray(input.matches)) {
@@ -251,6 +299,67 @@ export function buildDeclinedMatchUpdate(input: DeclinedMatchUpdateInput): Decli
     declinedMatch,
     auditEvent: {
       type: "match_declined",
+      actorUserId: userId,
+      matchedUserId,
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+      createdAt: input.timestamp,
+    },
+  };
+}
+
+export function buildUnmatchedMatchUpdate(input: UnmatchedMatchUpdateInput): UnmatchedMatchUpdateResult {
+  const userId = trimRequiredString(input.userId, "userId");
+  const matchedUserId = trimRequiredString(input.matchedUserId, "matchedUserId");
+  const reason = boundedOptionalString(input.reason, "reason", MAX_STATE_CHANGE_REASON_LENGTH);
+  const idempotencyKey = boundedOptionalString(input.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH);
+
+  if (!Array.isArray(input.matches)) {
+    throw new HttpsError("failed-precondition", "Match list is unavailable for unmatch.");
+  }
+
+  let unmatchedMatch: Record<string, unknown> | undefined;
+  const matches = input.matches.map((matchCandidate) => {
+    if (!matchCandidate || typeof matchCandidate !== "object" || Array.isArray(matchCandidate)) {
+      return matchCandidate as Record<string, unknown>;
+    }
+
+    const candidate = matchCandidate as Record<string, unknown>;
+    if (!candidateIds(candidate).includes(matchedUserId)) {
+      return candidate;
+    }
+    if (!isAcceptedMatch(candidate)) {
+      throw new HttpsError("failed-precondition", "Only accepted matches can be unmatched.");
+    }
+
+    unmatchedMatch = {
+      ...candidate,
+      status: "unmatched",
+      acceptance: {
+        ...objectRecord(candidate.acceptance),
+        status: "revoked",
+        revokedBy: userId,
+        revokedAt: input.timestamp,
+      },
+      unmatch: {
+        status: "unmatched",
+        unmatchedBy: userId,
+        unmatchedAt: input.timestamp,
+        ...(reason ? { reason } : {}),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+      },
+    };
+    return unmatchedMatch;
+  }) as Record<string, unknown>[];
+
+  if (!unmatchedMatch) {
+    throw new HttpsError("not-found", "Match candidate is not available for unmatch.");
+  }
+
+  return {
+    matches,
+    unmatchedMatch,
+    auditEvent: {
+      type: "match_unmatched",
       actorUserId: userId,
       matchedUserId,
       ...(idempotencyKey ? { idempotencyKey } : {}),

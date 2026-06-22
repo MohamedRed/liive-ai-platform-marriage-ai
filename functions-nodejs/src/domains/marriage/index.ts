@@ -23,9 +23,11 @@ import {
 import {
   buildAcceptedMatchUpdate,
   buildDeclinedMatchUpdate,
+  buildUnmatchedMatchUpdate,
   MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION,
   parseAcceptMatchPayload,
   parseDeclineMatchPayload,
+  parseUnmatchPayload,
 } from "./match-acceptance";
 import {
   processPendingMatchAcceptanceNotificationsHandler,
@@ -458,6 +460,80 @@ export const declineMatch = onCall(async (request) => {
     }
     logger.error(`Error declining match for ${userID}/${matchedUserId}:`, error);
     throw new HttpsError("internal", "Failed to decline match");
+  }
+});
+
+export const unmatch = onCall(async (request) => {
+  const userID = requireAuthenticatedUid(request.auth);
+  const { matchedUserId, reason, idempotencyKey } = parseUnmatchPayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    return await db.runTransaction(async (transaction) => {
+      const matchRef = db.collection(LEGACY_COLLECTIONS.MATCHES).doc(userID);
+      const matchedUserMatchRef = db.collection(LEGACY_COLLECTIONS.MATCHES).doc(matchedUserId);
+      const matchDoc = await transaction.get(matchRef);
+      const matchedUserMatchDoc = await transaction.get(matchedUserMatchRef);
+      const matchData = matchDoc.exists ? matchDoc.data() : undefined;
+      const matchedUserMatchData = matchedUserMatchDoc.exists ? matchedUserMatchDoc.data() : undefined;
+
+      const unmatchedUpdate = buildUnmatchedMatchUpdate({
+        userId: userID,
+        matchedUserId,
+        matches: matchData?.matches,
+        reason,
+        timestamp,
+        idempotencyKey,
+      });
+
+      let reciprocalUnmatchedUpdate: ReturnType<typeof buildUnmatchedMatchUpdate> | undefined;
+      if (Array.isArray(matchedUserMatchData?.matches)) {
+        try {
+          reciprocalUnmatchedUpdate = buildUnmatchedMatchUpdate({
+            userId: matchedUserId,
+            matchedUserId: userID,
+            matches: matchedUserMatchData?.matches,
+            timestamp,
+            idempotencyKey,
+          });
+        } catch (reciprocalError) {
+          if (!(reciprocalError instanceof HttpsError)) {
+            throw reciprocalError;
+          }
+        }
+      }
+
+      transaction.set(matchRef, {
+        matches: unmatchedUpdate.matches,
+        lastUnmatchedUserId: matchedUserId,
+        matchUnmatchedAt: timestamp,
+        updatedAt: timestamp,
+      }, { merge: true });
+
+      if (reciprocalUnmatchedUpdate) {
+        transaction.set(matchedUserMatchRef, {
+          matches: reciprocalUnmatchedUpdate.matches,
+          lastUnmatchedUserId: userID,
+          matchUnmatchedAt: timestamp,
+          updatedAt: timestamp,
+        }, { merge: true });
+      }
+
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+      transaction.set(auditRef, unmatchedUpdate.auditEvent);
+
+      return {
+        status: "unmatched",
+        matchedUserId,
+      };
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error unmatching marriage user for ${userID}/${matchedUserId}:`, error);
+    throw new HttpsError("internal", "Failed to unmatch marriage user");
   }
 });
 

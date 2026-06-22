@@ -2,8 +2,10 @@ import { HttpsError } from "firebase-functions/v2/https";
 import {
   buildAcceptedMatchUpdate,
   buildDeclinedMatchUpdate,
+  buildUnmatchedMatchUpdate,
   parseAcceptMatchPayload,
   parseDeclineMatchPayload,
+  parseUnmatchPayload,
 } from "../domains/marriage/match-acceptance";
 
 describe("match acceptance state machine", () => {
@@ -193,6 +195,74 @@ describe("match acceptance state machine", () => {
       userId: "user-1",
       matchedUserId: "missing-match",
       matches: [{ id: "match-1" }],
+      timestamp,
+    })).toThrow(HttpsError);
+  });
+
+  it("parses unmatch payloads with bounded optional reason", () => {
+    expect(parseUnmatchPayload({
+      matchedUserId: " match-1 ",
+      reason: "  No longer proceeding  ",
+      idempotencyKey: " unmatch-1 ",
+    })).toEqual({
+      matchedUserId: "match-1",
+      reason: "No longer proceeding",
+      idempotencyKey: "unmatch-1",
+    });
+  });
+
+  it("rejects malformed unmatch payloads", () => {
+    for (const payload of [
+      undefined,
+      null,
+      {},
+      { matchedUserId: "" },
+      { matchedUserId: "match-1", reason: "x".repeat(501) },
+      { matchedUserId: "match-1", idempotencyKey: "x".repeat(129) },
+    ]) {
+      expect(() => parseUnmatchPayload(payload)).toThrow(HttpsError);
+    }
+  });
+
+  it("unmatches only existing accepted matches and returns audited Firestore updates", () => {
+    const result = buildUnmatchedMatchUpdate({
+      userId: " user-1 ",
+      matchedUserId: " match-1 ",
+      matches: [
+        { id: "other-match", status: "accepted", acceptance: { status: "accepted" } },
+        { id: "match-1", status: "accepted", acceptance: { status: "accepted", waliId: "wali-1" } },
+      ],
+      reason: "No longer proceeding",
+      timestamp,
+      idempotencyKey: "unmatch-1",
+    });
+
+    expect(result.matches[0]).toEqual({ id: "other-match", status: "accepted", acceptance: { status: "accepted" } });
+    expect(result.unmatchedMatch).toMatchObject({
+      id: "match-1",
+      status: "unmatched",
+      acceptance: { status: "revoked" },
+      unmatch: {
+        status: "unmatched",
+        unmatchedBy: "user-1",
+        reason: "No longer proceeding",
+        idempotencyKey: "unmatch-1",
+      },
+    });
+    expect(result.auditEvent).toMatchObject({
+      type: "match_unmatched",
+      actorUserId: "user-1",
+      matchedUserId: "match-1",
+      idempotencyKey: "unmatch-1",
+    });
+    expect(result.auditEvent).not.toHaveProperty("reason");
+  });
+
+  it("rejects unmatch before a match has been accepted", () => {
+    expect(() => buildUnmatchedMatchUpdate({
+      userId: "user-1",
+      matchedUserId: "match-1",
+      matches: [{ id: "match-1", status: "declined" }],
       timestamp,
     })).toThrow(HttpsError);
   });
