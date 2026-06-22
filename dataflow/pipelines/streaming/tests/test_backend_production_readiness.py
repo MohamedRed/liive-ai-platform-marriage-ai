@@ -1210,10 +1210,15 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("profile_suspended", safety_source)
         self.assertIn("targetUserUpdate", safety_source)
         self.assertIn("suspensionReportId", safety_source)
+        self.assertIn("USER_SAFETY_ESCALATIONS_COLLECTION", safety_source)
+        self.assertIn("escalationRecord", safety_source)
+        self.assertIn("priority: \"high\"", safety_source)
         self.assertIn("blockedUserIds", source)
         self.assertIn("reviewMarriageReport", source)
         self.assertIn("targetUserRef", source)
         self.assertIn("transaction.set(targetUserRef", source)
+        self.assertIn("escalationRef", source)
+        self.assertIn("transaction.set(escalationRef", source)
         self.assertIn("permission-denied", safety_source)
         self.assertIn("USER_SAFETY_BLOCKS_COLLECTION", source)
         self.assertIn("USER_SAFETY_REPORTS_COLLECTION", source)
@@ -1222,6 +1227,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("transaction.set(auditRef", source)
         self.assertIn("match /USER_SAFETY_BLOCKS/{document=**}", rules)
         self.assertIn("match /USER_SAFETY_REPORTS/{document=**}", rules)
+        self.assertIn("match /USER_SAFETY_ESCALATIONS/{document=**}", rules)
         self.assertIn("allow read, write: if false", rules)
 
     def test_supervised_chat_has_server_authorized_write_and_read_paths(self):

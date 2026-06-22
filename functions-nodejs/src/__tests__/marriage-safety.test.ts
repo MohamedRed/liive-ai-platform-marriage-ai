@@ -250,4 +250,43 @@ describe("marriage safety block/report APIs", () => {
     });
     expect(write.auditEvent).not.toHaveProperty("moderatorNote");
   });
+
+  it("builds a server-owned escalation record for escalated report reviews", () => {
+    const write = buildMarriageSafetyReportReviewWrite({
+      moderatorUserId: " moderator-1 ",
+      payload: {
+        reportId: "report-1",
+        status: "escalated",
+        resolution: "escalated",
+        moderatorNote: "Sensitive escalation note",
+        idempotencyKey: "review-1",
+      },
+      existingReport: {
+        reporterUserId: "actor-user",
+        targetUserId: "target-user",
+        category: "safety_concern",
+      },
+      timestamp,
+    });
+
+    expect(write.escalationRecord).toMatchObject({
+      reportId: "report-1",
+      reporterUserId: "actor-user",
+      targetUserId: "target-user",
+      category: "safety_concern",
+      status: "open",
+      priority: "high",
+      escalatedBy: "moderator-1",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      idempotencyKey: "review-1",
+    });
+    expect(write.escalationRecord).not.toHaveProperty("moderatorNote");
+    expect(write.auditEvent).toMatchObject({
+      type: "marriage_report_reviewed",
+      status: "escalated",
+      resolution: "escalated",
+    });
+    expect(write.auditEvent).not.toHaveProperty("moderatorNote");
+  });
 });

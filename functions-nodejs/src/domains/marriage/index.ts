@@ -49,6 +49,7 @@ import {
   parseReviewMarriageReportPayload,
   requireMarriageSafetyModerator,
   USER_SAFETY_BLOCKS_COLLECTION,
+  USER_SAFETY_ESCALATIONS_COLLECTION,
   USER_SAFETY_REPORTS_COLLECTION,
 } from "./safety";
 import {
@@ -385,6 +386,10 @@ export const reviewMarriageReport = onCall(async (request) => {
       if (reportReviewWrite.targetUserId && reportReviewWrite.targetUserUpdate) {
         const targetUserRef = db.collection(LEGACY_COLLECTIONS.USER_INFO).doc(reportReviewWrite.targetUserId);
         transaction.set(targetUserRef, reportReviewWrite.targetUserUpdate, { merge: true });
+      }
+      if (reportReviewWrite.escalationRecord) {
+        const escalationRef = db.collection(USER_SAFETY_ESCALATIONS_COLLECTION).doc();
+        transaction.set(escalationRef, reportReviewWrite.escalationRecord);
       }
       transaction.set(auditRef, reportReviewWrite.auditEvent);
 
