@@ -41,13 +41,11 @@ def generate_qas_hash(qas_data: dict) -> str:
     # For dicts, sorting items (key-value pairs) is good.
     # For lists of dicts, sorting the list based on a stable key (e.g., questionId) would be ideal.
     # Simple JSON dump with sorted keys is a good general approach for dicts.
-    try:
-        # Ensure deterministic serialization for hashing
-        serialized_qas = json.dumps(qas_data, sort_keys=True, ensure_ascii=False)
-        return hashlib.md5(serialized_qas.encode('utf-8')).hexdigest()
-    except Exception as e:
-        logger.error(f"Error generating hash for Q&A data: {e}")
-        return "" # Fallback to empty string if hashing fails
+    # Ensure deterministic serialization for hashing. Let serialization errors propagate
+    # so the caller can tag the active element to SummaryGenerationErrors instead of
+    # storing a summary with an empty/non-versioned hash.
+    serialized_qas = json.dumps(qas_data, sort_keys=True, ensure_ascii=False)
+    return hashlib.md5(serialized_qas.encode('utf-8')).hexdigest()
 
 
 class GenerateProfileSummaryDoFn(beam.DoFn):
@@ -143,7 +141,21 @@ class GenerateProfileSummaryDoFn(beam.DoFn):
 
         # Generate a hash of the Q&A data for versioning
         # This hash represents the version of the data used to generate this summary
-        qas_version_hash = generate_qas_hash(questions_answers)
+        try:
+            qas_version_hash = generate_qas_hash(questions_answers)
+        except Exception as e:
+            self.logger.error(
+                f"Failed to hash Q&A data for profile summary for user {user_id}: {e}",
+                exc_info=True,
+            )
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": f"GenerateProfileSummaryDoFn Q&A hash generation failed: {str(e)}",
+                "user_id": user_id,
+                "element": element,
+                "traceback": traceback.format_exc(),
+            })
+            return
 
         # TODO: Refine this prompt. Make it configurable or load from a file/GCS.
         prompt = f"""

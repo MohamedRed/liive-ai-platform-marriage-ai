@@ -531,6 +531,20 @@ class BackendProductionReadinessTests(unittest.TestCase):
             summary_source,
         )
 
+    def test_profile_summary_qas_hash_failures_are_tagged_not_silent_empty_versions(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        summary_source = read("dataflow/pipelines/streaming/transforms/profile_summarization.py")
+
+        self.assertIn("GenerateProfileSummaryDoFn.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn("qas_version_hash = generate_qas_hash(questions_answers)", summary_source)
+        self.assertIn('"error_message": f"GenerateProfileSummaryDoFn Q&A hash generation failed: {str(e)}"', summary_source)
+        self.assertIn('"user_id": user_id', summary_source)
+        self.assertIn('"element": element', summary_source)
+        self.assertIn('"traceback": traceback.format_exc()', summary_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", summary_source)
+        self.assertIn("summary_results_tuple.generation_errors | \"DLQ_SummaryGenerationErrors\" >> dlq_sink(\"SummaryGenerationErrors\")", streaming_source)
+        self.assertNotIn('return "" # Fallback to empty string if hashing fails', summary_source)
+
     def test_streaming_dlq_writer_persists_structured_error_record(self):
         class _FakeMetrics:
             @staticmethod
