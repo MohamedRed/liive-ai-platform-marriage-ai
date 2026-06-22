@@ -10,8 +10,8 @@ uses them in two places:
    before cross-encoder/LLM reranking.
 
 The helpers enforce constraints when the relevant profile fields are present and
-always fail closed for deleted/hidden/archived profiles, block lists, and required
-candidate verification documents.
+always fail closed for deleted/hidden/archived profiles, privacy/discovery pause
+states, block lists, and required candidate verification documents.
 """
 
 from __future__ import annotations
@@ -212,6 +212,65 @@ def is_profile_active(profile: Mapping[str, Any] | None) -> bool:
     return True
 
 
+def _any_explicit_false(profile: Mapping[str, Any] | None, paths: Iterable[str]) -> bool:
+    return any(_normalize_bool(_get_path(profile, path), default=None) is False for path in paths)
+
+
+def _any_explicit_true(profile: Mapping[str, Any] | None, paths: Iterable[str]) -> bool:
+    return any(_normalize_bool(_get_path(profile, path), default=None) is True for path in paths)
+
+
+def is_profile_matchable(profile: Mapping[str, Any] | None) -> bool:
+    """Return whether the profile is allowed to participate in matching.
+
+    This is stricter than account activity: a user can have an active account but
+    pause discovery, set a private visibility state, or explicitly mark matching
+    disabled. Those privacy/disclosure states must fail closed before scoring.
+    """
+    if not is_profile_active(profile):
+        return False
+
+    if _any_explicit_false(profile, (
+        "isMatchable",
+        "matchable",
+        "discoverable",
+        "isDiscoverable",
+        "showInMatches",
+        "privacy.discoverable",
+        "privacy.isDiscoverable",
+        "privacy.showInMatches",
+        "matching.enabled",
+        "matching.isEnabled",
+        "matching.discoverable",
+        "matching.isDiscoverable",
+        "marriageProfile.discoverable",
+    )):
+        return False
+
+    if _any_explicit_true(profile, (
+        "matching.paused",
+        "matchingPaused",
+        "matchPaused",
+        "privacy.matchingPaused",
+        "privacy.discoveryPaused",
+        "discoveryPaused",
+    )):
+        return False
+
+    visibility = _normalize_string(_first_value(profile, (
+        "profileVisibility",
+        "visibility",
+        "privacy.profileVisibility",
+        "privacy.visibility",
+        "disclosure.profileVisibility",
+        "marriageProfile.visibility",
+    )))
+    if visibility in {"private", "hidden", "paused", "disabled", "unlisted", "invite_only", "wali_only"}:
+        return False
+
+    return True
+
+
 def verification_is_verified(document_data: Mapping[str, Any] | None) -> bool:
     if not isinstance(document_data, Mapping):
         return False
@@ -269,7 +328,7 @@ def is_candidate_hard_eligible(
     """
     if not isinstance(triggering_profile, Mapping) or not isinstance(candidate_profile, Mapping):
         return False
-    if not is_profile_active(triggering_profile) or not is_profile_active(candidate_profile):
+    if not is_profile_matchable(triggering_profile) or not is_profile_matchable(candidate_profile):
         return False
     if not verification_is_verified(candidate_identity_verification):
         return False
@@ -296,7 +355,7 @@ def is_candidate_hard_eligible(
 def build_match_metadata(profile: Mapping[str, Any] | None) -> dict[str, Any]:
     """Extract Pinecone-safe hard-filter metadata from a user profile."""
     metadata: dict[str, Any] = {
-        "is_matchable": bool(is_profile_active(profile)),
+        "is_matchable": bool(is_profile_matchable(profile)),
     }
     gender = profile_gender(profile)
     if gender:

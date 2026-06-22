@@ -1292,12 +1292,19 @@ class BackendProductionReadinessTests(unittest.TestCase):
         }
         wrong_gender_candidate = {**valid_candidate, "id": "u3", "gender": "female"}
         blocked_candidate = {**valid_candidate, "id": "u4", "blockedUserIds": ["u1"]}
+        non_discoverable_candidate = {**valid_candidate, "id": "u5", "privacy": {"discoverable": False}}
+        private_visibility_candidate = {**valid_candidate, "id": "u6", "privacy": {"profileVisibility": "private"}}
+        paused_triggering_profile = {**triggering_profile, "matching": {"paused": True}}
         unverified_identity = {"status": "pending"}
         verified = {"status": "verified"}
 
         self.assertTrue(eligibility.is_candidate_hard_eligible(triggering_profile, valid_candidate, verified, verified))
         self.assertFalse(eligibility.is_candidate_hard_eligible(triggering_profile, wrong_gender_candidate, verified, verified))
         self.assertFalse(eligibility.is_candidate_hard_eligible(triggering_profile, blocked_candidate, verified, verified))
+        self.assertFalse(eligibility.is_candidate_hard_eligible(triggering_profile, non_discoverable_candidate, verified, verified))
+        self.assertFalse(eligibility.is_candidate_hard_eligible(triggering_profile, private_visibility_candidate, verified, verified))
+        self.assertFalse(eligibility.is_candidate_hard_eligible(paused_triggering_profile, valid_candidate, verified, verified))
+        self.assertFalse(eligibility.build_match_metadata(non_discoverable_candidate)["is_matchable"])
         self.assertFalse(eligibility.is_candidate_hard_eligible(triggering_profile, valid_candidate, unverified_identity, verified))
 
     def test_embedding_and_pinecone_query_carry_hard_filter_metadata(self):
