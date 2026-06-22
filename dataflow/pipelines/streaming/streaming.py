@@ -30,9 +30,8 @@ from datetime import datetime
 import statistics # For calculating average aggregate score
 from apache_beam.metrics import Metrics # For custom DoFn metrics
 from google.cloud import firestore # Needed for history fetch setup
-from .common.definitions import COLLECTIONS, DEFAULT_LOCATION, FOUNDATIONAL_LAYER, INSIGHT_LAYER # Import COLLECTIONS and layer constants
+from .common.definitions import COLLECTIONS, DEFAULT_LOCATION # Import COLLECTIONS and layer constants
 from .utils.firestore_helpers import get_all_user_qas # Import history fetch helper
-from .common import config # <<< Corrected import for config.py
 
 # Import modular components
 from .transforms.common import (
@@ -78,7 +77,7 @@ from .transforms.final_eligibility import ApplyFinalMatchEligibilityGate
 from .transforms.scheduling import ScheduleDelayedMatching, HandleMatchActions
 from .transforms.profile_summarization import GenerateAndStoreProfileSummary
 from .transforms.answer_parsing import ParseAnswerIntoStatements
-from .transforms.scoring import normalize_ai_score_to_unit
+from .transforms.match_percentage import CalculateAdjustedTopMatchPercentage
 # Import utility functions if needed
 # from .utils import access_secret
 
@@ -633,55 +632,12 @@ def run_streaming_pipeline(argv=None):
         # }
 
         # Add step to calculate Adjusted Top Match Percentage
-        def calculate_adjusted_top_match_percentage(element):
-            user_id = element.get('user_id')
-            matches_list = element.get('matches', [])
-            user_qas = element.get('user_qas', {})
-
-            raw_top_match_ai_score = None
-            adjusted_top_match_percentage = None
-            num_answered_core_questions_by_user = 0
-            core_profile_completeness_factor = 0.0
-
-            if matches_list:
-                try:
-                    top_match = matches_list[0]
-                    raw_top_match_ai_score_raw = top_match.get('ai_score')
-
-                    raw_top_match_ai_score = normalize_ai_score_to_unit(raw_top_match_ai_score_raw)
-
-                    if raw_top_match_ai_score is not None:
-
-                        for qa_id, qa_data in user_qas.items():
-                            layer = qa_data.get('layer')
-                            if layer == FOUNDATIONAL_LAYER or layer == INSIGHT_LAYER:
-                                num_answered_core_questions_by_user += 1
-                        
-                        if config.TOTAL_CORE_QUESTIONS_IN_SYSTEM > 0:
-                            core_profile_completeness_factor = min(1.0, num_answered_core_questions_by_user / config.TOTAL_CORE_QUESTIONS_IN_SYSTEM)
-                        else:
-                            core_profile_completeness_factor = 1.0
-
-                        adjusted_percentage_float = raw_top_match_ai_score * (
-                            config.MIN_CONFIDENCE_WEIGHT + (1 - config.MIN_CONFIDENCE_WEIGHT) * core_profile_completeness_factor
-                        )
-                        adjusted_top_match_percentage = round(adjusted_percentage_float * 100)
-
-                except Exception as e:
-                    logger.error(f"Error calculating adjusted top score for {user_id}: {e}")
-            
-            element['topMatchPercentage'] = adjusted_top_match_percentage
-            element['rawTopMatchAiScore'] = raw_top_match_ai_score # Store as 0-1
-            element['currentUserCoreProfileCompletenessFactor'] = core_profile_completeness_factor
-            element['currentUserAnsweredCoreQuestionsCount'] = num_answered_core_questions_by_user
-            element['totalCoreQuestionsInSystem'] = config.TOTAL_CORE_QUESTIONS_IN_SYSTEM
-            element['minConfidenceWeightUsed'] = config.MIN_CONFIDENCE_WEIGHT
-            return element
-
-        matches_with_percentage = (
+        match_percentage_results = (
             final_eligible_matches_data # Authoritatively filtered before percentage calculation and side effects
-            | "CalculateAdjustedTopMatchPercentage" >> beam.Map(calculate_adjusted_top_match_percentage)
+            | "CalculateAdjustedTopMatchPercentage" >> CalculateAdjustedTopMatchPercentage()
         )
+        match_percentage_results.error | "DLQ_MatchPercentageErrors" >> dlq_sink("MatchPercentageErrors")
+        matches_with_percentage = match_percentage_results.main
 
         # --- Combine Candidate Layers, History, AND Reranking Results (FOR FINAL NEXT QUESTION SELECTION) --- #
         RERANKING_RESULTS_TAG = 'reranking_results' 

@@ -1190,6 +1190,25 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn('filtered_element = {**element, "matches": []}', final_gate_source)
         self.assertNotIn("yield filtered_element\n                return", final_gate_source)
 
+    def test_match_percentage_calculation_errors_are_tagged_not_logged_only(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        percentage_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/match_percentage.py"
+        self.assertTrue(percentage_path.exists(), "match percentage transform must exist")
+        percentage_source = percentage_path.read_text()
+
+        self.assertIn("class CalculateAdjustedTopMatchPercentageDoFn", percentage_source)
+        self.assertIn("CalculateAdjustedTopMatchPercentageDoFn.OUTPUT_ERROR_TAG", percentage_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", percentage_source)
+        self.assertIn("normalize_ai_score_to_unit", percentage_source)
+        self.assertIn('"Invalid user_qas shape for match percentage calculation"', percentage_source)
+        self.assertIn('"Invalid top match shape for match percentage calculation"', percentage_source)
+        self.assertIn('"operation": "calculate_adjusted_top_match_percentage"', percentage_source)
+        self.assertIn("CalculateAdjustedTopMatchPercentage", streaming_source)
+        self.assertIn("match_percentage_results.error | \"DLQ_MatchPercentageErrors\" >> dlq_sink(\"MatchPercentageErrors\")", streaming_source)
+        self.assertIn("matches_with_percentage = match_percentage_results.main", streaming_source)
+        self.assertNotIn("def calculate_adjusted_top_match_percentage(element):", streaming_source)
+        self.assertNotIn("Error calculating adjusted top score", streaming_source)
+
     def test_final_match_write_and_actions_are_authoritatively_eligibility_gated(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         final_gate_path = REPO_ROOT / "dataflow/pipelines/streaming/transforms/final_eligibility.py"
