@@ -8,7 +8,6 @@ import {
   QuestionsAnswers,
   WaliInfo,
   RelationshipType,
-  QuestionLayer,
   LEGACY_COLLECTIONS
 } from '@livve-1/database-types';
 
@@ -21,17 +20,17 @@ import {
   queueMatchingEvent,
   republishPendingMatchingEventsHandler,
 } from "./matching-events";
+import {
+  parseUpdateUserAnswersPayload,
+  requireAuthenticatedUid,
+} from "./request-validation";
 import { buildVerifiedWaliRelationPayload } from "./wali-verification";
 
 /**
  * Get user's questions and answers
  */
 export const getUserQA = onCall(async (request) => {
-  if (!request.auth) {
-    throw new Error("Unauthorized. You must be logged in to access your QA data.");
-  }
-
-  const userID = request.auth.uid;
+  const userID = requireAuthenticatedUid(request.auth);
 
   try {
     // Using legacy collections until migration to separate databases is complete
@@ -57,23 +56,13 @@ export const getUserQA = onCall(async (request) => {
  * Update user's answers
  */
 export const updateUserAnswers = onCall(async (request) => {
-  if (!request.auth) {
-    throw new Error("Unauthorized. You must be logged in to update your answers.");
-  }
-
-  const userID = request.auth.uid;
-  const { questionId, question, answer, layer, section } = request.data;
+  const userID = requireAuthenticatedUid(request.auth);
+  const { questionId, question, answer, layer, section } = parseUpdateUserAnswersPayload(request.data);
   const timestamp = firestore.Timestamp.now();
 
   try {
     // Using legacy collections until migration to separate databases is complete
     const db = admin.firestore();
-
-    // Validate input
-    const validLayers = Object.values(QuestionLayer).filter((value) => typeof value === 'number');
-    if (typeof questionId !== 'string' || !questionId.trim() || typeof answer !== 'string' || !validLayers.includes(layer)) {
-      throw new Error("Invalid input. Question ID, answer, and a valid question layer are required.");
-    }
 
     let questionTextForEvent = typeof question === 'string' && question.trim() ? question.trim() : questionId;
     const sectionForStorage = typeof section === 'string' && section.trim() ? section.trim() : undefined;
