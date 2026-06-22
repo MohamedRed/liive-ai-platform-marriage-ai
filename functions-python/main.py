@@ -10,6 +10,7 @@ from video_authorization import (
     MatchVideoAuthorizationError,
     authorize_supervised_video_room,
     parse_supervised_video_request,
+    resolve_supervised_video_counterpart,
 )
 
 
@@ -65,11 +66,20 @@ def livekitToken(req: https_fn.CallableRequest) -> Any:
     except MatchVideoAuthorizationError as exc:
         raise _invalid_argument(str(exc)) from exc
 
-    match_snapshot = firestore.client().collection(MATCHES_COLLECTION).document(uid).get()
+    firestore_client = firestore.client()
+    match_snapshot = firestore_client.collection(MATCHES_COLLECTION).document(uid).get()
     match_document = match_snapshot.to_dict() if match_snapshot.exists else None
 
     try:
-        authorization = authorize_supervised_video_room(uid, match_id, match_document)
+        counterpart = resolve_supervised_video_counterpart(uid, match_id, match_document)
+    except MatchVideoAuthorizationError as exc:
+        raise _failed_precondition(str(exc)) from exc
+
+    matched_user_snapshot = firestore_client.collection(MATCHES_COLLECTION).document(counterpart.matched_user_id).get()
+    matched_user_document = matched_user_snapshot.to_dict() if matched_user_snapshot.exists else None
+
+    try:
+        authorization = authorize_supervised_video_room(uid, match_id, match_document, matched_user_document)
     except MatchVideoAuthorizationError as exc:
         raise _failed_precondition(str(exc)) from exc
 
@@ -100,5 +110,7 @@ def livekitToken(req: https_fn.CallableRequest) -> Any:
         "url": livekit_url_value,
         "room": room_name,
         "matchId": authorization.match_id,
+        "matchedUserId": authorization.matched_user_id,
         "waliId": authorization.wali_id,
+        "matchedUserWaliId": authorization.matched_user_wali_id,
     }
