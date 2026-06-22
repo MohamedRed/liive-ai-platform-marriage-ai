@@ -176,6 +176,15 @@ class ParseAnswerStatementsDoFn(beam.DoFn):
             yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {"error_message": error_message, "element": element})
             return
 
+        if not isinstance(element, dict):
+            self.logger.warning("Invalid answer parsing input shape: %r", element)
+            self.error_counter.inc()
+            yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG, {
+                "error_message": "Invalid answer parsing input shape",
+                "element": element,
+            })
+            return
+
         user_id = element.get('user_id')
         question_id = element.get('question_id')
         question_text = element.get('question_text')

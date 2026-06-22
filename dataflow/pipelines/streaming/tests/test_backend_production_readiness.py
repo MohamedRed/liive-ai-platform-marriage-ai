@@ -1211,6 +1211,21 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertNotIn("OpenAI client for answer parsing is not initialized", answer_parsing_source)
         self.assertNotIn("return []\n        except Exception as e:\n            self.logger.error(f\"LLM call failed for answer parsing", answer_parsing_source)
 
+    def test_answer_parsing_invalid_input_shape_is_tagged_before_field_access(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        answer_parsing_source = read("dataflow/pipelines/streaming/transforms/answer_parsing.py")
+
+        self.assertIn("ParseAnswerStatementsDoFn.OUTPUT_ERROR_TAG", answer_parsing_source)
+        self.assertIn("if not isinstance(element, dict):", answer_parsing_source)
+        self.assertIn('"error_message": "Invalid answer parsing input shape"', answer_parsing_source)
+        self.assertIn('"element": element', answer_parsing_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.OUTPUT_ERROR_TAG", answer_parsing_source)
+        self.assertIn("parsed_statements_results.error | \"DLQ_ParseStatementsErrors\" >> dlq_sink(\"ParseStatementsErrors\")", streaming_source)
+        self.assertLess(
+            answer_parsing_source.index("if not isinstance(element, dict):"),
+            answer_parsing_source.index("user_id = element.get('user_id')"),
+        )
+
     def test_statement_embedding_errors_are_tagged_and_written_to_dlq(self):
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")
         embedding_source = read("dataflow/pipelines/streaming/transforms/embedding.py")
