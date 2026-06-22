@@ -22,8 +22,10 @@ import {
 } from "./matching-events";
 import {
   buildAcceptedMatchUpdate,
+  buildDeclinedMatchUpdate,
   MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION,
   parseAcceptMatchPayload,
+  parseDeclineMatchPayload,
 } from "./match-acceptance";
 import {
   processPendingMatchAcceptanceNotificationsHandler,
@@ -412,6 +414,50 @@ export const acceptMatch = onCall(async (request) => {
     }
     logger.error(`Error accepting match for ${userID}/${matchedUserId}:`, error);
     throw new HttpsError("internal", "Failed to accept match");
+  }
+});
+
+export const declineMatch = onCall(async (request) => {
+  const userID = requireAuthenticatedUid(request.auth);
+  const { matchedUserId, reason, idempotencyKey } = parseDeclineMatchPayload(request.data);
+  const timestamp = firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  try {
+    return await db.runTransaction(async (transaction) => {
+      const matchRef = db.collection(LEGACY_COLLECTIONS.MATCHES).doc(userID);
+      const matchDoc = await transaction.get(matchRef);
+      const matchData = matchDoc.exists ? matchDoc.data() : undefined;
+      const declinedUpdate = buildDeclinedMatchUpdate({
+        userId: userID,
+        matchedUserId,
+        matches: matchData?.matches,
+        reason,
+        timestamp,
+        idempotencyKey,
+      });
+
+      transaction.set(matchRef, {
+        matches: declinedUpdate.matches,
+        lastDeclinedMatchId: matchedUserId,
+        matchDeclinedAt: timestamp,
+        updatedAt: timestamp,
+      }, { merge: true });
+
+      const auditRef = db.collection(LEGACY_COLLECTIONS.AUDIT_LOGS).doc();
+      transaction.set(auditRef, declinedUpdate.auditEvent);
+
+      return {
+        status: "declined",
+        matchedUserId,
+      };
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    logger.error(`Error declining match for ${userID}/${matchedUserId}:`, error);
+    throw new HttpsError("internal", "Failed to decline match");
   }
 });
 

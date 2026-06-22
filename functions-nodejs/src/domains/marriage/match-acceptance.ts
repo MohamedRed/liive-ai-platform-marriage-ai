@@ -2,6 +2,9 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 export const MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION = "MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX";
 
+const MAX_DECLINE_REASON_LENGTH = 500;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+
 interface WaliRelationLike {
   userId?: unknown;
   waliId?: unknown;
@@ -11,6 +14,12 @@ interface WaliRelationLike {
 export interface AcceptMatchPayload {
   matchedUserId: string;
   notifyWali: boolean;
+  idempotencyKey?: string;
+}
+
+export interface DeclineMatchPayload {
+  matchedUserId: string;
+  reason?: string;
   idempotencyKey?: string;
 }
 
@@ -24,11 +33,26 @@ export interface AcceptedMatchUpdateInput {
   idempotencyKey?: string;
 }
 
+export interface DeclinedMatchUpdateInput {
+  userId: string;
+  matchedUserId: string;
+  matches: unknown;
+  reason?: string;
+  timestamp: unknown;
+  idempotencyKey?: string;
+}
+
 export interface AcceptedMatchUpdateResult {
   matches: Record<string, unknown>[];
   acceptedMatch: Record<string, unknown>;
   auditEvent: Record<string, unknown>;
   notificationOutboxEvent?: Record<string, unknown>;
+}
+
+export interface DeclinedMatchUpdateResult {
+  matches: Record<string, unknown>[];
+  declinedMatch: Record<string, unknown>;
+  auditEvent: Record<string, unknown>;
 }
 
 function trimOptionalString(value: unknown): string | undefined {
@@ -43,6 +67,17 @@ function trimRequiredString(value: unknown, fieldName: string): string {
   const trimmed = trimOptionalString(value);
   if (!trimmed) {
     throw new HttpsError("invalid-argument", `${fieldName} is required.`);
+  }
+  return trimmed;
+}
+
+function boundedOptionalString(value: unknown, fieldName: string, maxLength: number): string | undefined {
+  const trimmed = trimOptionalString(value);
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.length > maxLength) {
+    throw new HttpsError("invalid-argument", `${fieldName} must be ${maxLength} characters or fewer.`);
   }
   return trimmed;
 }
@@ -62,6 +97,19 @@ export function parseAcceptMatchPayload(data: unknown): AcceptMatchPayload {
     matchedUserId: trimRequiredString(payload.matchedUserId, "matchedUserId"),
     notifyWali,
     idempotencyKey: trimOptionalString(payload.idempotencyKey),
+  };
+}
+
+export function parseDeclineMatchPayload(data: unknown): DeclineMatchPayload {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new HttpsError("invalid-argument", "Match decline payload is required.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  return {
+    matchedUserId: trimRequiredString(payload.matchedUserId, "matchedUserId"),
+    reason: boundedOptionalString(payload.reason, "reason", MAX_DECLINE_REASON_LENGTH),
+    idempotencyKey: boundedOptionalString(payload.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH),
   };
 }
 
@@ -156,5 +204,57 @@ export function buildAcceptedMatchUpdate(input: AcceptedMatchUpdateInput): Accep
         updatedAt: input.timestamp,
       },
     } : {}),
+  };
+}
+
+export function buildDeclinedMatchUpdate(input: DeclinedMatchUpdateInput): DeclinedMatchUpdateResult {
+  const userId = trimRequiredString(input.userId, "userId");
+  const matchedUserId = trimRequiredString(input.matchedUserId, "matchedUserId");
+  const reason = boundedOptionalString(input.reason, "reason", MAX_DECLINE_REASON_LENGTH);
+  const idempotencyKey = boundedOptionalString(input.idempotencyKey, "idempotencyKey", MAX_IDEMPOTENCY_KEY_LENGTH);
+
+  if (!Array.isArray(input.matches)) {
+    throw new HttpsError("failed-precondition", "Match list is unavailable for decline.");
+  }
+
+  let declinedMatch: Record<string, unknown> | undefined;
+  const matches = input.matches.map((matchCandidate) => {
+    if (!matchCandidate || typeof matchCandidate !== "object" || Array.isArray(matchCandidate)) {
+      return matchCandidate as Record<string, unknown>;
+    }
+
+    const candidate = matchCandidate as Record<string, unknown>;
+    if (!candidateIds(candidate).includes(matchedUserId)) {
+      return candidate;
+    }
+
+    declinedMatch = {
+      ...candidate,
+      status: "declined",
+      decline: {
+        status: "declined",
+        declinedBy: userId,
+        declinedAt: input.timestamp,
+        ...(reason ? { reason } : {}),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+      },
+    };
+    return declinedMatch;
+  }) as Record<string, unknown>[];
+
+  if (!declinedMatch) {
+    throw new HttpsError("not-found", "Match candidate is not available for decline.");
+  }
+
+  return {
+    matches,
+    declinedMatch,
+    auditEvent: {
+      type: "match_declined",
+      actorUserId: userId,
+      matchedUserId,
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+      createdAt: input.timestamp,
+    },
   };
 }

@@ -1,7 +1,9 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import {
   buildAcceptedMatchUpdate,
+  buildDeclinedMatchUpdate,
   parseAcceptMatchPayload,
+  parseDeclineMatchPayload,
 } from "../domains/marriage/match-acceptance";
 
 describe("match acceptance state machine", () => {
@@ -124,6 +126,73 @@ describe("match acceptance state machine", () => {
       matches: [{ id: "match-1" }],
       waliRelation: verifiedWaliRelation,
       notifyWali: true,
+      timestamp,
+    })).toThrow(HttpsError);
+  });
+
+  it("parses decline-match payloads with bounded optional reason", () => {
+    expect(parseDeclineMatchPayload({
+      matchedUserId: " match-1 ",
+      reason: "  Not suitable  ",
+      idempotencyKey: " decline-1 ",
+    })).toEqual({
+      matchedUserId: "match-1",
+      reason: "Not suitable",
+      idempotencyKey: "decline-1",
+    });
+  });
+
+  it("rejects malformed decline-match payloads", () => {
+    for (const payload of [
+      undefined,
+      null,
+      {},
+      { matchedUserId: "" },
+      { matchedUserId: "match-1", reason: "x".repeat(501) },
+      { matchedUserId: "match-1", idempotencyKey: "x".repeat(129) },
+    ]) {
+      expect(() => parseDeclineMatchPayload(payload)).toThrow(HttpsError);
+    }
+  });
+
+  it("declines only an existing match and returns audited Firestore updates", () => {
+    const result = buildDeclinedMatchUpdate({
+      userId: " user-1 ",
+      matchedUserId: " match-1 ",
+      matches: [
+        { id: "other-match", ai_score: 84 },
+        { id: "match-1", ai_score: 92, acceptance: { status: "pending" } },
+      ],
+      reason: "Not suitable",
+      timestamp,
+      idempotencyKey: "decline-1",
+    });
+
+    expect(result.matches[0]).toEqual({ id: "other-match", ai_score: 84 });
+    expect(result.declinedMatch).toMatchObject({
+      id: "match-1",
+      status: "declined",
+      decline: {
+        status: "declined",
+        declinedBy: "user-1",
+        reason: "Not suitable",
+        idempotencyKey: "decline-1",
+      },
+    });
+    expect(result.auditEvent).toMatchObject({
+      type: "match_declined",
+      actorUserId: "user-1",
+      matchedUserId: "match-1",
+      idempotencyKey: "decline-1",
+    });
+    expect(result.auditEvent).not.toHaveProperty("reason");
+  });
+
+  it("rejects declines for missing match candidates", () => {
+    expect(() => buildDeclinedMatchUpdate({
+      userId: "user-1",
+      matchedUserId: "missing-match",
+      matches: [{ id: "match-1" }],
       timestamp,
     })).toThrow(HttpsError);
   });

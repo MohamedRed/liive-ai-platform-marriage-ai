@@ -1122,7 +1122,7 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("match /MATCHING_EVENT_OUTBOX/{document=**}", rules)
         self.assertIn("allow read, write: if false", rules)
 
-    def test_match_acceptance_queues_internal_wali_notification_outbox(self):
+    def test_match_acceptance_and_decline_are_server_authorized_state_transitions(self):
         source = read("functions-nodejs/src/domains/marriage/index.ts")
         match_acceptance_source = read("functions-nodejs/src/domains/marriage/match-acceptance.ts")
         notification_source = read("functions-nodejs/src/domains/marriage/match-notifications.ts")
@@ -1132,6 +1132,13 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX", match_acceptance_source)
         self.assertIn("wali_match_acceptance_requested", match_acceptance_source)
         self.assertIn("notificationOutboxEvent", match_acceptance_source)
+        self.assertIn("parseDeclineMatchPayload", match_acceptance_source)
+        self.assertIn("buildDeclinedMatchUpdate", match_acceptance_source)
+        self.assertIn("match_declined", match_acceptance_source)
+        self.assertIn("declineMatch", source)
+        self.assertIn("lastDeclinedMatchId", source)
+        self.assertIn("transaction.set(matchRef", source)
+        self.assertIn("transaction.set(auditRef", source)
         self.assertIn("MATCH_ACCEPTANCE_NOTIFICATION_OUTBOX_COLLECTION", source)
         self.assertIn("transaction.set(notificationRef", source)
         self.assertLess(source.index("transaction.set(matchRef"), source.index("transaction.set(notificationRef"))
