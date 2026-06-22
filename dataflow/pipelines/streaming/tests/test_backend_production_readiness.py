@@ -449,6 +449,23 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("action_errors | \"DLQ_ActionErrors\" >> dlq_sink(\"ActionErrors\")", streaming_source)
         self.assertNotIn("# Don't raise here, just log the failure for this specific action", scheduling_source)
 
+    def test_handle_match_actions_availability_fallback_is_tagged_not_log_only(self):
+        streaming_source = read("dataflow/pipelines/streaming/streaming.py")
+        scheduling_source = read("dataflow/pipelines/streaming/transforms/scheduling.py")
+
+        self.assertIn("def _check_notification_availability(self, prefs, user_id: str):", scheduling_source)
+        self.assertIn("return True, None", scheduling_source)
+        self.assertIn('"error_message": f"Notification availability check failed for user {user_id}: {e}"', scheduling_source)
+        self.assertIn('"operation": "check_notification_availability"', scheduling_source)
+        self.assertIn('"prefs": prefs', scheduling_source)
+        self.assertIn("return True, {", scheduling_source)
+        self.assertIn("is_available, availability_error = self._check_notification_availability(notification_prefs, user_id)", scheduling_source)
+        self.assertIn("if availability_error:", scheduling_source)
+        self.assertIn('availability_error["element"] = element', scheduling_source)
+        self.assertIn("yield beam.pvalue.TaggedOutput(self.ERROR_TAG, availability_error)", scheduling_source)
+        self.assertIn("action_errors | \"DLQ_ActionErrors\" >> dlq_sink(\"ActionErrors\")", streaming_source)
+        self.assertNotIn("# Default to available on error to avoid blocking notifications due to bad settings", scheduling_source)
+
     def test_trigger_event_parser_dlq_error_paths_do_not_assume_pubsub_data(self):
         common_source = read("dataflow/pipelines/streaming/transforms/common.py")
         streaming_source = read("dataflow/pipelines/streaming/streaming.py")

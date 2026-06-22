@@ -195,10 +195,10 @@ class HandleMatchActionsDoFn(beam.DoFn):
             self.setup_error_message = f"HandleMatchActionsDoFn setup failed: {e}"
             self.logger.error(self.setup_error_message, exc_info=True)
 
-    def _check_notification_availability(self, prefs):
+    def _check_notification_availability(self, prefs, user_id: str):
         """Checks notification availability based on user preferences. Matches TypeScript logic."""
         if not prefs:
-            return True  # Default to available if no preferences set
+            return True, None  # Default to available if no preferences set
 
         try:
             # Use UTC or a consistent timezone if prefs relate to specific times
@@ -209,7 +209,7 @@ class HandleMatchActionsDoFn(beam.DoFn):
 
             # Check enabled flag first
             if not prefs.get('enabled', True):
-                 return False
+                 return False, None
 
             # Check quiet hours
             quiet_hours = prefs.get('quietHours')
@@ -222,17 +222,17 @@ class HandleMatchActionsDoFn(beam.DoFn):
                     # This logic seems reversed in original? Let's assume standard quiet hours:
                     # Quiet between start and end
                     if current_hour >= start and current_hour < end:
-                         return False
+                         return False, None
                 else: # Overnight (e.g., 22 to 6)
                     if current_hour >= start or current_hour < end:
-                         return False
+                         return False, None
 
             # Check available days (Map: day_name -> boolean)
             available_days = prefs.get('availableDays')
             if available_days and isinstance(available_days, dict):
                 # Check if today exists in the map and if it's set to False
                 if current_day in available_days and available_days[current_day] is False:
-                     return False
+                     return False, None
                 # If day is not in map, assume available? Or default to unavailable?
                 # Assuming default available if not specified.
 
@@ -247,17 +247,23 @@ class HandleMatchActionsDoFn(beam.DoFn):
                      # Check if current time is *within* the available range
                      if start <= end:
                           if not (current_hour >= start and current_hour < end):
-                               return False # Not within the range
+                               return False, None # Not within the range
                      else: # Overnight availability (e.g., 20 to 9)
                           if not (current_hour >= start or current_hour < end):
-                               return False # Not within the overnight range
+                               return False, None # Not within the overnight range
 
             # If none of the checks returned False, assume available
-            return True
+            return True, None
         except Exception as e:
-             self.logger.error(f"Error checking notification availability: {e}", exc_info=True)
-             # Default to available on error to avoid blocking notifications due to bad settings
-             return True
+             self.logger.error(f"Error checking notification availability for user {user_id}: {e}", exc_info=True)
+             self.error_counter.inc()
+             return True, {
+                 "error_message": f"Notification availability check failed for user {user_id}: {e}",
+                 "operation": "check_notification_availability",
+                 "user_id": user_id,
+                 "prefs": prefs,
+                 "traceback": traceback.format_exc(),
+             }
 
     def _schedule_task(self, queue_name: str, function_url: str, payload: dict, operation: str):
         """Create a Cloud Task and return a DLQ payload when scheduling fails."""
@@ -360,7 +366,10 @@ class HandleMatchActionsDoFn(beam.DoFn):
                 # Only trigger actions if there are suggested questions
                 if match_id and suggested_questions:
                     # Check user availability based on preferences
-                    is_available = self._check_notification_availability(notification_prefs)
+                    is_available, availability_error = self._check_notification_availability(notification_prefs, user_id)
+                    if availability_error:
+                        availability_error["element"] = element
+                        yield beam.pvalue.TaggedOutput(self.ERROR_TAG, availability_error)
 
                     if is_available:
                         # Schedule push notification / in-app message
