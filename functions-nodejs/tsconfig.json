@@ -10,11 +10,7 @@
     "strict": true,
     "target": "es2017",
     "skipLibCheck": true,
-    "baseUrl": ".",
-    "paths": {
-      "@livve-1/database-types": ["../packages/database-types/src"],
-      "@liive-marriage-ai/database-types": ["../packages/database-types/src"]
-    }
+    "baseUrl": "."
   },
   "compileOnSave": true,
   "include": [

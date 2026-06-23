@@ -3,6 +3,20 @@ import { z as zod } from 'zod';
 import { Timestamping } from './index';
 import { PersonalInfo, UserMetadata, InvitationMetadata } from './users';
 import { IdentityVerification, VerificationMetadata, VerificationStatus } from './identity-verification';
+export declare enum QuestionLayer {
+    LAYER_1_CLARIFICATION = 1,
+    LAYER_2_FOUNDATIONAL = 2,
+    LAYER_3_GENERAL = 3,
+    LAYER_4_INSIGHT = 4,// Added for completeness, though not a template layer
+    LAYER_5_TOP_MATCH = 5
+}
+export interface QuestionTemplate extends Timestamping {
+    id: string;
+    text: string;
+    layer: QuestionLayer.LAYER_2_FOUNDATIONAL;
+    section?: string;
+    priority?: number;
+}
 export declare enum RelationshipType {
     FATHER = "father",
     BROTHER = "brother",
@@ -15,10 +29,12 @@ export interface QuestionsAnswers {
         [questionId: string]: {
             question: string;
             answer: string;
+            layer: QuestionLayer;
             section?: string;
             createdAt: FirestoreTimestamp;
             updatedAt?: FirestoreTimestamp;
             aiLyingScore?: number;
+            isGenerated?: boolean;
         };
     };
 }
@@ -55,20 +71,61 @@ export interface WaliInfo extends PersonalInfo, UserMetadata, InvitationMetadata
     userId: string;
     relationship: RelationshipType;
 }
+export interface NextQuestionSuggestion extends Timestamping {
+    userId: string;
+    suggestionCompletionState?: 'initializing' | 'layer2_ongoing' | 'layer3_ongoing' | 'layer4_ongoing' | 'completed' | string;
+    lastActivity?: FirestoreTimestamp;
+    nextSuggestedQuestionId?: string | null;
+    nextSuggestedQuestionText?: string | null;
+    nextSuggestedQuestionLayer?: QuestionLayer | null;
+    nextSuggestedQuestionSection?: string | null;
+    nextSuggestedQuestionTimestamp?: FirestoreTimestamp;
+    nextSuggestedQuestionReasoning?: string;
+    nextSuggestionSource?: string;
+    nextSuggestedQuestionFramework?: string;
+    nextSuggestedQuestionClarificationTag?: string;
+    nextSuggestionCandidateCount?: number | null;
+}
+/**
+ * Represents an entry in the match candidate scoreboard.
+ * Path: MATCH_CANDIDATE_SCOREBOARD/{triggering_user_id}/candidate_scores/{matched_user_id}
+ */
+export interface MatchCandidateScoreboardEntry extends Timestamping {
+    triggering_user_id: string;
+    matched_user_id: string;
+    score: number;
+}
+/**
+ * Represents a pre-generated LLM summary of a user's profile.
+ * Path: MARRIAGE_PROFILE_SUMMARIES/{userId}
+ */
+export interface MarriageProfileSummary extends Timestamping {
+    userId: string;
+    profileSummaryText: string;
+    qasVersionHash: string;
+}
 export interface Matches extends Timestamping {
+    userId: string;
     matches: {
         userId: string;
-        vector_score: number;
+        aggregated_score?: number;
+        cross_encoder_score?: number;
         ai_score: number;
         suggested_questions: {
             question: string;
             rationale: string;
             section: string;
         }[];
-        metadata: {
-            [key: string]: [value: string];
+        metadata?: {
+            [key: string]: any;
         };
     }[];
+    topMatchPercentage: number;
+    rawTopMatchAiScore: number;
+    currentUserCoreProfileCompletenessFactor: number;
+    currentUserAnsweredCoreQuestionsCount: number;
+    totalCoreQuestionsInSystem: number;
+    minConfidenceWeightUsed: number;
 }
 export declare const NewWaliSchema: zod.ZodObject<{
     name: zod.ZodObject<{

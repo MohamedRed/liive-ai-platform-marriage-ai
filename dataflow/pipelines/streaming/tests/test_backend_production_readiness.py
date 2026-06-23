@@ -54,6 +54,43 @@ class BackendProductionReadinessTests(unittest.TestCase):
         self.assertIn("src/**/*.test.tsx", excludes)
         self.assertIn("src/**/__tests__/**", excludes)
 
+    def test_functions_node_lockfile_includes_date_fns_peer_dependency(self):
+        """Firebase Functions must be reproducibly installable with npm ci."""
+        lockfile = json.loads(read("functions-nodejs/package-lock.json"))
+        packages = lockfile.get("packages", {})
+
+        self.assertIn("date-fns-tz", packages.get("", {}).get("dependencies", {}))
+        self.assertIn(
+            "node_modules/date-fns",
+            packages,
+            "functions-nodejs/package-lock.json must include date-fns because date-fns-tz declares it as a peer; otherwise npm ci fails before backend build/tests can run.",
+        )
+
+    def test_functions_node_declares_database_type_runtime_dependencies(self):
+        """Function builds must not depend on undeclared shared-package deps."""
+        package_json = json.loads(read("functions-nodejs/package.json"))
+        dependencies = package_json.get("dependencies", {})
+
+        for package_name in ["@firebase/firestore-types", "dayjs", "zod"]:
+            self.assertIn(
+                package_name,
+                dependencies,
+                f"functions-nodejs/package.json must declare {package_name}; the bundled database-types package imports it at build/test/runtime.",
+            )
+
+    def test_functions_node_uses_bundled_database_types_not_parent_workspace_sources(self):
+        """Firebase Functions deploys from functions-nodejs, so it must use its local file dependency."""
+        package_json = json.loads(read("functions-nodejs/package.json"))
+        bundled_package_json = json.loads(read("functions-nodejs/modules/@livve-1/database-types/package.json"))
+        tsconfig = json.loads(read("functions-nodejs/tsconfig.json"))
+        paths = tsconfig.get("compilerOptions", {}).get("paths", {})
+
+        self.assertNotIn("workspaces", package_json)
+        self.assertEqual("file:./modules/@livve-1/database-types", package_json["dependencies"].get("@livve-1/database-types"))
+        self.assertNotIn("prepare", bundled_package_json.get("scripts", {}))
+        self.assertNotIn("@livve-1/database-types", paths)
+        self.assertNotIn("@liive-marriage-ai/database-types", paths)
+
     def test_firebase_phone_auth_helper_uses_modular_verifier_contract(self):
         source = read("src/auth/context/firebase/action.ts")
 

@@ -27,6 +27,7 @@ export declare const COLLECTIONS: {
         readonly AUDIT_LOGS: "AUDIT_LOGS";
     };
     readonly MARRIAGE: {
+        readonly NEXT_QUESTION_SUGGESTIONS: "NEXT_QUESTION_SUGGESTIONS";
         readonly QUESTIONS_ANSWERS: "QAS";
         readonly QA_EDIT_LOGS: "QA_EDIT_LOGS";
         readonly IDENTITY_VERIFICATIONS: "ID_VERIFICATIONS";
@@ -34,6 +35,9 @@ export declare const COLLECTIONS: {
         readonly WALI_USER_PROVIDED_INFO: "WALI_USER_PROVIDED_INFO";
         readonly WALI_INFO: "WALI_INFO";
         readonly MATCHES: "MATCHES";
+        readonly LAYER2_FOUNDATIONAL_QUESTIONS: "LAYER2_FOUNDATIONAL_QUESTIONS";
+        readonly MATCH_CANDIDATE_SCOREBOARD: "MATCH_CANDIDATE_SCOREBOARD";
+        readonly MARRIAGE_PROFILE_SUMMARIES: "MARRIAGE_PROFILE_SUMMARIES";
     };
     readonly COOKING: {
         readonly RECIPES: "RECIPES";

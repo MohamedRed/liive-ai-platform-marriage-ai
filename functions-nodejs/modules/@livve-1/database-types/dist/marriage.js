@@ -1,7 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NewWaliSchema = exports.RelationshipType = void 0;
+exports.NewWaliSchema = exports.RelationshipType = exports.QuestionLayer = void 0;
 const zod_1 = require("zod");
+// Define the layers
+var QuestionLayer;
+(function (QuestionLayer) {
+    QuestionLayer[QuestionLayer["LAYER_1_CLARIFICATION"] = 1] = "LAYER_1_CLARIFICATION";
+    QuestionLayer[QuestionLayer["LAYER_2_FOUNDATIONAL"] = 2] = "LAYER_2_FOUNDATIONAL";
+    QuestionLayer[QuestionLayer["LAYER_3_GENERAL"] = 3] = "LAYER_3_GENERAL";
+    QuestionLayer[QuestionLayer["LAYER_4_INSIGHT"] = 4] = "LAYER_4_INSIGHT";
+    QuestionLayer[QuestionLayer["LAYER_5_TOP_MATCH"] = 5] = "LAYER_5_TOP_MATCH";
+})(QuestionLayer || (exports.QuestionLayer = QuestionLayer = {}));
 var RelationshipType;
 (function (RelationshipType) {
     RelationshipType["FATHER"] = "father";

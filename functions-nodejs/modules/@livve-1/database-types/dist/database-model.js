@@ -34,13 +34,18 @@ exports.COLLECTIONS = {
     },
     // Collections for the MARRIAGE database
     MARRIAGE: {
-        QUESTIONS_ANSWERS: 'QAS', // All QAs for a user
+        NEXT_QUESTION_SUGGESTIONS: 'NEXT_QUESTION_SUGGESTIONS', // User state/metadata for the next question suggestion process
+        QUESTIONS_ANSWERS: 'QAS', // All QAs for a user (Uses QuestionTemplate.id or generated ID)
         QA_EDIT_LOGS: 'QA_EDIT_LOGS', // Edit history for QAs
         IDENTITY_VERIFICATIONS: 'ID_VERIFICATIONS', // Identity verification status/data
         USER_WALI_RELATION_VERIFICATIONS: 'USER_WALI_RELATION_VERIFICATIONS', // Wali verification status/data
         WALI_USER_PROVIDED_INFO: 'WALI_USER_PROVIDED_INFO', // Wali info entered by user
         WALI_INFO: 'WALI_INFO', // Wali info entered by wali
         MATCHES: 'MATCHES', // Match results
+        LAYER2_FOUNDATIONAL_QUESTIONS: 'LAYER2_FOUNDATIONAL_QUESTIONS', // Template questions for Layer 2
+        // No LAYER3 collection needed per Scenario 2 (Dynamic Generation)
+        MATCH_CANDIDATE_SCOREBOARD: 'MATCH_CANDIDATE_SCOREBOARD', // Stores aggregated scores for potential matches
+        MARRIAGE_PROFILE_SUMMARIES: 'MARRIAGE_PROFILE_SUMMARIES', // Stores pre-generated LLM summaries of user profiles
     },
     // Collections for the COOKING database
     COOKING: {

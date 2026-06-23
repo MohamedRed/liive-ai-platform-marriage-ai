@@ -1,8 +1,5 @@
 {
   "name": "functions",
-  "workspaces": [
-    "../packages/*"
-  ],
   "scripts": {
     "lint": "eslint --config eslint.config.mjs src/",
     "build": "tsc",
@@ -22,6 +19,7 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "@firebase/firestore-types": "^3.0.4",
     "@google-cloud/pubsub": "^4.11.0",
     "@google-cloud/secret-manager": "^5.6.0",
     "@google-cloud/tasks": "^5.5.2",
@@ -34,6 +32,7 @@
     "bottleneck": "^2.19.5",
     "cheerio": "^1.0.0",
     "date-fns-tz": "^3.2.0",
+    "dayjs": "^1.11.21",
     "eslint-config-prettier": "^9.1.0",
     "firebase-admin": "^13.2.0",
     "firebase-functions": "^6.3.2",
@@ -43,7 +42,8 @@
     "redis": "^4.6.7",
     "stripe": "^16.12.0",
     "telnyx": "^2.0.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/compat": "^1.2.2",

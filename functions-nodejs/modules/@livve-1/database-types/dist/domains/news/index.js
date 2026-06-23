@@ -14,14 +14,4 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// Export common types first
-__exportStar(require("./common-types"), exports);
-// Export from domain files
-__exportStar(require("./database-model"), exports);
-__exportStar(require("./system"), exports);
-__exportStar(require("./identity-verification"), exports);
-__exportStar(require("./users"), exports);
-__exportStar(require("./meal-planning"), exports);
-__exportStar(require("./marriage"), exports);
-__exportStar(require("./hijra"), exports);
-__exportStar(require("./hajj"), exports);
+__exportStar(require("./news.types"), exports);
